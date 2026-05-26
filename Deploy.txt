@@ -1,0 +1,5 @@
+gọi lệnh anvil-fork
+deploy lại contract => lấy địa chỉ paste vào tất cả file .env của từng folder 
+approve lại ở frontend (user => permit2, permit2 => reactor, permit2 => fallbackexecutor)
+wrap ETH => WETH
+fund lại tài khoản whale

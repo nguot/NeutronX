@@ -1,0 +1,292 @@
+================================================================================
+  NeutronX DEX Aggregator — Demo Scenario
+  Dutch Auction Partial Fill with Multi-Filler Competition
+================================================================================
+
+SYSTEM OVERVIEW
+---------------
+NeutronX is a DEX aggregator protocol featuring:
+  - Dutch auction pricing: order starts at a high price and decays each block
+  - Partial fills: multiple fillers can each fill a portion of one order
+  - Fill auction (FillAuction): fillers register + stake ETH before executing
+  - CoW (Coincidence of Wants): CoWFiller matches against a mocked CEX orderbook
+  - Fallback executor: sweeps remaining unfilled amount via Uniswap near deadline
+
+ACTORS
+------
+  Swapper  : 0xf39Fd6e51aad88F6f4ce6aB8827279cffFb92266  (Anvil Account 0)
+  WhaleFiller : 0x70997970C51812dc3A010C7d01b50e0d17dc79C8  (Anvil Account 1)
+  CoWFiller   : 0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC  (Anvil Account 2)
+  Cosigner / Deployer : 0xf39Fd6e51aad88F6f4ce6aB8827279cffFb92266  (Anvil Account 0)
+
+CONTRACTS (example addresses — update after each redeploy)
+-----------------------------------------------------------
+  FillAuction        : 0x5A02DD0Fa0B44f434EA95b1fF5848Cd27861dBe9
+  PartialFillReactor : 0x1Ce89e1A9c652a31f13E9B140e4065F21FAF8F32
+  FallbackExecutor   : 0xBAC906222f5FA30081363B5292E612D9999b0454
+
+================================================================================
+PREREQUISITES
+================================================================================
+
+1. Anvil mainnet fork running
+   Command : anvil --fork-url <ALCHEMY_RPC_URL>
+   Expected: chainId = 31337, accounts funded with 10000 ETH each
+
+2. Contracts deployed
+   Command : forge script script/Deploy.s.sol:Deploy --rpc-url http://localhost:8545 --broadcast
+   Expected: FillAuction, PartialFillReactor, FallbackExecutor addresses printed
+
+3. Backend running (port 3000)
+   Command : cd backend && npm start
+   Expected: "Backend running on port 3000", "Indexer started", "Fallback watcher started"
+
+4. Swapper has WETH + Permit2 approvals
+   Input   : wrap 5 ETH → WETH for Account 0
+             approve Permit2 (0x000000000022D473030F116dDEE9F6B43aC78BA3) for WETH (ERC20)
+             approve Permit2 → Reactor for WETH (Permit2 allowance)
+             approve Permit2 → FallbackExecutor for WETH (Permit2 allowance)
+   Expected: WETH balance ≥ 4.0, allowances set to MaxUint
+
+5. WhaleFiller inventory funded
+   Input   : transfer 5000 USDC to Account 1 (impersonate Binance whale)
+             Account 1 approves Reactor to spend USDC
+   Expected: Account 1 holds ~5000 USDC
+
+6. CoWFiller inventory funded
+   Input   : transfer 10000 USDC to Account 2
+             Account 2 approves Reactor to spend USDC
+   Expected: Account 2 holds ~10000 USDC
+
+================================================================================
+DEMO SCENARIO
+================================================================================
+
+STEP 1 — Swapper submits a Dutch auction order
+-----------------------------------------------
+Action  : Via frontend, fill order form and submit:
+            Input token  : WETH
+            Output token : USDC
+            Input amount : 4.0 WETH
+            Min output   : 9500 USDC
+            Start price  : 2490 USDC/WETH
+            Decay/block  : 100000 (0.0001 USDC per block)
+            Duration     : ~42 blocks
+            Min fill bps : 100 (1% minimum chunk size)
+
+Input   : POST /orders  { swapper, inputToken, outputToken, inputAmount=4e18,
+                          minOutputAmount=9500e6, startPrice=2490e6, ... }
+
+Expected output:
+  - Backend cosigns the order with deployer key (EIP-712, chainId=31337)
+  - Order stored in DB with status = "pending"
+  - Response: { orderHash: "0x...", status: "pending" }
+
+
+STEP 2 — Both fillers detect the new order
+-------------------------------------------
+Action  : WhaleFiller and CoWFiller poll backend every 6 seconds
+
+Expected output (WhaleFiller log):
+  [Listener] ✦ new order  0x...  4.0000 WETH → min 9500.0000 USDC
+             startPrice=2490.0000  deadline=block#XXXXXXX  status=pending
+  [Executor] +watch  0x...  watching=1
+
+Expected output (CoWFiller log):
+  [Orderbook] WETH→USDC — 5 bid levels
+    bid 2510.00 USDC  size=2.00 WETH
+    bid 2505.00 USDC  size=3.00 WETH
+    bid 2500.00 USDC  size=5.00 WETH
+    ...
+  [Listener] ✦ new order  0x...  same order detected
+
+
+STEP 3 — Fillers enter REGISTER PHASE (blocksLeft ≤ 60)
+---------------------------------------------------------
+Action  : Mine blocks until deadline approaches (blocksLeft ≤ 60)
+Command : cast rpc anvil_mine 1 --rpc-url http://127.0.0.1:8545
+
+WhaleFiller strategy evaluation:
+  Input   : auctionPrice = startPrice - (blocksMined * decayPerBlock)
+            outputBalance (USDC) of Account 1
+  Logic   : spread = refPrice(2500) - auctionPrice
+            if spread < MIN_SPREAD_BPS (10bps) → skip
+            fillAmount = min(maxFromInventory, onChainRemaining)
+            maxFromInventory = (usableBalance * 1e18) / auctionPrice
+            usableBalance = balance * MAX_INVENTORY_USE_BPS(50%) / 10000
+
+Expected output (WhaleFiller):
+  [Strategy] 0x... WETH→USDC  auctionPrice=2490.0000  blocksLeft=39
+  [Strategy] 0x... ✔ FILL  fill=1.0628 WETH  spread=40bps  inventory=5292.97 USDC
+
+CoWFiller strategy evaluation:
+  Input   : mocked CEX orderbook bids sorted descending by price
+            greedy match: take best bids while bid.price > auctionPrice
+  Logic   : for each bid level, fill as much as profitable
+            profit = Σ(bidPrice - auctionPrice) * chunkSize / 1e18
+
+Expected output (CoWFiller):
+  [Strategy] 0x... WETH→USDC  auctionPrice=2490.0000  blocksLeft=39
+  [Strategy] 0x... ✔ FILL  fill=2.0080 WETH  profit=40.1205 USDC  levels=2
+
+
+STEP 4 — Both fillers register in FillAuction (concurrent)
+------------------------------------------------------------
+Action  : Each filler calls FillAuction.register(orderHash, fillAmount, inputAmount, deadline)
+          Optimistic lock set BEFORE tx to prevent duplicate nonce submission
+
+WhaleFiller tx:
+  from    : Account 1 (0x70997970...)
+  to      : FillAuction
+  value   : computed stake (ETH) based on fill size and time bucket
+  Input   : orderHash, fillAmount=1062845361445783132, inputAmount=4e18, deadline
+
+CoWFiller tx:
+  from    : Account 2 (0x3C44CdDd...)
+  to      : FillAuction
+  Input   : orderHash, fillAmount=2008032128514056224, inputAmount=4e18, deadline
+
+Expected output:
+  [Executor] 0x... ✔ registered  tx=0x...  stakeETH=0.0
+  (Two independent registrations — different wallets = no conflict)
+
+
+STEP 5 — Both fillers execute fills (EXECUTE PHASE)
+-----------------------------------------------------
+Action  : Next block, each filler calls PartialFillReactor.executePartialChunk(signedOrder, fillAmount)
+          Reactor verifies: signature valid, filler registered, fillAmount ≤ remaining, fillAmount ≥ minFill
+
+On first fill execution, reactor validates EIP-712 signature:
+  digest = keccak256("\x19\x01" || DOMAIN_SEPARATOR || structHash)
+  DOMAIN_SEPARATOR uses chainId=31337, verifyingContract=Reactor
+  signer must equal cosigner (Account 0)
+
+If valid:
+  Reactor pulls fillAmount WETH from swapper via Permit2
+  Reactor pulls outputAmount USDC from filler (safeTransferFrom)
+  Reactor sends WETH to filler, USDC to swapper
+  FillAuction.onFillSuccess() releases/rewards stake
+
+Expected output (WhaleFiller):
+  [Executor] 0x... ✔ FILLED  tx=0x40ad48a7...
+  [Executor] 0x...   reason: spread=40bps | inventory=5292.97 USDC
+
+Expected output (CoWFiller):
+  [Executor] 0x... ✔ FILLED  tx=0x35e906aa...
+  [Executor] 0x...   reason: profit=40.1205 USDC | levels=2 | inventory=10000.00 USDC
+
+On-chain state after both fills:
+  WhaleFiller received : ~1.0628 WETH, paid ~2646 USDC
+  CoWFiller received   : ~2.0080 WETH, paid ~5008 USDC
+  Remaining input      : ~0.929 WETH (23.2% of order)
+  Order status in DB   : "active"
+
+
+STEP 6 — Backend event indexer records fills
+---------------------------------------------
+Event   : PartialFillExecuted(orderHash, filler, fillAmount, outputAmount)
+Action  : eventIndexer.ts listens, inserts rows into fills table
+
+Expected output (backend log):
+  Fill detected: 0x9f8c...
+  tx: 0x35e906...  logIndex: 3  block: 25174805
+  inserting fill...
+  fill inserted
+  updating order status to active
+  order updated to active
+
+Verify via API:
+  GET /fills?order=0x9f8c...
+  Expected: { fills: [ {filler: Account1, fillAmount: "1062845361445783132", ...},
+                        {filler: Account2, fillAmount: "2008032128514056224", ...} ],
+              total: 2 }
+
+
+STEP 7 — FallbackExecutor sweeps remaining ~0.929 WETH
+-------------------------------------------------------
+Trigger : deadline - currentBlock ≤ 10 (fallback window)
+Action  : fallbackWatcher.ts fires, queries remaining via reactor.remainingInput()
+          calls AlphaRouter SDK to find Uniswap V3 route for ~0.929 WETH → USDC
+          calls FallbackExecutor.executeFallback(signedOrder, routeCalldata, minAmountOut)
+
+FallbackExecutor on-chain:
+  pulls rem WETH from swapper via Permit2
+  approves SwapRouter02 to spend rem
+  calls SwapRouter02 with Alpha Router calldata (exactInputSingle, fee=100)
+  checks amountOut ≥ minAmountOut
+  emits FallbackExecuted(orderHash, rem, amountOut)
+
+Expected output (backend log):
+  Fallback trigger: 0x9f8c...
+  Fallback executed: 0x6af5d704...
+  Fill detected: 0x9f8c...  block: 25174877
+  fill inserted
+  updating order status to filled
+  order updated to filled
+
+Mine command:
+  DEADLINE=<from_filler_log>
+  CURRENT=$(cast block-number --rpc-url http://127.0.0.1:8545)
+  cast rpc anvil_mine $((DEADLINE - CURRENT - 11)) --rpc-url http://127.0.0.1:8545
+
+
+================================================================================
+FINAL STATE
+================================================================================
+
+Order status  : filled
+Total fills   : 3 rows in fills table
+  Fill 1 (WhaleFiller) : ~1.0628 WETH consumed, ~2646 USDC paid to swapper
+  Fill 2 (CoWFiller)   : ~2.0080 WETH consumed, ~5008 USDC paid to swapper
+  Fill 3 (Fallback)    : ~0.929  WETH consumed, market USDC via Uniswap
+
+Swapper received : ~8660 USDC total for 4 WETH (above 9500 min due to Dutch decay)
+Note: above min because fillers executed early while price was still at startPrice
+
+================================================================================
+VERIFICATION COMMANDS
+================================================================================
+
+# Check order status
+curl -s http://localhost:3000/orders/<orderHash> | jq '{status: .status, fills: (.fills | length)}'
+
+# List all fills for the order
+curl -s "http://localhost:3000/fills?order=<orderHash>" | jq '.fills[] | {filler, fillAmount, txHash}'
+
+# Check WETH balance of filler (should have gained WETH)
+cast call 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2 \
+  "balanceOf(address)(uint256)" 0x70997970C51812dc3A010C7d01b50e0d17dc79C8 \
+  --rpc-url http://127.0.0.1:8545
+
+# Inspect a fill transaction
+cast tx <txHash> --rpc-url http://127.0.0.1:8545
+
+# Check on-chain remaining (should be 0 after full fill)
+cast call <PARTIAL_FILL_REACTOR> \
+  "remainingInput(bytes32,uint256)(uint256)" <orderHash> 4000000000000000000 \
+  --rpc-url http://127.0.0.1:8545
+
+================================================================================
+KEY DESIGN POINTS FOR THESIS
+================================================================================
+
+1. Partial fills without coordination
+   Two fillers fill the same order independently and concurrently.
+   No messaging between fillers — FillAuction manages slot allocation on-chain.
+
+2. Strategy differentiation
+   WhaleFiller : private inventory, profits from Dutch auction spread (simple, fast)
+   CoWFiller   : greedy CEX orderbook matching, profits from bid/ask capture
+
+3. Dutch auction incentive alignment
+   Price decays → fillers compete to fill early (higher spread = more profit)
+   Late fills still protected by minOutputAmount
+
+4. Fallback guarantees execution
+   If no filler acts, FallbackExecutor routes via Uniswap near deadline,
+   ensuring swapper always receives at least minOutputAmount.
+
+5. Optimistic locking prevents nonce reuse
+   registered.set() before tx send → subsequent block events skip re-registration.
+   On failure, registered.delete() allows retry.
+================================================================================

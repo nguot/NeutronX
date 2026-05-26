@@ -1,0 +1,36 @@
+-- schema.sql
+CREATE TABLE IF NOT EXISTS orders (
+    hash            TEXT PRIMARY KEY,
+    swapper         TEXT NOT NULL,
+    input_token     TEXT NOT NULL,
+    output_token    TEXT NOT NULL,
+    input_amount    TEXT NOT NULL,
+    min_output      TEXT NOT NULL,
+    deadline        BIGINT NOT NULL,
+    nonce           BIGINT NOT NULL,
+    min_fill_bps    INTEGER NOT NULL,
+    start_price     TEXT NOT NULL,
+    decay_per_block INTEGER NOT NULL,
+    fee_tier        INTEGER NOT NULL,
+    signature       TEXT NOT NULL,
+    status              TEXT    NOT NULL DEFAULT 'pending',
+    fallback_initiated  BOOLEAN NOT NULL DEFAULT false,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS fills (
+    id              TEXT PRIMARY KEY,
+    order_hash      TEXT NOT NULL REFERENCES orders(hash),
+    filler          TEXT NOT NULL,
+    fill_amount     TEXT NOT NULL,
+    output_amount   TEXT NOT NULL,
+    tx_hash         TEXT NOT NULL,
+    path            JSONB,
+    graph           JSONB,
+    block_number    BIGINT,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_orders_swapper ON orders(swapper);
+CREATE INDEX IF NOT EXISTS idx_orders_status  ON orders(status);
+CREATE INDEX IF NOT EXISTS idx_fills_order    ON fills(order_hash);

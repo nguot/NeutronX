@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\vutie\\\\Documents\\\\DATN\\\\dex-aggregator\" -Force)",
+      "Bash(Select-Object Name, FullName)",
+      "Bash(xargs cat)",
+      "Bash(grep -E \"\\\\.sol$|package|tsconfig\")",
+      "Bash(dir \"C:\\\\Users\\\\vutie\\\\Documents\\\\DATN\\\\dex-aggregator\")",
+      "PowerShell(Remove-Item *)",
+      "Bash(cast block-number *)"
+    ]
+  }
+}

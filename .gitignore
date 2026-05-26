@@ -1,0 +1,20 @@
+# Node
+node_modules/
+dist/
+build/
+.env
+*.log
+
+# Foundry / Forge
+contract/lib/
+contract/out/
+contract/cache/
+contract/broadcast/
+
+# Frontend
+frontend/.next/
+frontend/out/
+
+# OS
+.DS_Store
+Thumbs.db

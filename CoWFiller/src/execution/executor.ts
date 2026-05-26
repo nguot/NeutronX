@@ -1,0 +1,193 @@
+import { ethers } from 'ethers'
+import axios from 'axios'
+import { BACKEND_URL, INVENTORY } from '../config'
+import { wallet, fillAuction, reactor, erc20 } from '../contract/contracts'
+import { decide } from '../strategy/strategy'
+import type { OrderInfo } from '../types'
+
+const ORDER_TYPE_HASH = ethers.utils.keccak256(
+  ethers.utils.toUtf8Bytes(
+    'PartialFillOrder(' +
+    'address swapper,address inputToken,uint256 inputAmount,' +
+    'address outputToken,uint256 minOutputAmount,' +
+    'uint256 deadline,uint256 nonce,uint16 minFillBps' +
+    ')'
+  )
+)
+
+function computeOrderHash(order: OrderInfo): string {
+  return ethers.utils.keccak256(
+    ethers.utils.defaultAbiCoder.encode(
+      ['bytes32','address','address','uint256','address','uint256','uint256','uint256','uint16'],
+      [ORDER_TYPE_HASH, order.swapper, order.inputToken, order.inputAmount,
+       order.outputToken, order.minOutput, order.deadline, order.nonce, order.minFillBps]
+    )
+  )
+}
+
+function getFillRatioBucket(fill: bigint, total: bigint): number {
+  if (fill >= total) return 4
+  const pct = Number((fill * 100n) / total)
+  if (pct < 2) return 0; if (pct < 10) return 1; if (pct < 30) return 2; if (pct < 70) return 3; return 4
+}
+function getOrderSizeBucket(total: bigint): number {
+  if (total < 10_000n * 10n**6n) return 0; if (total < 100_000n * 10n**6n) return 1; if (total < 1_000_000n * 10n**6n) return 2; return 3
+}
+function getTimeMultiplier(deadline: number, currentBlock: number): number {
+  const left = deadline - currentBlock
+  if (left > 50) return 10_000; if (left > 20) return 15_000; if (left > 5) return 30_000; return 50_000
+}
+async function computeRequiredStake(fill: bigint, total: bigint, deadline: number, block: number): Promise<bigint> {
+  const multBps: number = await fillAuction.stakeTable(getOrderSizeBucket(total), getFillRatioBucket(fill, total))
+  if (multBps === 0) return 0n
+  return (fill * BigInt(multBps) / 10_000n) * BigInt(getTimeMultiplier(deadline, block)) / 10_000n
+}
+
+async function ensureApproval(tokenAddress: string, amount: bigint): Promise<void> {
+  const token   = erc20(tokenAddress)
+  const allowed: ethers.BigNumber = await token.allowance(wallet.address, reactor.address)
+  if (allowed.toBigInt() < amount) {
+    const tx = await token.approve(reactor.address, ethers.constants.MaxUint256)
+    await tx.wait()
+    console.log(`[Executor] approved ${tokenAddress}`)
+  }
+}
+
+interface Registration { fillAmount: bigint; registeredAt: number }
+
+export class Executor {
+  private watching   = new Map<string, OrderInfo>()
+  private registered = new Map<string, Registration>()
+
+  watch(order: OrderInfo): void {
+    if (this.watching.has(order.hash)) return
+    this.watching.set(order.hash, order)
+    console.log(`[Executor] +watch  ${order.hash.slice(0,10)}…  watching=${this.watching.size}`)
+  }
+
+  async onBlock(currentBlock: number): Promise<void> {
+    if (this.watching.size > 0)
+      console.log(`[Executor] block #${currentBlock}  watching=${this.watching.size}  registered=${this.registered.size}`)
+
+    for (const [hash, order] of this.watching) {
+      if (currentBlock > order.deadline) {
+        console.log(`[Executor] expired  ${hash.slice(0,10)}… — dropping`)
+        this.watching.delete(hash)
+        this.registered.delete(hash)
+        continue
+      }
+      await this.tryFill(order, currentBlock).catch(e =>
+        console.error(`[Executor] error on ${hash.slice(0,10)}…:`, e)
+      )
+    }
+  }
+
+  private async tryFill(cachedOrder: OrderInfo, currentBlock: number): Promise<void> {
+    const tag = `[Executor] ${cachedOrder.hash.slice(0,10)}…`
+
+    let order = cachedOrder
+    try {
+      const { data } = await axios.get<OrderInfo>(`${BACKEND_URL}/orders/${cachedOrder.hash}`)
+      order = data
+      this.watching.set(order.hash, order)
+    } catch {
+      console.warn(`${tag} backend unreachable — using cached order`)
+    }
+
+    const hash      = order.hash
+    const orderHash = computeOrderHash(order)
+
+    const remainingBN: ethers.BigNumber = await reactor.remainingInput(orderHash, order.inputAmount)
+    const onChainRemaining = remainingBN.toBigInt()
+    const remainingPct = (Number(onChainRemaining) / Number(order.inputAmount) * 100).toFixed(1)
+    console.log(`${tag} on-chain remaining=${remainingPct}%  blocksLeft=${order.deadline - currentBlock}`)
+
+    if (onChainRemaining === 0n) {
+      console.log(`${tag} fully filled — dropping`)
+      this.watching.delete(hash); this.registered.delete(hash); return
+    }
+
+    const blocksLeft = order.deadline - currentBlock
+
+    // ── REGISTER PHASE ────────────────────────────────────────────────────
+    if (!this.registered.has(hash) && blocksLeft <= INVENTORY.REGISTER_AT_BLOCKS_LEFT) {
+      console.log(`${tag} REGISTER PHASE  blocksLeft=${blocksLeft}`)
+      const decision = await decide(order, currentBlock)
+      if (!decision.shouldFill) {
+        console.log(`${tag} skip register — ${decision.reason}`)
+        return
+      }
+
+      const fillAmount = decision.fillAmount < onChainRemaining
+        ? decision.fillAmount : onChainRemaining
+
+      const stake = await computeRequiredStake(
+        fillAmount, BigInt(order.inputAmount), order.deadline, currentBlock
+      )
+
+      // Optimistic lock — prevents duplicate tx when multiple blocks fire before first tx mines
+      this.registered.set(hash, { fillAmount, registeredAt: currentBlock })
+
+      console.log(`${tag} registering  fill=${fillAmount}  stake=${ethers.utils.formatEther(stake)} ETH  tx pending…`)
+      try {
+        const tx = await fillAuction.register(
+          orderHash, fillAmount, order.inputAmount, order.deadline, { value: stake }
+        )
+        await tx.wait()
+        console.log(`${tag} ✔ registered  tx=${tx.hash}  stakeETH=${ethers.utils.formatEther(stake)}`)
+      } catch (e: any) {
+        const reason: string = e?.error?.reason ?? e?.reason ?? e?.message ?? ''
+        if (reason.includes('already registered')) {
+          console.log(`${tag} already registered on-chain — recovering in-memory state`)
+        } else {
+          this.registered.delete(hash)
+          throw e
+        }
+      }
+      return
+    }
+
+    // ── EXECUTE PHASE ─────────────────────────────────────────────────────
+    if (this.registered.has(hash)) {
+      const { fillAmount: registeredFill, registeredAt } = this.registered.get(hash)!
+      const fillAmount = registeredFill < onChainRemaining ? registeredFill : onChainRemaining
+      console.log(`${tag} EXECUTE PHASE  registeredAt=block#${registeredAt}  fillAmount=${fillAmount}`)
+
+      const decision = await decide(order, currentBlock)
+      if (!decision.shouldFill) {
+        console.log(`${tag} holding — ${decision.reason}`)
+        return
+      }
+
+      const expectedOutput = (fillAmount * decision.currentPrice) / 10n**18n
+      await ensureApproval(order.outputToken, expectedOutput)
+
+      const signedOrder = {
+        info: {
+          swapper:         order.swapper,
+          inputToken:      order.inputToken,
+          inputAmount:     ethers.BigNumber.from(order.inputAmount),
+          outputToken:     order.outputToken,
+          minOutputAmount: ethers.BigNumber.from(order.minOutput),
+          deadline:        order.deadline,
+          nonce:           order.nonce,
+          minFillBps:      order.minFillBps,
+          startPrice:      ethers.BigNumber.from(order.startPrice),
+          decayPerBlock:   order.decayPerBlock,
+          feeTier:         order.feeTier,
+        },
+        sig: order.signature,
+      }
+
+      console.log(`${tag} calling executePartialChunk  fillAmount=${fillAmount}  tx pending…`)
+      const tx = await reactor.executePartialChunk(signedOrder, fillAmount)
+      await tx.wait()
+      console.log(`${tag} ✔ FILLED  tx=${tx.hash}`)
+      console.log(`${tag}   reason: ${decision.reason}`)
+
+      this.watching.delete(hash)
+      this.registered.delete(hash)
+      console.log(`${tag} done  watching=${this.watching.size}  registered=${this.registered.size}`)
+    }
+  }
+}
