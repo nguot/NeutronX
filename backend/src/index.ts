@@ -1,11 +1,14 @@
 import express from 'express'
 import cors from 'cors'
 import * as dotenv from 'dotenv'
-import ordersRouter   from './routes/orders'
-import fillsRouter    from './routes/fills'
-import simulateRouter from './routes/simulate'
-import { startFallbackWatcher } from './watcher/fallbackWatcher'
-import { startIndexer } from './indexer/eventIndexer'
+import ordersRouter      from './routes/orders'
+import fillsRouter       from './routes/fills'
+import simulateRouter    from './routes/simulate'
+import crosschainRouter  from './routes/crosschain'
+import { startFallbackWatcher }   from './watcher/fallbackWatcher'
+import { startIndexer }           from './indexer/eventIndexer'
+import { startChainBWatcher }     from './chain/chainBWatcher'
+import { initCrossChainSchema }   from './services/crosschainService'
 dotenv.config()
 
 const app = express()
@@ -15,12 +18,15 @@ app.use(express.json())
 app.use('/orders',   ordersRouter)
 app.use('/fills',    fillsRouter)
 app.use('/simulate', simulateRouter)
+app.use('/cc',       crosschainRouter)
 
 app.get('/health', (_, res) => res.json({ ok: true }))
 
 const PORT = process.env.PORT || 3000
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
     console.log(`Backend running on port ${PORT}`)
+    await initCrossChainSchema()
     startIndexer()
     startFallbackWatcher()
+    startChainBWatcher()
 })

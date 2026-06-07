@@ -8,6 +8,9 @@ import type {
 
 import { db } from '../db/client'
 import { ethers } from 'ethers'
+import { readFileSync } from 'fs'
+import { resolve } from 'path'
+import { parse as parseEnv } from 'dotenv'
 
 const ORDER_TYPE_HASH = ethers.utils.keccak256(
   ethers.utils.toUtf8Bytes(
@@ -19,6 +22,17 @@ const ORDER_TYPE_HASH = ethers.utils.keccak256(
   )
 )
 
+// Re-read .env on every call so setup.sh can redeploy contracts without restarting the backend.
+// The contract bakes address(this) into its DOMAIN_SEPARATOR at deploy time — we must match it.
+function getReactorAddress(): string {
+  try {
+    const parsed = parseEnv(readFileSync(resolve(process.cwd(), '.env')))
+    return parsed['PARTIAL_FILL_REACTOR'] || process.env.PARTIAL_FILL_REACTOR || ''
+  } catch {
+    return process.env.PARTIAL_FILL_REACTOR || ''
+  }
+}
+
 function getDomainSeparator(): string {
   return ethers.utils.keccak256(
     ethers.utils.defaultAbiCoder.encode(
@@ -27,7 +41,7 @@ function getDomainSeparator(): string {
         ethers.utils.keccak256(ethers.utils.toUtf8Bytes('EIP712Domain(string name,uint256 chainId,address verifyingContract)')),
         ethers.utils.keccak256(ethers.utils.toUtf8Bytes('NeutronX')),
         parseInt(process.env.CHAIN_ID || '1'),
-        process.env.PARTIAL_FILL_REACTOR
+        getReactorAddress()
       ]
     )
   )

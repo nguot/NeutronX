@@ -1,0 +1,102 @@
+Great catch — let me explain exactly what's happening because this is an important concept for your thesis too.
+
+  ---
+  How Anvil Fork Works (the real picture)
+
+  When you run:
+  anvil --fork-url https://eth-mainnet.g.alchemy.com/v2/YOUR_KEY
+
+  Anvil does one thing: it takes a snapshot of Ethereum mainnet state at that block and runs it locally. Every deployed
+  contract — Chainlink, Uniswap, Aave — is copied into local memory.
+
+  So when you call chainlinkFeed.latestRoundData() on your fork:
+
+  Your code → Anvil (local) → reads local copy of Chainlink contract storage
+                                           ↑
+                                NOT the real Ethereum network
+                                NOT spending real money
+                                NOT a live price feed
+
+  It returns the price as it was at the block you forked from. That's it.
+
+  ---
+  The Catch You Suspected
+
+  Fork at block 19,000,000 → ETH price = $3,012.45 (frozen forever)
+
+  Block 19,000,001 on your local chain → still $3,012.45
+  Block 19,000,100 on your local chain → still $3,012.45
+                                                ↑
+                      Chainlink nodes on REAL mainnet have updated 30 times
+                      but your fork has no idea
+
+  The price never updates on your local fork because real Chainlink nodes only push to the real Ethereum network. Your
+  fork is an isolated copy.
+
+  ---
+  What This Means for Each Use Case
+
+  ┌─────────────────────────────────────────────┬─────────────────┬──────────────────────────────────────────────────┐
+  │                  Use case                   │     Works?      │                       Why                        │
+  ├─────────────────────────────────────────────┼─────────────────┼──────────────────────────────────────────────────┤
+  │ Unit test: "does my profitability formula   │ ✅ Yes          │ You get a fixed real-ish price, perfect for      │
+  │ work?"                                      │                 │ assertions                                       │
+  ├─────────────────────────────────────────────┼─────────────────┼──────────────────────────────────────────────────┤
+  │ Integration test: "does the full flow       │ ✅ Yes          │ Price is consistent across the whole test run    │
+  │ work?"                                      │                 │                                                  │
+  ├─────────────────────────────────────────────┼─────────────────┼──────────────────────────────────────────────────┤
+  │ Simulating "price dropped mid-order"        │ ✅ Yes —        │ Use vm.store() to overwrite the Chainlink slot   │
+  │                                             │ manually        │                                                  │
+  ├─────────────────────────────────────────────┼─────────────────┼──────────────────────────────────────────────────┤
+  │ Live production solver making real          │ ❌ No           │ Price is stale after a few minutes               │
+  │ decisions                                   │                 │                                                  │
+  └─────────────────────────────────────────────┴─────────────────┴──────────────────────────────────────────────────┘
+
+  ---
+  For Tests: Override the Price with vm.store()
+
+  If you want to simulate price movement in a Foundry test:
+
+  // Force Chainlink ETH/USD to report $2800 (simulate price crash)
+  // Chainlink stores latestAnswer in storage slot 1 of the aggregator
+  vm.store(
+      0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419, // ETH/USD feed
+      bytes32(uint256(1)),                          // slot for latestAnswer
+      bytes32(uint256(280000000000))                // $2800 * 1e8
+  );
+
+  Now latestRoundData() returns your fake price. This is how real Foundry tests manipulate oracles.
+
+  ---
+  The Right Architecture for Your Solver
+
+                   ┌─ Anvil fork (local test) ─────────────────────────┐
+                   │  Chainlink.latestRoundData() → frozen fork price   │
+  strategy.ts  ──→ │                                                     │
+                   │  OR: vm.store() overrides it → any price you want  │
+                   └───────────────────────────────────────────────────-┘
+
+                   ┌─ Production (if you ever deploy) ─────────────────┐
+                   │  Chainlink.latestRoundData() → live price          │
+  strategy.ts  ──→ │  updates every ~1-2 minutes (Chainlink heartbeat)  │
+                   │  costs nothing to READ (it's a free view call)     │
+                   └────────────────────────────────────────────────────┘
+
+  Reading Chainlink is always free — it's just a view function call, no gas, no money. Chainlink nodes pay gas to write
+  the price updates on real mainnet. You're just reading what they wrote.
+
+  ---
+  For Your Thesis (this is actually a good point to write about)
+
+  This is a real trade-off in DeFi development worth a paragraph in Ch7 (Testing & Evaluation):
+
+  ▎ Oracle freshness in fork testing. On an Anvil mainnet fork, Chainlink price feeds return the value from the fork
+  ▎ block and do not update. For unit and integration tests this is desirable — price is deterministic and controllable
+  ▎ via vm.store(). For production deployment, the solver must account for Chainlink's heartbeat (1-hour maximum
+  ▎ staleness on ETH/USD) and reject stale rounds where updatedAt < block.timestamp - MAX_STALENESS.
+
+  That one paragraph covers oracle risk analysis, which is a real security consideration and adds depth to your testing
+  chapter.
+
+
+  fork different block with different prices => more diverse

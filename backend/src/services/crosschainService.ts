@@ -1,0 +1,362 @@
+import { ethers } from 'ethers'
+import { db } from '../db/client'
+
+// ─── Init DB tables (called once at startup) ──────────────────────────────────
+export async function initCrossChainSchema(): Promise<void> {
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS cc_sessions (
+      swapper       VARCHAR(42) PRIMARY KEY,
+      root_secret   VARCHAR(66) NOT NULL,   -- 0x + 64 hex bytes
+      cosigner_addr VARCHAR(42) NOT NULL,
+      created_at    TIMESTAMP DEFAULT NOW()
+    )
+  `)
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS cc_orders (
+      order_hash    VARCHAR(66) PRIMARY KEY,
+      swapper       VARCHAR(42) NOT NULL,
+      input_token   VARCHAR(42) NOT NULL,
+      input_amount  VARCHAR(78) NOT NULL,
+      output_token  VARCHAR(42) NOT NULL,
+      min_output    VARCHAR(78) NOT NULL,
+      deadline      INTEGER NOT NULL,
+      nonce         VARCHAR(78) NOT NULL,
+      num_slots     SMALLINT NOT NULL,
+      merkle_root   VARCHAR(66) NOT NULL,
+      cosigner_sig  TEXT NOT NULL,
+      t2_expiry     INTEGER NOT NULL,
+      reactor_addr  VARCHAR(42) NOT NULL,
+      chain_a_id    INTEGER NOT NULL,
+      created_at    TIMESTAMP DEFAULT NOW()
+    )
+  `)
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS cc_slots (
+      order_hash      VARCHAR(66) NOT NULL,
+      slot_index      SMALLINT NOT NULL,
+      hashlock        VARCHAR(66) NOT NULL,
+      leaf            VARCHAR(66) NOT NULL,
+      proof           TEXT NOT NULL,         -- JSON-serialised string[]
+      status          VARCHAR(20) NOT NULL DEFAULT 'available',
+      assigned_filler VARCHAR(42),
+      escrow_addr     VARCHAR(42),           -- deployed EscrowDst clone address
+      PRIMARY KEY (order_hash, slot_index)
+    )
+  `)
+  // Migration: rename lock_id → escrow_addr for existing installs
+  await db.query(`
+    DO $$
+    BEGIN
+      IF EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'cc_slots' AND column_name = 'lock_id'
+      ) THEN
+        ALTER TABLE cc_slots RENAME COLUMN lock_id TO escrow_addr;
+      END IF;
+    END
+    $$
+  `)
+}
+
+// ─── Crypto helpers (mirrors key_distributor/src/crypto/) ─────────────────────
+
+function getNumSlots(inputAmount: string): number {
+  const amt = BigInt(inputAmount)
+  if (amt <  500_000_000_000_000_000n)   return 2
+  if (amt < 2_000_000_000_000_000_000n)  return 4
+  if (amt < 10_000_000_000_000_000_000n) return 8
+  if (amt < 50_000_000_000_000_000_000n) return 16
+  return 32
+}
+
+function deriveMasterSecret(rootSecret: string, p: {
+  swapper: string; inputToken: string; inputAmount: string
+  outputToken: string; minOutput: string; deadline: number; nonce: string
+}): string {
+  return ethers.utils.keccak256(
+    ethers.utils.defaultAbiCoder.encode(
+      ['bytes32','address','address','uint256','address','uint256','uint256','uint256'],
+      [rootSecret, p.swapper, p.inputToken, p.inputAmount, p.outputToken, p.minOutput, p.deadline, p.nonce]
+    )
+  )
+}
+
+export function deriveSecret(rootSecret: string, orderParams: {
+  swapper: string; inputToken: string; inputAmount: string
+  outputToken: string; minOutput: string; deadline: number; nonce: string
+}, slotIndex: number): string {
+  const master = deriveMasterSecret(rootSecret, orderParams)
+  return ethers.utils.keccak256(
+    ethers.utils.defaultAbiCoder.encode(['bytes32','uint8'], [master, slotIndex])
+  )
+}
+
+function deriveHashlock(secret: string): string {
+  return ethers.utils.keccak256(secret)
+}
+
+function computeLeaf(hashlock: string, slotIndex: number): string {
+  const inner = ethers.utils.keccak256(
+    ethers.utils.defaultAbiCoder.encode(['bytes32','uint8'], [hashlock, slotIndex])
+  )
+  return ethers.utils.keccak256(inner)
+}
+
+function hashPair(a: string, b: string): string {
+  const [x, y] = a.toLowerCase() < b.toLowerCase() ? [a, b] : [b, a]
+  return ethers.utils.keccak256(ethers.utils.concat([x, y]))
+}
+
+function buildTree(leaves: string[]): { root: string; layers: string[][] } {
+  const layers: string[][] = [[...leaves]]
+  let current = [...leaves]
+  while (current.length > 1) {
+    const next: string[] = []
+    for (let i = 0; i < current.length; i += 2) next.push(hashPair(current[i], current[i+1]))
+    layers.push(next)
+    current = next
+  }
+  return { root: current[0], layers }
+}
+
+function getProof(layers: string[][], idx: number): string[] {
+  const proof: string[] = []
+  let i = idx
+  for (let level = 0; level < layers.length - 1; level++) {
+    proof.push(layers[level][i % 2 === 0 ? i + 1 : i - 1])
+    i = Math.floor(i / 2)
+  }
+  return proof
+}
+
+// ─── Session ──────────────────────────────────────────────────────────────────
+
+export interface SessionInfo {
+  swapper:      string
+  cosignerAddr: string
+  isNew:        boolean
+}
+
+export async function getOrCreateSession(swapper: string): Promise<SessionInfo> {
+  const existing = await db.query('SELECT cosigner_addr FROM cc_sessions WHERE swapper = $1', [swapper])
+  if (existing.rows.length > 0) {
+    return { swapper, cosignerAddr: existing.rows[0].cosigner_addr, isNew: false }
+  }
+
+  // Generate root secret and derive cosigner wallet (rootSecret doubles as the private key)
+  const rootSecret  = ethers.utils.hexlify(ethers.utils.randomBytes(32))
+  const cosignerWallet = new ethers.Wallet(rootSecret)
+
+  await db.query(
+    'INSERT INTO cc_sessions (swapper, root_secret, cosigner_addr) VALUES ($1, $2, $3)',
+    [swapper, rootSecret, cosignerWallet.address]
+  )
+  return { swapper, cosignerAddr: cosignerWallet.address, isNew: true }
+}
+
+async function getRootSecret(swapper: string): Promise<string | null> {
+  const r = await db.query('SELECT root_secret FROM cc_sessions WHERE swapper = $1', [swapper])
+  return r.rows[0]?.root_secret ?? null
+}
+
+// ─── Orders ───────────────────────────────────────────────────────────────────
+
+export interface CreateOrderParams {
+  swapper:      string
+  inputToken:   string
+  inputAmount:  string
+  outputToken:  string
+  minOutput:    string
+  deadline:     number
+  nonce:        string
+  chainAId:     number
+  reactorAddr:  string
+  t2Buffer:     number   // blocks before T1 that Chain B locks expire
+}
+
+export interface OrderResult {
+  orderHash:   string
+  merkleRoot:  string
+  numSlots:    number
+  cosignerSig: string
+}
+
+const ORDER_TYPE_HASH = ethers.utils.keccak256(ethers.utils.toUtf8Bytes(
+  'CrossChainOrder(' +
+  'address swapper,address inputToken,uint256 inputAmount,' +
+  'address outputToken,uint256 minOutput,' +
+  'uint256 deadline,uint256 nonce,bytes32 merkleRoot,uint8 numSlots)'
+))
+
+function computeDomainSeparator(chainId: number, reactorAddr: string): string {
+  return ethers.utils.keccak256(
+    ethers.utils.defaultAbiCoder.encode(
+      ['bytes32','bytes32','uint256','address'],
+      [
+        ethers.utils.keccak256(ethers.utils.toUtf8Bytes('EIP712Domain(string name,uint256 chainId,address verifyingContract)')),
+        ethers.utils.keccak256(ethers.utils.toUtf8Bytes('NeutronX CrossChain')),
+        chainId,
+        reactorAddr,
+      ]
+    )
+  )
+}
+
+export async function createCrossChainOrder(p: CreateOrderParams): Promise<OrderResult> {
+  const rootSecret = await getRootSecret(p.swapper)
+  if (!rootSecret) throw new Error('Session not found — call POST /cc/session first')
+
+  const numSlots = getNumSlots(p.inputAmount)
+  const master   = deriveMasterSecret(rootSecret, p)
+
+  // Build slot data
+  const leaves: string[] = []
+  const slotData: { hashlock: string; leaf: string }[] = []
+
+  for (let i = 0; i < numSlots; i++) {
+    const secret   = ethers.utils.keccak256(ethers.utils.defaultAbiCoder.encode(['bytes32','uint8'], [master, i]))
+    const hashlock = deriveHashlock(secret)
+    const leaf     = computeLeaf(hashlock, i)
+    leaves.push(leaf)
+    slotData.push({ hashlock, leaf })
+  }
+
+  const { root: merkleRoot, layers } = buildTree(leaves)
+
+  // EIP-712 sign as cosigner
+  const cosignerWallet = new ethers.Wallet(rootSecret)
+
+  const structHash = ethers.utils.keccak256(
+    ethers.utils.defaultAbiCoder.encode(
+      ['bytes32','address','address','uint256','address','uint256','uint256','uint256','bytes32','uint8'],
+      [ORDER_TYPE_HASH, p.swapper, p.inputToken, p.inputAmount,
+       p.outputToken, p.minOutput, p.deadline, p.nonce, merkleRoot, numSlots]
+    )
+  )
+  const digest = ethers.utils.keccak256(
+    ethers.utils.solidityPack(
+      ['string','bytes32','bytes32'],
+      ['\x19\x01', computeDomainSeparator(p.chainAId, p.reactorAddr), structHash]
+    )
+  )
+  const cosignerSig = ethers.utils.joinSignature(cosignerWallet._signingKey().signDigest(digest))
+
+  const t2Expiry = p.deadline - p.t2Buffer
+
+  // Persist order
+  await db.query(`
+    INSERT INTO cc_orders
+      (order_hash, swapper, input_token, input_amount, output_token, min_output,
+       deadline, nonce, num_slots, merkle_root, cosigner_sig, t2_expiry, reactor_addr, chain_a_id)
+    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+    ON CONFLICT (order_hash) DO NOTHING
+  `, [structHash, p.swapper, p.inputToken, p.inputAmount, p.outputToken, p.minOutput,
+      p.deadline, p.nonce, numSlots, merkleRoot, cosignerSig, t2Expiry, p.reactorAddr, p.chainAId])
+
+  // Persist slots
+  for (let i = 0; i < numSlots; i++) {
+    const proof = getProof(layers, i)
+    await db.query(`
+      INSERT INTO cc_slots (order_hash, slot_index, hashlock, leaf, proof)
+      VALUES ($1,$2,$3,$4,$5)
+      ON CONFLICT (order_hash, slot_index) DO NOTHING
+    `, [structHash, i, slotData[i].hashlock, slotData[i].leaf, JSON.stringify(proof)])
+  }
+
+  return { orderHash: structHash, merkleRoot, numSlots, cosignerSig }
+}
+
+// ─── Query helpers ────────────────────────────────────────────────────────────
+
+export async function getSessionWithOrders(swapper: string) {
+  const session = await db.query(
+    'SELECT cosigner_addr FROM cc_sessions WHERE swapper = $1', [swapper]
+  )
+  if (!session.rows.length) return null
+
+  const orders = await db.query(
+    'SELECT * FROM cc_orders WHERE swapper = $1 ORDER BY created_at DESC', [swapper]
+  )
+  const result = []
+  for (const o of orders.rows) {
+    const slots = await db.query(
+      'SELECT slot_index, hashlock, status, assigned_filler, escrow_addr FROM cc_slots WHERE order_hash = $1 ORDER BY slot_index',
+      [o.order_hash]
+    )
+    result.push({
+      orderHash:   o.order_hash,
+      inputToken:  o.input_token,
+      inputAmount: o.input_amount,
+      outputToken: o.output_token,
+      minOutput:   o.min_output,
+      deadline:    o.deadline,
+      numSlots:    o.num_slots,
+      merkleRoot:  o.merkle_root,
+      cosignerSig: o.cosigner_sig,
+      t2Expiry:    o.t2_expiry,
+      slots: slots.rows.map(s => ({
+        index:          s.slot_index,
+        hashlock:       s.hashlock,
+        status:         s.status,
+        assignedFiller: s.assigned_filler,
+        escrowAddr:     s.escrow_addr,
+      }))
+    })
+  }
+
+  return { cosignerAddr: session.rows[0].cosigner_addr, orders: result }
+}
+
+export async function getCrossChainOrder(orderHash: string) {
+  const o = await db.query('SELECT * FROM cc_orders WHERE order_hash = $1', [orderHash])
+  if (!o.rows.length) return null
+  const slots = await db.query(
+    'SELECT slot_index, hashlock, proof, status, assigned_filler, escrow_addr FROM cc_slots WHERE order_hash = $1 ORDER BY slot_index',
+    [orderHash]
+  )
+  const row = o.rows[0]
+  return {
+    orderHash:   row.order_hash,
+    swapper:     row.swapper,
+    inputToken:  row.input_token,
+    inputAmount: row.input_amount,
+    outputToken: row.output_token,
+    minOutput:   row.min_output,
+    deadline:    row.deadline,
+    nonce:       row.nonce,
+    numSlots:    row.num_slots,
+    merkleRoot:  row.merkle_root,
+    cosignerSig: row.cosigner_sig,
+    t2Expiry:    row.t2_expiry,
+    slots: slots.rows.map(s => ({
+      index:          s.slot_index,
+      hashlock:       s.hashlock,
+      proof:          JSON.parse(s.proof) as string[],
+      status:         s.status,
+      assignedFiller: s.assigned_filler,
+      escrowAddr:     s.escrow_addr,
+    }))
+  }
+}
+
+// Find which order+slot a given hashlock belongs to (used by Chain B watcher)
+export async function findSlotByHashlock(hashlock: string) {
+  const r = await db.query(`
+    SELECT s.order_hash, s.slot_index, o.swapper, o.input_token, o.input_amount,
+           o.output_token, o.min_output, o.deadline, o.nonce, o.t2_expiry
+    FROM cc_slots s
+    JOIN cc_orders o ON o.order_hash = s.order_hash
+    WHERE s.hashlock = $1 AND s.status = 'available'
+  `, [hashlock])
+  return r.rows[0] ?? null
+}
+
+export async function updateSlotStatus(
+  orderHash: string, slotIndex: number,
+  status: string, escrowAddr?: string
+): Promise<void> {
+  await db.query(
+    'UPDATE cc_slots SET status=$1, escrow_addr=$2 WHERE order_hash=$3 AND slot_index=$4',
+    [status, escrowAddr ?? null, orderHash, slotIndex]
+  )
+}

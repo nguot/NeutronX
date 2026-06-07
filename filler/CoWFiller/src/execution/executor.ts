@@ -5,7 +5,6 @@ import { wallet, fillAuction, reactor, erc20 } from '../contract/contracts'
 import { decide } from '../strategy/strategy'
 import type { OrderInfo } from '../types'
 
-// Replicates PartialFillReactor._hashOrder
 const ORDER_TYPE_HASH = ethers.utils.keccak256(
   ethers.utils.toUtf8Bytes(
     'PartialFillOrder(' +
@@ -26,7 +25,6 @@ function computeOrderHash(order: OrderInfo): string {
   )
 }
 
-// Stake bucket helpers (mirrors DynamicStakeLib)
 function getFillRatioBucket(fill: bigint, total: bigint): number {
   if (fill >= total) return 4
   const pct = Number((fill * 100n) / total)
@@ -46,7 +44,7 @@ async function computeRequiredStake(fill: bigint, total: bigint, deadline: numbe
 }
 
 async function ensureApproval(tokenAddress: string, amount: bigint): Promise<void> {
-  const token    = erc20(tokenAddress)
+  const token   = erc20(tokenAddress)
   const allowed: ethers.BigNumber = await token.allowance(wallet.address, reactor.address)
   if (allowed.toBigInt() < amount) {
     const tx = await token.approve(reactor.address, ethers.constants.MaxUint256)
@@ -68,8 +66,10 @@ export class Executor {
   }
 
   async onBlock(currentBlock: number): Promise<void> {
-    if (this.watching.size > 0)
-      console.log(`[Executor] block #${currentBlock}  watching=${this.watching.size}  registered=${this.registered.size}`)
+    const active = [...this.watching.values()].filter(o => o.deadline - currentBlock <= INVENTORY.REGISTER_AT_BLOCKS_LEFT * 3)
+    const idle   = this.watching.size - active.length
+    if (active.length > 0 || this.registered.size > 0)
+      console.log(`[Executor] block #${currentBlock}  active=${active.length}  registered=${this.registered.size}  idle=${idle}`)
 
     for (const [hash, order] of this.watching) {
       if (currentBlock > order.deadline) {
@@ -78,8 +78,10 @@ export class Executor {
         this.registered.delete(hash)
         continue
       }
+      const blocksLeft = order.deadline - currentBlock
+      if (blocksLeft > INVENTORY.REGISTER_AT_BLOCKS_LEFT * 3) continue  // too early, skip silently
       await this.tryFill(order, currentBlock).catch(e =>
-        console.error(`[Executor] error on ${hash.slice(0,10)}…:`, e)
+        console.error(`[Executor] error on ${hash.slice(0,10)}…: ${(e as any)?.reason ?? (e as any)?.message ?? e}`)
       )
     }
   }
@@ -87,7 +89,6 @@ export class Executor {
   private async tryFill(cachedOrder: OrderInfo, currentBlock: number): Promise<void> {
     const tag = `[Executor] ${cachedOrder.hash.slice(0,10)}…`
 
-    // Re-fetch fresh order so fills list (decay cursor) is current
     let order = cachedOrder
     try {
       const { data } = await axios.get<OrderInfo>(`${BACKEND_URL}/orders/${cachedOrder.hash}`)
@@ -100,7 +101,6 @@ export class Executor {
     const hash      = order.hash
     const orderHash = computeOrderHash(order)
 
-    // Check on-chain remaining — drop if already fully filled
     const remainingBN: ethers.BigNumber = await reactor.remainingInput(orderHash, order.inputAmount)
     const onChainRemaining = remainingBN.toBigInt()
     const remainingPct = (Number(onChainRemaining) / Number(order.inputAmount) * 100).toFixed(1)
@@ -163,7 +163,6 @@ export class Executor {
         return
       }
 
-      // Expected output: fillAmount * currentPrice / 1e18 (reactor will demand this from filler)
       const expectedOutput = (fillAmount * decision.currentPrice) / 10n**18n
       await ensureApproval(order.outputToken, expectedOutput)
 
