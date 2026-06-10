@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express'
+import { fillerRegistry } from '../services/fillerRegistry'
 
 const router = Router()
 
@@ -24,11 +25,6 @@ interface FillerQuote {
   error?:          string
 }
 
-const FILLER_URLS: Array<{ name: string; url: string }> = [
-  { name: 'WhaleFiller', url: process.env.WHALE_FILLER_QUOTE_URL! },
-  { name: 'CoWFiller',   url: process.env.COW_FILLER_QUOTE_URL!   },
-]
-
 async function fetchQuote(fillerUrl: string, body: QuoteRequest): Promise<FillerQuote> {
   const res = await fetch(`${fillerUrl}/quote`, {
     method:  'POST',
@@ -47,6 +43,8 @@ router.post('/', async (req: Request, res: Response) => {
     res.status(400).json({ error: 'Missing required fields: inputToken, outputToken, inputAmount, startPrice, decayPerBlock' })
     return
   }
+
+  const FILLER_URLS = fillerRegistry.list()
 
   // Query all fillers concurrently; never let one failure block the rest
   const results = await Promise.allSettled(

@@ -1,4 +1,4 @@
-import { INVENTORY, SUPPORTED_TOKENS } from '../config'
+import { DEV_MODE, INVENTORY, SUPPORTED_TOKENS } from '../config'
 import { erc20, wallet } from '../contract/contracts'
 import { getOrderbook, logOrderbook } from '../orderbook/mockOrderbook'
 import { match } from '../matching/matcher'
@@ -38,6 +38,13 @@ export async function decide(order: OrderInfo, currentBlock: number): Promise<Fi
     `${tag} ${sym(order.inputToken)}→${sym(order.outputToken)}` +
     `  auctionPrice=${auctionPriceHuman.toFixed(4)}  blocksLeft=${blocksLeft}`
   )
+
+  // ── DEV_MODE: skip orderbook/inventory/profit checks ─────────────────────
+  if (DEV_MODE) {
+    const inputAmount = BigInt(order.inputAmount)
+    console.log(`${tag} ✔ FILL [DEV]  fill=100%  price=${auctionPriceHuman.toFixed(4)}`)
+    return { shouldFill: true, fillAmount: inputAmount, currentPrice, reason: 'dev mode' }
+  }
 
   // ── Orderbook lookup ──────────────────────────────────────────────────────
   const book = getOrderbook(order.inputToken, order.outputToken)

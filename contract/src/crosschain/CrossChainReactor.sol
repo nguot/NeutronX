@@ -84,7 +84,7 @@ contract CrossChainReactor is ReentrancyGuard {
         uint256 deadline;     // T1 (block number): after this, swapper reclaims unclaimed slots
         uint256 nonce;        // anti-replay: must be unique per swapper
         bytes32 merkleRoot;   // root of the N-leaf tree built by the server
-        uint8   numSlots;     // N — must be a power of 2 between 2 and 32
+        uint8   numSlots;     // N — must be a power of 2 between 2 and 64
     }
 
     // ─── What we store per order (only the minimum needed for claims) ─────────
@@ -98,7 +98,7 @@ contract CrossChainReactor is ReentrancyGuard {
         uint8    numSlots;
         uint64   claimedCount;   // number of slots claimed so far
         // Bitmap: bit i is set when slot i has been claimed.
-        // uint64 supports up to 64 slots; we cap at 32 so this is fine.
+        // uint64 has exactly 64 bits — one per slot at our max numSlots.
         uint64   claimedBitmap;
     }
 
@@ -200,7 +200,7 @@ contract CrossChainReactor is ReentrancyGuard {
         require(info.swapper     == msg.sender,               "not swapper");
         require(info.inputAmount >  0,                        "zero amount");
         require(SlotLib.isPowerOfTwo(info.numSlots),          "numSlots not power of 2");
-        require(info.numSlots    <= 32,                       "numSlots too large");
+        require(info.numSlots    <= 64,                       "numSlots too large");
         require(info.deadline    >  block.number,             "deadline in past");
         require(info.merkleRoot  != bytes32(0),               "empty merkle root");
 

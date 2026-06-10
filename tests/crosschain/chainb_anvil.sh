@@ -28,4 +28,5 @@ anvil \
   --fork-url  "$ALCHEMY_URL" \
   --fork-block-number "$FORK_BLOCK" \
   --chain-id  31338 \
-  --port      8546
+  --port      8546 \
+  --block-time 1

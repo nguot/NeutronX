@@ -1,0 +1,50 @@
+\documentclass[../DoAn.tex]{subfiles}
+\begin{document}
+
+\section{Đặt vấn đề}
+\label{section:1.1}
+
+Trong những năm gần đây, lĩnh vực tài chính phi tập trung (Decentralized Finance - DeFi) đã phát triển mạnh mẽ nhờ sự xuất hiện của các sàn giao dịch phi tập trung (Decentralized Exchange - DEX). Khác với sàn giao dịch tập trung truyền thống, DEX cho phép người dùng trao đổi tài sản số trực tiếp thông qua hợp đồng thông minh mà không cần ủy thác tài sản cho một bên trung gian nào. Khối lượng giao dịch hàng ngày trên các DEX lớn như Uniswap hay Curve hiện đã đạt đến quy mô hàng tỉ đô la, cho thấy vai trò ngày càng lớn của mô hình giao dịch này trong toàn bộ hệ sinh thái blockchain.
+
+Phần lớn các DEX hiện nay vận hành dựa trên cơ chế tạo lập thị trường tự động (Automated Market Maker - AMM), trong đó giá của tài sản được xác định theo công thức toán học dựa trên lượng thanh khoản hiện có trong hồ chứa (liquidity pool). Cách làm này tuy đơn giản và dễ triển khai, nhưng lại bộc lộ một số hạn chế khi xử lý các giao dịch có khối lượng lớn: lệnh được thực hiện ngay lập tức trên một hồ thanh khoản sẽ gây ra hiện tượng trượt giá (slippage) đáng kể, đồng thời tạo cơ hội cho các tác nhân khai thác giá trị có thể trích xuất tối đa (Maximal Extractable Value - MEV) thực hiện hành vi chèn lệnh nhằm thu lợi từ chính giao dịch đó.
+
+Để khắc phục một phần các hạn chế nêu trên, một số giao thức đã chuyển sang hướng tiếp cận giao dịch dựa trên ý định (intent-based trading): người dùng chỉ cần ký một thông điệp thể hiện mong muốn giao dịch (gọi là "lệnh" hay "order"), còn việc tìm đối tác và thực thi lệnh được giao cho các bên thứ ba gọi là "filler". Tuy vậy, qua khảo sát các giao thức theo hướng này, có thể thấy phần lớn vẫn xử lý lệnh theo nguyên tắc tất cả hoặc không có gì: lệnh chỉ được khớp trọn vẹn hoặc không được khớp, dẫn đến việc lệnh hết hạn mà không thực thi nếu không tìm được đối tác đáp ứng đủ toàn bộ khối lượng. Bên cạnh đó, cơ chế khuyến khích filler tham gia khớp lệnh của các giao thức này thường khá đơn giản, chưa ràng buộc trách nhiệm khi filler đăng ký nhận lệnh nhưng sau đó không thực hiện, gây tốn thời gian chờ và làm chậm việc khớp lệnh của người dùng.
+
+Một vấn đề khác cũng chưa được giải quyết triệt để là khả năng giao dịch xuyên chuỗi (cross-chain). Tài sản số ngày nay được phân bổ trên nhiều mạng blockchain độc lập nhau, trong khi phần lớn các giao thức giao dịch dựa trên ý định kể trên chỉ hoạt động trong phạm vi một chuỗi duy nhất. Các giải pháp xuyên chuỗi phổ biến hiện nay phần lớn dựa vào cầu nối (bridge) - một thành phần trung gian nắm giữ tài sản của người dùng và do đó tiềm ẩn rủi ro bị tấn công, điều mà thực tế đã từng gây ra không ít vụ thất thoát tài sản với quy mô lớn.
+
+Xuất phát từ những hạn chế đã nêu, nếu xây dựng được một hệ thống tổng hợp DEX cho phép khớp lệnh từng phần với mức giá xác định theo cơ chế minh bạch, ràng buộc trách nhiệm của filler bằng cơ chế đặt cọc và phạt, đảm bảo lệnh luôn được thực thi trước thời hạn, đồng thời hỗ trợ giao dịch xuyên chuỗi mà không cần thông qua cầu nối trung gian, thì người dùng sẽ có thêm một lựa chọn giao dịch vừa hiệu quả về chi phí, vừa giảm được nhiều rủi ro so với các giải pháp hiện có. Đây chính là vấn đề mà đồ án này hướng tới giải quyết.
+
+\section{Mục tiêu và phạm vi đề tài}
+\label{section:1.2}
+
+Các hướng tiếp cận hiện nay cho bài toán giao dịch tài sản phi tập trung có thể chia thành ba nhóm chính: nhóm dựa trên AMM như Uniswap, nhóm dựa trên giao thức lệnh giới hạn như 1inch Limit Order Protocol, và nhóm dựa trên ý định với sự tham gia của filler như UniswapX hay CoW Protocol. Khảo sát các nhóm trên (được trình bày chi tiết ở Chương 2) cho thấy nhóm AMM không hỗ trợ đặt giá mong muốn và dễ bị trượt giá khi khối lượng lớn; nhóm giao thức lệnh giới hạn tuy hỗ trợ khớp lệnh từng phần nhưng theo cách trừ dần số lượng còn lại một cách đơn giản và không có cơ chế nào đảm bảo lệnh sẽ được thực thi trước hạn; còn nhóm giao thức dựa trên ý định cải thiện được trải nghiệm ký lệnh và tạo ra sự cạnh tranh giữa các filler, nhưng phần lớn vẫn giới hạn trong một chuỗi và chưa có cơ chế ràng buộc kinh tế đủ chặt chẽ đối với filler.
+
+Từ những hạn chế đã phân tích ở trên, đồ án đặt ra các mục tiêu cụ thể sau đây: xây dựng cơ chế khớp lệnh từng phần dựa trên đấu giá kiểu Hà Lan, trong đó giá giảm dần theo từng khối nhằm hạn chế khả năng bị khai thác MEV; áp dụng chuẩn ký dữ liệu có cấu trúc EIP-712 cùng với Permit2 để người dùng có thể ký lệnh ngoài chuỗi một cách an toàn và không tốn phí gas khi tạo lệnh; xây dựng cơ chế đặt cọc động kết hợp phạt nhằm ràng buộc trách nhiệm của filler khi đăng ký khớp lệnh; xây dựng một thành phần thực thi dự phòng để đảm bảo phần lệnh còn lại luôn được khớp trước khi hết hạn; và mở rộng khả năng giao dịch xuyên chuỗi giữa hai mạng tương thích EVM thông qua hợp đồng khóa thời gian theo mã băm có hỗ trợ khớp từng phần.
+
+Về phạm vi, đồ án giới hạn đối tượng giao dịch là các token tuân theo chuẩn ERC-20, môi trường triển khai và kiểm thử là các mạng giả lập cục bộ được tạo bằng Anvil (một mạng sao chép trạng thái từ Ethereum mainnet cho kịch bản giao dịch trong cùng một chuỗi, và hai mạng giả lập độc lập cho kịch bản xuyên chuỗi). Đồ án tập trung vào việc xây dựng và kiểm thử hệ thống trong môi trường mô phỏng nói trên, chưa thực hiện triển khai sản phẩm lên mạng chính thức.
+
+\section{Định hướng giải pháp}
+\label{section:1.3}
+
+Đồ án lựa chọn hướng tiếp cận giao dịch dựa trên ý định, trong đó người dùng (gọi là "swapper") chỉ cần ký một lệnh thể hiện mong muốn giao dịch của mình, còn việc tìm thanh khoản và thực thi lệnh được giao cho các filler cạnh tranh nhau thực hiện. Hướng đi này được lựa chọn vì cho phép tách riêng phần "thể hiện ý định" khỏi phần "thực thi", nhờ đó giảm được chi phí cho người dùng khi tạo lệnh và mở ra khả năng tối ưu việc thực thi thông qua cạnh tranh giữa nhiều filler.
+
+Dựa trên hướng đi đó, đồ án xây dựng một hệ thống có tên gọi NeutronX, gồm bốn thành phần chính phối hợp với nhau: tầng hợp đồng thông minh chịu trách nhiệm xác thực và thực thi lệnh trên chuỗi, tầng backend đảm nhận việc đồng ký lệnh và theo dõi trạng thái khớp lệnh, tầng filler mô phỏng các bên tham gia khớp lệnh theo nhiều chiến lược khác nhau, và giao diện người dùng cho phép tạo lệnh cũng như theo dõi kết quả khớp lệnh.
+
+Đóng góp chính của đồ án nằm ở việc thiết kế và cài đặt một cơ chế khớp lệnh từng phần theo đấu giá kiểu Hà Lan có khả năng hạn chế MEV, một cơ chế đặt cọc động ràng buộc trách nhiệm filler, một thành phần thực thi dự phòng giúp đảm bảo lệnh luôn được hoàn tất, và một phần mở rộng cho phép thực hiện giao dịch hoán đổi xuyên chuỗi có hỗ trợ khớp từng phần - một đặc điểm mà qua quá trình khảo sát, nhóm thực hiện nhận thấy chưa phổ biến ở các giao thức xuyên chuỗi dựa trên hợp đồng khóa thời gian hiện nay. Hệ thống đã được cài đặt và kiểm thử trên môi trường mạng giả lập, kết quả đạt được sẽ được trình bày cụ thể ở Chương 4.
+
+\section{Bố cục đồ án}
+\label{section:1.4}
+
+Phần còn lại của báo cáo đồ án tốt nghiệp này được tổ chức thành năm chương tiếp theo như sau.
+
+Chương 2 trình bày kết quả khảo sát hiện trạng các hệ thống giao dịch phi tập trung hiện có, đưa ra cái nhìn tổng quan về chức năng của hệ thống đề xuất thông qua các biểu đồ use case, đặc tả chi tiết những chức năng quan trọng nhất, và nêu các yêu cầu phi chức năng mà hệ thống cần đáp ứng.
+
+Chương 3 trình bày nền tảng lý thuyết và các công nghệ được sử dụng trong đồ án, bao gồm những khái niệm cơ bản về Ethereum và máy ảo EVM, hợp đồng thông minh, chuẩn token ERC-20, các mô hình DEX phổ biến, cơ chế đấu giá kiểu Hà Lan, chuẩn ký dữ liệu EIP-712, giao thức Permit2, hiện tượng MEV, và hợp đồng khóa thời gian theo mã băm dùng cho giao dịch xuyên chuỗi.
+
+Chương 4 trình bày quá trình phân tích, thiết kế, triển khai và đánh giá hệ thống NeutronX, từ kiến trúc tổng thể, thiết kế các hợp đồng thông minh và các dịch vụ backend, đến framework filler, cùng với kết quả kiểm thử và đánh giá hệ thống sau khi cài đặt.
+
+Chương 5 đi sâu vào các giải pháp và đóng góp nổi bật của đồ án, làm rõ những điểm khác biệt so với các hệ thống đã khảo sát ở Chương 2, cụ thể là cơ chế đặt cọc động kết hợp phạt, thành phần thực thi dự phòng, và phần mở rộng giao dịch xuyên chuỗi có hỗ trợ khớp từng phần.
+
+Chương 6 tổng kết lại những kết quả đã đạt được của đồ án, đối chiếu với các mục tiêu đã đặt ra ở Chương 1, đồng thời nêu lên những hạn chế còn tồn tại và đề xuất hướng phát triển trong thời gian tới.
+
+\end{document}

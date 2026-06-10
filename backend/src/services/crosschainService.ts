@@ -62,11 +62,11 @@ export async function initCrossChainSchema(): Promise<void> {
 
 function getNumSlots(inputAmount: string): number {
   const amt = BigInt(inputAmount)
-  if (amt <  500_000_000_000_000_000n)   return 2
-  if (amt < 2_000_000_000_000_000_000n)  return 4
-  if (amt < 10_000_000_000_000_000_000n) return 8
-  if (amt < 50_000_000_000_000_000_000n) return 16
-  return 32
+  if (amt <  500_000_000_000_000_000n)   return 4
+  if (amt < 2_000_000_000_000_000_000n)  return 8
+  if (amt < 10_000_000_000_000_000_000n) return 16
+  if (amt < 50_000_000_000_000_000_000n) return 32
+  return 64
 }
 
 function deriveMasterSecret(rootSecret: string, p: {
@@ -359,4 +359,66 @@ export async function updateSlotStatus(
     'UPDATE cc_slots SET status=$1, escrow_addr=$2 WHERE order_hash=$3 AND slot_index=$4',
     [status, escrowAddr ?? null, orderHash, slotIndex]
   )
+}
+
+// Filler calls this right after registerFiller() so the dev UI can show
+// which wallet owns each claimed slot (avoids "not registered filler" confusion).
+export async function updateSlotFiller(orderHash: string, slotIndex: number, filler: string): Promise<void> {
+  await db.query(
+    'UPDATE cc_slots SET assigned_filler=$1 WHERE order_hash=$2 AND slot_index=$3',
+    [filler.toLowerCase(), orderHash, slotIndex]
+  )
+}
+
+// Reset a stuck 'claimed' slot back to 'available' when Chain B was restarted
+// and the escrow no longer exists on the current Chain B instance.
+export async function resetSlotToAvailable(orderHash: string, slotIndex: number): Promise<void> {
+  await db.query(
+    "UPDATE cc_slots SET status='available', escrow_addr=NULL, assigned_filler=NULL WHERE order_hash=$1 AND slot_index=$2",
+    [orderHash, slotIndex]
+  )
+}
+
+// Filler calls this after successfully calling claimSlot() on Chain A.
+// Transitions 'claimed' → 'done' so the dev UI stops showing "Claim WETH".
+export async function markSlotDone(orderHash: string, slotIndex: number): Promise<void> {
+  await db.query(
+    "UPDATE cc_slots SET status='done' WHERE order_hash=$1 AND slot_index=$2",
+    [orderHash, slotIndex]
+  )
+}
+
+// List all CC orders that still have at least one available slot (for filler dev UI)
+export async function listOpenCCOrders() {
+  const r = await db.query(`
+    SELECT o.order_hash, o.swapper, o.input_token, o.input_amount,
+           o.output_token, o.min_output, o.deadline, o.num_slots, o.t2_expiry
+    FROM cc_orders o
+    ORDER BY o.created_at DESC
+    LIMIT 20
+  `)
+  const result = []
+  for (const row of r.rows) {
+    const slots = await db.query(
+      'SELECT slot_index, status, assigned_filler FROM cc_slots WHERE order_hash=$1 ORDER BY slot_index',
+      [row.order_hash]
+    )
+    result.push({
+      orderHash:   row.order_hash,
+      swapper:     row.swapper,
+      inputToken:  row.input_token,
+      inputAmount: row.input_amount,
+      outputToken: row.output_token,
+      minOutput:   row.min_output,
+      deadline:    row.deadline,
+      numSlots:    row.num_slots,
+      t2Expiry:    row.t2_expiry,
+      slots: slots.rows.map(s => ({
+        index:          s.slot_index,
+        status:         s.status,
+        assignedFiller: s.assigned_filler ?? null,
+      })),
+    })
+  }
+  return result
 }

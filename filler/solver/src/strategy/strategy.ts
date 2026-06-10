@@ -1,18 +1,27 @@
-import { STRATEGY, SUPPORTED_TOKENS } from '../config'
+import axios from 'axios'
+import { BACKEND_URL, STRATEGY, SUPPORTED_TOKENS } from '../config'
 import type { OrderInfo, FillDecision } from '../types'
 
-// ─── IMPLEMENT THIS ───────────────────────────────────────────────────────────
-// Return how many units of outputToken equal 1 full unit of inputToken
-// at current market rates (raw token amounts, not USD).
-//
-// Example: WETH → USDC
-//   1 WETH = 2500 USDC → return 2500
-//
-// Plug in CoinGecko, Chainlink, Pyth, your own CEX feed, etc.
-async function getMarketPrice(_inputToken: string, _outputToken: string): Promise<number> {
-  throw new Error('getMarketPrice() not implemented — add your price oracle in strategy/strategy.ts')
+// Fetches market rate from the backend /quote endpoint (AlphaRouter → CoinGecko fallback).
+// Returns how many units of outputToken equal 1 full unit of inputToken.
+async function getMarketPrice(inputToken: string, outputToken: string): Promise<number> {
+  const inMeta  = SUPPORTED_TOKENS[inputToken]
+  const outMeta = SUPPORTED_TOKENS[outputToken]
+  if (!inMeta || !outMeta) throw new Error('unsupported token pair')
+
+  const oneUnit = (10n ** BigInt(inMeta.decimals)).toString()
+  const params  = new URLSearchParams({
+    inputToken,
+    outputToken,
+    inputAmount:    oneUnit,
+    inputDecimals:  String(inMeta.decimals),
+    outputDecimals: String(outMeta.decimals),
+    inputSymbol:    inMeta.symbol,
+    outputSymbol:   outMeta.symbol,
+  })
+  const { data } = await axios.get(`${BACKEND_URL}/quote?${params}`)
+  return parseFloat(data.marketRate)
 }
-// ─────────────────────────────────────────────────────────────────────────────
 
 // Decides whether to fill an order at the current block.
 // Returns a FillDecision with shouldFill=true only when the fill is profitable.

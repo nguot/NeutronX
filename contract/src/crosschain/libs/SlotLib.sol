@@ -20,10 +20,16 @@ pragma solidity ^0.8.20;
  * We want powers of 2 so the Merkle tree is perfectly balanced (every proof
  * is exactly log2(N) hashes long, which is easy to reason about).
  *
+ * Bigger orders get proportionally more slots than smaller ones (not a flat
+ * doubling), because a fixed slot count would let the per-slot size — and
+ * therefore the minimum capital a filler needs to participate at all — grow
+ * right alongside the order size. Splitting larger orders more finely keeps
+ * that participation floor from climbing out of reach for smaller fillers.
+ *
  * The thresholds below assume the input token is priced roughly like ETH/WETH.
  * For stablecoin-in / token-out orders the server can override numSlots when
- * it creates the Merkle tree — the contract just validates 2 ≤ N ≤ 32 and
- * that N is a power of two.
+ * it creates the Merkle tree — the contract just validates 2 ≤ N ≤ 64 and
+ * that N is a power of two (claimedBitmap is a uint64 — one bit per slot).
  */
 library SlotLib {
 
@@ -32,18 +38,18 @@ library SlotLib {
      * Called OFF-CHAIN by the KeyDistributor server; result is submitted in
      * the OrderInfo struct and validated by CrossChainReactor.createOrder().
      *
-     *   < 0.5 ETH  →  2  slots   (tiny order, 1 filler is usually enough)
-     *   < 2 ETH    →  4  slots
-     *   < 10 ETH   →  8  slots
-     *   < 50 ETH   →  16 slots
-     *   ≥ 50 ETH   →  32 slots   (largest supported tree depth = log2(32) = 5)
+     *   < 0.5 ETH  →  4  slots   (tiny order, but still splittable for small fillers)
+     *   < 2 ETH    →  8  slots
+     *   < 10 ETH   →  16 slots
+     *   < 50 ETH   →  32 slots
+     *   ≥ 50 ETH   →  64 slots   (max supported — tree depth = log2(64) = 6)
      */
     function getNumSlots(uint256 inputAmountWei) internal pure returns (uint8) {
-        if (inputAmountWei <  0.5 ether) return 2;
-        if (inputAmountWei <  2   ether) return 4;
-        if (inputAmountWei <  10  ether) return 8;
-        if (inputAmountWei <  50  ether) return 16;
-        return 32;
+        if (inputAmountWei <  0.5 ether) return 4;
+        if (inputAmountWei <  2   ether) return 8;
+        if (inputAmountWei <  10  ether) return 16;
+        if (inputAmountWei <  50  ether) return 32;
+        return 64;
     }
 
     /**

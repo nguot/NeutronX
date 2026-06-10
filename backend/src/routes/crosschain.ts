@@ -4,6 +4,10 @@ import {
   getSessionWithOrders,
   createCrossChainOrder,
   getCrossChainOrder,
+  listOpenCCOrders,
+  markSlotDone,
+  updateSlotFiller,
+  resetSlotToAvailable,
 } from '../services/crosschainService'
 
 const router = Router()
@@ -59,6 +63,55 @@ router.post('/orders', async (req, res) => {
     })
 
     return res.json(result)
+  } catch (e: any) {
+    return res.status(500).json({ error: e.message })
+  }
+})
+
+// GET /cc/orders
+// Returns all CC orders that have at least one available slot (for filler dev UI).
+router.get('/orders', async (req, res) => {
+  try {
+    const orders = await listOpenCCOrders()
+    return res.json({ orders })
+  } catch (e: any) {
+    return res.status(500).json({ error: e.message })
+  }
+})
+
+// PATCH /cc/orders/:hash/slots/:index/filler  { filler: "0x..." }
+// Filler records itself as the registered filler so the UI can grey-out
+// "Claim WETH" buttons on the other filler's UI.
+router.patch('/orders/:hash/slots/:index/filler', async (req, res) => {
+  try {
+    const { filler } = req.body
+    if (!filler) return res.status(400).json({ error: 'filler required' })
+    await updateSlotFiller(req.params.hash, parseInt(req.params.index), filler)
+    return res.json({ ok: true })
+  } catch (e: any) {
+    return res.status(500).json({ error: e.message })
+  }
+})
+
+// PATCH /cc/orders/:hash/slots/:index/reset
+// Resets a stuck 'claimed' slot back to 'available' when Chain B was restarted
+// and the original escrow no longer exists on the current Chain B instance.
+router.patch('/orders/:hash/slots/:index/reset', async (req, res) => {
+  try {
+    await resetSlotToAvailable(req.params.hash, parseInt(req.params.index))
+    return res.json({ ok: true })
+  } catch (e: any) {
+    return res.status(500).json({ error: e.message })
+  }
+})
+
+// PATCH /cc/orders/:hash/slots/:index/done
+// Filler calls this after successfully calling claimSlot() on Chain A so the
+// DB transitions from 'claimed' → 'done' and the UI stops showing "Claim WETH".
+router.patch('/orders/:hash/slots/:index/done', async (req, res) => {
+  try {
+    await markSlotDone(req.params.hash, parseInt(req.params.index))
+    return res.json({ ok: true })
   } catch (e: any) {
     return res.status(500).json({ error: e.message })
   }

@@ -8,6 +8,10 @@ export const PRIVATE_KEY  = process.env.PRIVATE_KEY          || ''
 export const FILL_AUCTION = process.env.FILL_AUCTION         || ''
 export const REACTOR      = process.env.PARTIAL_FILL_REACTOR || ''
 
+// Set DEV_MODE=true to skip profit checks and register phase (Anvil testing only).
+// The filler will fill every order instantly using whale impersonation for token funding.
+export const DEV_MODE = process.env.DEV_MODE === 'true'
+
 // ── Strategy knobs — tune these for your filler ──────────────────────────────
 export const STRATEGY = {
   MIN_PROFIT_BPS:           20,   // skip fill if expected margin is below this

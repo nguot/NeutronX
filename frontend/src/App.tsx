@@ -1,43 +1,79 @@
 import { useState } from 'react'
+import { AppConfigProvider } from './context/AppConfig'
 import { useWallet } from './hooks/useWallet'
 import DutchAuction from './pages/DutchAuction'
 import CrossChain   from './pages/CrossChain'
+import Explore      from './pages/Explore'
+import Simulate     from './pages/Simulate'
+import Orders       from './pages/Orders'
+import Admin        from './pages/Admin'
 
-type Tab = 'dutch' | 'crosschain'
+type Tab = 'swap' | 'crosschain' | 'orders' | 'explore' | 'simulate' | 'admin'
 
-export default function App() {
-  const [tab, setTab] = useState<Tab>('dutch')
+const NAV: { id: Tab; label: string }[] = [
+  { id: 'swap',       label: 'Swap' },
+  { id: 'crosschain', label: 'Cross-Chain' },
+  { id: 'orders',     label: 'Orders' },
+  { id: 'explore',    label: 'Explore' },
+  { id: 'simulate',   label: 'Simulate' },
+  { id: 'admin',      label: 'Admin' },
+]
+
+function Inner() {
+  const [tab, setTab] = useState<Tab>('swap')
   const { wallet, error, connect } = useWallet()
 
   return (
-    <>
-      <h1>NeutronX</h1>
-      <p className="sub">DEX aggregator — Dutch auction fills + cross-chain HTLC swaps</p>
+    <div>
+      <nav className="navbar">
+        <div className="navbar-brand">
+          <span className="brand-logo">⬡</span>
+          <span className="brand-name">NeutronX</span>
+          <span className="brand-tag">DEX Aggregator</span>
+        </div>
 
-      {/* ── Wallet bar ── */}
-      <div style={{ marginTop: 16, display: 'flex', alignItems: 'center', gap: 12 }}>
-        {wallet.connected ? (
-          <span style={{ color: '#4ade80', fontSize: '0.82em' }}>
-            ● {wallet.account.slice(0,6)}…{wallet.account.slice(-4)} &nbsp;|&nbsp; block #{wallet.blockNumber}
-          </span>
-        ) : (
-          <button onClick={connect}>Connect MetaMask</button>
-        )}
-        {error && <span style={{ color: '#f87171', fontSize: '0.8em' }}>{error}</span>}
-      </div>
+        <div className="navbar-nav">
+          {NAV.map(n => (
+            <button
+              key={n.id}
+              className={`nav-btn ${tab === n.id ? 'active' : ''}`}
+              onClick={() => setTab(n.id)}
+            >
+              {n.label}
+            </button>
+          ))}
+        </div>
 
-      {/* ── Tabs ── */}
-      <div className="tabs" style={{ marginTop: 20 }}>
-        <button className={`tab-btn ${tab === 'dutch'      ? 'active' : ''}`} onClick={() => setTab('dutch')}>
-          Dutch Auction
-        </button>
-        <button className={`tab-btn ${tab === 'crosschain' ? 'active' : ''}`} onClick={() => setTab('crosschain')}>
-          Cross-Chain
-        </button>
-      </div>
+        <div className="navbar-wallet">
+          {wallet.connected ? (
+            <div className="wallet-badge">
+              <span className="wallet-dot" />
+              <span>{wallet.account.slice(0, 6)}…{wallet.account.slice(-4)}</span>
+              <span className="wallet-block">block #{wallet.blockNumber}</span>
+            </div>
+          ) : (
+            <button className="btn-connect" onClick={connect}>Connect Wallet</button>
+          )}
+          {error && <span className="wallet-error">{error}</span>}
+        </div>
+      </nav>
 
-      {tab === 'dutch'      && <DutchAuction wallet={wallet} />}
-      {tab === 'crosschain' && <CrossChain   wallet={wallet} />}
-    </>
+      <main className="page-content">
+        {tab === 'swap'       && <DutchAuction wallet={wallet} />}
+        {tab === 'crosschain' && <CrossChain   wallet={wallet} />}
+        {tab === 'orders'     && <Orders        wallet={wallet} />}
+        {tab === 'explore'    && <Explore />}
+        {tab === 'simulate'   && <Simulate      wallet={wallet} />}
+        {tab === 'admin'      && <Admin />}
+      </main>
+    </div>
+  )
+}
+
+export default function App() {
+  return (
+    <AppConfigProvider>
+      <Inner />
+    </AppConfigProvider>
   )
 }

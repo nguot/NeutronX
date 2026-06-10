@@ -108,13 +108,26 @@ EOF
 log OK "Saved addresses to $LOG_DIR/.cc_addresses"
 
 # ── 4. Update backend .env ────────────────────────────────────────────────────
-log STEP "Step 4 — Updating backend/.env"
+log STEP "Step 4 — Updating backend/.env and filler .env files"
 
 update_env_var "$PROJECT_ROOT/backend/.env" "CROSS_CHAIN_REACTOR"   "$CC_REACTOR"
 update_env_var "$PROJECT_ROOT/backend/.env" "CHAIN_B_FACTORY"       "$FACTORY"
 update_env_var "$PROJECT_ROOT/backend/.env" "CHAIN_B_RPC"           "$RPC_B"
 update_env_var "$PROJECT_ROOT/backend/.env" "CHAIN_B_CONFIRMATIONS" "1"
 log OK "backend/.env updated (CHAIN_B_FACTORY=$FACTORY)"
+
+# Fillers need CC vars so their dev UIs can show CC orders and fill slots
+for FILLER_DIR in "filler/WhaleFiller" "filler/CoWFiller"; do
+  ENV_FILE="$PROJECT_ROOT/$FILLER_DIR/.env"
+  if [ -f "$ENV_FILE" ]; then
+    update_env_var "$ENV_FILE" "CC_REACTOR"      "$CC_REACTOR"
+    update_env_var "$ENV_FILE" "CHAIN_B_RPC"     "$RPC_B"
+    update_env_var "$ENV_FILE" "CHAIN_B_FACTORY" "$FACTORY"
+    log OK "$FILLER_DIR/.env updated with CC vars"
+  else
+    log WARN "$ENV_FILE not found — skipping (run tests/demo/setup.sh first)"
+  fi
+done
 
 # ── 5. Chain A — wrap WETH + Permit2 approvals for swapper ───────────────────
 log STEP "Step 5 — Chain A: fund swapper + Permit2 approvals"

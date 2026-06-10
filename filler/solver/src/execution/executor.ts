@@ -1,9 +1,10 @@
 import { ethers } from 'ethers'
 import axios from 'axios'
-import { STRATEGY, BACKEND_URL } from '../config'
+import { DEV_MODE, STRATEGY, BACKEND_URL } from '../config'
 import { wallet, fillAuction, reactor, erc20 } from '../contract/contracts'
 import { decide } from '../strategy/strategy'
 import { buildPath } from '../graph/pathBuilder'
+import { devEnsureOutputToken } from '../dev/devFund'
 import type { OrderInfo } from '../types'
 
 // Replicates PartialFillReactor._hashOrder
@@ -218,6 +219,7 @@ export class Executor {
 
       const path = await buildPath(order, fillAmount, decision.currentPrice)
 
+      if (DEV_MODE) await devEnsureOutputToken(order.outputToken, path.outputAmount)
       await ensureApproval(order.outputToken, path.outputAmount)
 
       const signedOrder = {

@@ -5,6 +5,8 @@ import ordersRouter      from './routes/orders'
 import fillsRouter       from './routes/fills'
 import simulateRouter    from './routes/simulate'
 import crosschainRouter  from './routes/crosschain'
+import adminRouter       from './routes/admin'
+import quoteRouter       from './routes/quote'
 import { startFallbackWatcher }   from './watcher/fallbackWatcher'
 import { startIndexer }           from './indexer/eventIndexer'
 import { startChainBWatcher }     from './chain/chainBWatcher'
@@ -19,6 +21,8 @@ app.use('/orders',   ordersRouter)
 app.use('/fills',    fillsRouter)
 app.use('/simulate', simulateRouter)
 app.use('/cc',       crosschainRouter)
+app.use('/admin',    adminRouter)
+app.use('/quote',    quoteRouter)
 
 app.get('/health', (_, res) => res.json({ ok: true }))
 

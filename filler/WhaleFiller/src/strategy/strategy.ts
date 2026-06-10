@@ -1,4 +1,4 @@
-import { INVENTORY, REFERENCE_PRICES, SUPPORTED_TOKENS } from '../config'
+import { DEV_MODE, INVENTORY, REFERENCE_PRICES, SUPPORTED_TOKENS } from '../config'
 import { erc20, wallet } from '../contract/contracts'
 import type { OrderInfo, FillDecision } from '../types'
 
@@ -37,8 +37,14 @@ export async function decide(order: OrderInfo, currentBlock: number): Promise<Fi
     `  auctionPrice=${auctionPriceHuman.toFixed(4)}  blocksLeft=${blocksLeft}`
   )
 
+  // ── DEV_MODE: skip spread + inventory checks, fill 100% ──────────────────
+  if (DEV_MODE) {
+    const inputAmount = BigInt(order.inputAmount)
+    console.log(`${tag} ✔ FILL [DEV]  fill=100%  price=${auctionPriceHuman.toFixed(4)}`)
+    return { shouldFill: true, fillAmount: inputAmount, currentPrice, reason: 'dev mode' }
+  }
+
   // ── Market spread check ───────────────────────────────────────────────────
-  // Profitable when auctionPrice < refPrice: filler pays less USDC than WETH is worth.
   const refPrice = REFERENCE_PRICES[order.inputToken]?.[order.outputToken]
   if (!refPrice) return no(`no reference price for ${sym(order.inputToken)}→${sym(order.outputToken)}`)
 
@@ -53,9 +59,6 @@ export async function decide(order: OrderInfo, currentBlock: number): Promise<Fi
   }
 
   // ── Inventory capacity check ──────────────────────────────────────────────
-  // Cap usable balance to MAX_INVENTORY_USE_BPS fraction — don't risk all inventory on one fill.
-  // outputRequired = fillAmount * currentPrice / 1e18
-  // => maxFill from inventory = usableBalance * 1e18 / currentPrice
   const outputBalance   = (await erc20(order.outputToken).balanceOf(wallet.address)).toBigInt()
   if (outputBalance === 0n) return no('zero inventory of outputToken')
 
