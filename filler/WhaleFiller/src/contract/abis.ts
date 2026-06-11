@@ -1,6 +1,5 @@
 export const FILL_AUCTION_ABI = [
-  'function register(bytes32 orderHash, uint256 fillAmount, uint256 orderTotal, uint256 deadline) external payable',
-  'function stakeTable(uint256, uint256) view returns (uint32)',
+  'function collateralRate(uint256) view returns (uint32)',
   'function hasValidRegistration(bytes32, address, uint256) view returns (bool)',
   'function pendingReturns(address) view returns (uint256)',
   'function withdraw() external',
@@ -8,6 +7,7 @@ export const FILL_AUCTION_ABI = [
 
 export const REACTOR_ABI = [
   'function executePartialChunk(tuple(tuple(address swapper, address inputToken, uint256 inputAmount, address outputToken, uint256 minOutputAmount, uint256 deadline, uint256 nonce, uint16 minFillBps, uint128 startPrice, uint32 decayPerBlock, uint24 feeTier) info, bytes sig) order, uint256 fillAmount) external',
+  'function register(tuple(tuple(address swapper, address inputToken, uint256 inputAmount, address outputToken, uint256 minOutputAmount, uint256 deadline, uint256 nonce, uint16 minFillBps, uint128 startPrice, uint32 decayPerBlock, uint24 feeTier) info, bytes sig) order, uint256 fillAmount) external payable',
   'function remainingInput(bytes32, uint256) view returns (uint256)',
   'function fillAuction() view returns (address)',
 ]
@@ -19,11 +19,21 @@ export const ERC20_ABI = [
   'function transfer(address to, uint256 amount) returns (bool)',
 ]
 
-export const CC_REACTOR_ABI = [
-  'function registerFiller(bytes32 orderHash, uint8 slotIndex) external',
-  'function claimSlot(bytes32 orderHash, uint8 slotIndex, bytes32 secret, bytes32[] calldata merkleProof) external',
-  'function slotFiller(bytes32 orderHash, uint8 slotIndex) view returns (address)',
-  'function isSlotClaimed(bytes32 orderHash, uint8 slotIndex) view returns (bool)',
+export const ESCROW_SRC_FACTORY_ABI = [
+  'function fillSlot((address swapper,address inputToken,uint256 inputAmount,address outputToken,uint256 minOutput,uint256 deadline,uint256 nonce,bytes32 merkleRoot,uint8 numSlots) info, bytes swapperSig, bytes cosignerSig, uint8 slotIndex, bytes32 hashlock, bytes32[] merkleProof) external payable returns (address escrow)',
+  'function isSlotFilled(bytes32 orderHash, uint8 slotIndex) view returns (bool)',
+  'function computeAddress(bytes32 orderHash, uint8 slotIndex) view returns (address)',
+  'function hashOrder((address swapper,address inputToken,uint256 inputAmount,address outputToken,uint256 minOutput,uint256 deadline,uint256 nonce,bytes32 merkleRoot,uint8 numSlots) info) pure returns (bytes32)',
+  'function DOMAIN_SEPARATOR() view returns (bytes32)',
+]
+
+export const ESCROW_SRC_ABI = [
+  'function filler() view returns (address)',
+  'function status() view returns (string)',
+  'function withdraw(bytes32 secret) external',
+  'function cancel() external',
+  'event Withdrawn(address indexed filler, bytes32 secret)',
+  'event Cancelled(address indexed swapper, uint256 amount, address indexed canceller, uint256 safetyDeposit)',
 ]
 
 export const ESCROW_FACTORY_ABI = [

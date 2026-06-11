@@ -26,11 +26,6 @@ function computeOrderHash(order: OrderInfo): string {
   )
 }
 
-function getFillRatioBucket(fill: bigint, total: bigint): number {
-  if (fill >= total) return 4
-  const pct = Number((fill * 100n) / total)
-  if (pct < 2) return 0; if (pct < 10) return 1; if (pct < 30) return 2; if (pct < 70) return 3; return 4
-}
 function getOrderSizeBucket(total: bigint): number {
   if (total < 10_000n * 10n**6n) return 0
   if (total < 100_000n * 10n**6n) return 1
@@ -100,38 +95,8 @@ export async function devFill(orderBackendHash: string, fillBps: number): Promis
     console.log(`[DevFill] approved ${order.outputToken}`)
   }
 
-  const multBps: number = await fillAuction.stakeTable(
-    getOrderSizeBucket(BigInt(order.inputAmount)),
-    getFillRatioBucket(fillAmount, BigInt(order.inputAmount))
-  )
-  const stake = multBps === 0 ? 0n
-    : (fillAmount * BigInt(multBps) / 10_000n) * BigInt(getTimeMultiplier(order.deadline, currentBlock)) / 10_000n
-
-  const alreadyValid = await fillAuction.hasValidRegistration(
-    orderHash, wallet.address, ethers.BigNumber.from(fillAmount)
-  )
-  if (!alreadyValid) {
-    const regTx = await fillAuction.register(
-      orderHash,
-      ethers.BigNumber.from(fillAmount),
-      ethers.BigNumber.from(order.inputAmount),
-      order.deadline,
-      { value: ethers.BigNumber.from(stake) }
-    ).catch((e: any) => {
-      const reason: string = e?.error?.reason ?? e?.reason ?? e?.message ?? ''
-      if (reason.includes('already registered')) {
-        throw new Error(
-          'This filler already filled this order. ' +
-          'Each filler can only fill an order once — use the other filler for a second partial fill.'
-        )
-      }
-      throw e
-    })
-    await regTx.wait()
-    console.log(`[DevFill] registered  fill=${fillAmount}  stake=${ethers.utils.formatEther(stake)} ETH`)
-  } else {
-    console.log('[DevFill] valid registration already exists — skipping register')
-  }
+  const rateBps: number = await fillAuction.collateralRate(getOrderSizeBucket(BigInt(order.inputAmount)))
+  const stake = (fillAmount * BigInt(rateBps) / 10_000n) * BigInt(getTimeMultiplier(order.deadline, currentBlock)) / 10_000n
 
   const signedOrder = {
     info: {
@@ -148,6 +113,30 @@ export async function devFill(orderBackendHash: string, fillBps: number): Promis
       feeTier:         order.feeTier,
     },
     sig: order.signature,
+  }
+
+  const alreadyValid = await fillAuction.hasValidRegistration(
+    orderHash, wallet.address, ethers.BigNumber.from(fillAmount)
+  )
+  if (!alreadyValid) {
+    const regTx = await reactor.register(
+      signedOrder,
+      ethers.BigNumber.from(fillAmount),
+      { value: ethers.BigNumber.from(stake) }
+    ).catch((e: any) => {
+      const reason: string = e?.error?.reason ?? e?.reason ?? e?.message ?? ''
+      if (reason.includes('already registered')) {
+        throw new Error(
+          'This filler already filled this order. ' +
+          'Each filler can only fill an order once — use the other filler for a second partial fill.'
+        )
+      }
+      throw e
+    })
+    await regTx.wait()
+    console.log(`[DevFill] registered  fill=${fillAmount}  stake=${ethers.utils.formatEther(stake)} ETH`)
+  } else {
+    console.log('[DevFill] valid registration already exists — skipping register')
   }
 
   await reactor.callStatic.executePartialChunk(signedOrder, ethers.BigNumber.from(fillAmount))

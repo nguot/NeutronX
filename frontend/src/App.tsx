@@ -6,9 +6,8 @@ import CrossChain   from './pages/CrossChain'
 import Explore      from './pages/Explore'
 import Simulate     from './pages/Simulate'
 import Orders       from './pages/Orders'
-import Admin        from './pages/Admin'
 
-type Tab = 'swap' | 'crosschain' | 'orders' | 'explore' | 'simulate' | 'admin'
+type Tab = 'swap' | 'crosschain' | 'orders' | 'explore' | 'simulate'
 
 const NAV: { id: Tab; label: string }[] = [
   { id: 'swap',       label: 'Swap' },
@@ -16,7 +15,6 @@ const NAV: { id: Tab; label: string }[] = [
   { id: 'orders',     label: 'Orders' },
   { id: 'explore',    label: 'Explore' },
   { id: 'simulate',   label: 'Simulate' },
-  { id: 'admin',      label: 'Admin' },
 ]
 
 function Inner() {
@@ -64,7 +62,6 @@ function Inner() {
         {tab === 'orders'     && <Orders        wallet={wallet} />}
         {tab === 'explore'    && <Explore />}
         {tab === 'simulate'   && <Simulate      wallet={wallet} />}
-        {tab === 'admin'      && <Admin />}
       </main>
     </div>
   )

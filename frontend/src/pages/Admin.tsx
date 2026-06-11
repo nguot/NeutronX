@@ -11,7 +11,12 @@ interface FillerInfo {
   error?:    string
 }
 
-export default function Admin() {
+interface AdminProps {
+  token: string
+  onUnauthorized: () => void
+}
+
+export default function Admin({ token, onUnauthorized }: AdminProps) {
   const [tab, setTab] = useState<AdminTab>('config')
 
   return (
@@ -34,16 +39,16 @@ export default function Admin() {
           ))}
         </div>
 
-        {tab === 'config'  && <ConfigTab />}
-        {tab === 'fillers' && <FillersTab />}
-        {tab === 'chain'   && <ChainTab />}
+        {tab === 'config'  && <ConfigTab  token={token} onUnauthorized={onUnauthorized} />}
+        {tab === 'fillers' && <FillersTab token={token} onUnauthorized={onUnauthorized} />}
+        {tab === 'chain'   && <ChainTab   token={token} onUnauthorized={onUnauthorized} />}
       </div>
     </>
   )
 }
 
 // ── Config tab ─────────────────────────────────────────────────────────────
-function ConfigTab() {
+function ConfigTab({ token, onUnauthorized }: AdminProps) {
   const cfg = useAppConfig()
   const [form, setForm] = useState({
     backendUrl:         cfg.backendUrl,
@@ -79,7 +84,7 @@ function ConfigTab() {
       if (form.backendUrl !== cfg.backendUrl) cfg.setBackendUrl(form.backendUrl)
       const res = await fetch(`${form.backendUrl}/admin/config`, {
         method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'x-admin-token': token },
         body:    JSON.stringify({
           partialFillReactor: form.partialFillReactor,
           crossChainReactor:  form.crossChainReactor,
@@ -89,6 +94,7 @@ function ConfigTab() {
           chainId:            form.chainId,
         }),
       })
+      if (res.status === 401) { onUnauthorized(); return }
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? 'Failed to save')
       cfg.reload()
@@ -149,7 +155,7 @@ function ConfigTab() {
 }
 
 // ── Fillers tab ────────────────────────────────────────────────────────────
-function FillersTab() {
+function FillersTab({ token, onUnauthorized }: AdminProps) {
   const { backendUrl } = useAppConfig()
   const [fillers, setFillers] = useState<FillerInfo[]>([])
   const [loading, setLoading] = useState(false)
@@ -175,9 +181,10 @@ function FillersTab() {
     try {
       const res  = await fetch(`${backendUrl}/admin/fillers`, {
         method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'x-admin-token': token },
         body:    JSON.stringify({ name: newName, url: newUrl }),
       })
+      if (res.status === 401) return onUnauthorized()
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
       setNewName(''); setNewUrl('')
@@ -188,7 +195,10 @@ function FillersTab() {
 
   async function removeFiller(name: string) {
     try {
-      await fetch(`${backendUrl}/admin/fillers/${encodeURIComponent(name)}`, { method: 'DELETE' })
+      const res = await fetch(`${backendUrl}/admin/fillers/${encodeURIComponent(name)}`, {
+        method: 'DELETE', headers: { 'x-admin-token': token },
+      })
+      if (res.status === 401) return onUnauthorized()
       loadFillers()
     } catch { /* ignore */ }
   }
@@ -254,7 +264,7 @@ function FillersTab() {
 }
 
 // ── Chain Control tab ──────────────────────────────────────────────────────
-function ChainTab() {
+function ChainTab({ token, onUnauthorized }: AdminProps) {
   const { backendUrl } = useAppConfig()
   const [blocks,    setBlocks]    = useState('1')
   const [interval,  setInterval_] = useState('0')
@@ -281,9 +291,10 @@ function ChainTab() {
     try {
       const res  = await fetch(`${backendUrl}/admin/mine`, {
         method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'x-admin-token': token },
         body:    JSON.stringify({ blocks: parseInt(blocks), interval: parseInt(interval) }),
       })
+      if (res.status === 401) { onUnauthorized(); return }
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
       setMineStatus({ msg: `✔ Mined ${data.blocks} block(s).`, cls: 'ok' })

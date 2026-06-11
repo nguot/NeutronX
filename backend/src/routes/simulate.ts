@@ -65,13 +65,18 @@ router.post('/', async (req: Request, res: Response) => {
     }
   })
 
-  // Aggregate total fill across all willing fillers
-  const totalFill = quotes.reduce(
+  const inputAmount = BigInt(body.inputAmount)
+
+  // Each registered filler is queried independently with the FULL order
+  // amount, so a filler willing to take 100% reports fillAmount=inputAmount.
+  // Summing those raw quotes would double- (or N-) count the same liquidity,
+  // so cap the aggregate at the order size.
+  const totalFillRaw = quotes.reduce(
     (sum, q) => (q.wouldFill ? sum + BigInt(q.fillAmount) : sum),
     0n
   )
-  const inputAmount = BigInt(body.inputAmount)
-  const remaining   = inputAmount > totalFill ? inputAmount - totalFill : 0n
+  const totalFill = totalFillRaw > inputAmount ? inputAmount : totalFillRaw
+  const remaining = inputAmount - totalFill
 
   const inDecimals = 18
   const toHuman = (raw: bigint) => (Number(raw) / 10 ** inDecimals).toFixed(4)

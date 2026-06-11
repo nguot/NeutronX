@@ -25,11 +25,25 @@ function computeOrderHash(order: OrderInfo): string {
   )
 }
 
-function getFillRatioBucket(fill: bigint, total: bigint): number {
-  if (fill >= total) return 4
-  const pct = Number((fill * 100n) / total)
-  if (pct < 2) return 0; if (pct < 10) return 1; if (pct < 30) return 2; if (pct < 70) return 3; return 4
+function toSignedOrder(order: OrderInfo) {
+  return {
+    info: {
+      swapper:         order.swapper,
+      inputToken:      order.inputToken,
+      inputAmount:     ethers.BigNumber.from(order.inputAmount),
+      outputToken:     order.outputToken,
+      minOutputAmount: ethers.BigNumber.from(order.minOutput),
+      deadline:        order.deadline,
+      nonce:           order.nonce,
+      minFillBps:      order.minFillBps,
+      startPrice:      ethers.BigNumber.from(order.startPrice),
+      decayPerBlock:   order.decayPerBlock,
+      feeTier:         order.feeTier,
+    },
+    sig: order.signature,
+  }
 }
+
 function getOrderSizeBucket(total: bigint): number {
   if (total < 10_000n * 10n**6n) return 0; if (total < 100_000n * 10n**6n) return 1; if (total < 1_000_000n * 10n**6n) return 2; return 3
 }
@@ -38,9 +52,8 @@ function getTimeMultiplier(deadline: number, currentBlock: number): number {
   if (left > 50) return 10_000; if (left > 20) return 15_000; if (left > 5) return 30_000; return 50_000
 }
 async function computeRequiredStake(fill: bigint, total: bigint, deadline: number, block: number): Promise<bigint> {
-  const multBps: number = await fillAuction.stakeTable(getOrderSizeBucket(total), getFillRatioBucket(fill, total))
-  if (multBps === 0) return 0n
-  return (fill * BigInt(multBps) / 10_000n) * BigInt(getTimeMultiplier(deadline, block)) / 10_000n
+  const rateBps: number = await fillAuction.collateralRate(getOrderSizeBucket(total))
+  return (fill * BigInt(rateBps) / 10_000n) * BigInt(getTimeMultiplier(deadline, block)) / 10_000n
 }
 
 async function ensureApproval(tokenAddress: string, amount: bigint): Promise<void> {
@@ -98,8 +111,9 @@ export class Executor {
       console.warn(`${tag} backend unreachable — using cached order`)
     }
 
-    const hash      = order.hash
-    const orderHash = computeOrderHash(order)
+    const hash       = order.hash
+    const orderHash  = computeOrderHash(order)
+    const signedOrder = toSignedOrder(order)
 
     const remainingBN: ethers.BigNumber = await reactor.remainingInput(orderHash, order.inputAmount)
     const onChainRemaining = remainingBN.toBigInt()
@@ -134,9 +148,7 @@ export class Executor {
 
       console.log(`${tag} registering  fill=${fillAmount}  stake=${ethers.utils.formatEther(stake)} ETH  tx pending…`)
       try {
-        const tx = await fillAuction.register(
-          orderHash, fillAmount, order.inputAmount, order.deadline, { value: stake }
-        )
+        const tx = await reactor.register(signedOrder, fillAmount, { value: stake })
         await tx.wait()
         console.log(`${tag} ✔ registered  tx=${tx.hash}  stakeETH=${ethers.utils.formatEther(stake)}`)
       } catch (e: any) {
@@ -165,23 +177,6 @@ export class Executor {
 
       const expectedOutput = (fillAmount * decision.currentPrice) / 10n**18n
       await ensureApproval(order.outputToken, expectedOutput)
-
-      const signedOrder = {
-        info: {
-          swapper:         order.swapper,
-          inputToken:      order.inputToken,
-          inputAmount:     ethers.BigNumber.from(order.inputAmount),
-          outputToken:     order.outputToken,
-          minOutputAmount: ethers.BigNumber.from(order.minOutput),
-          deadline:        order.deadline,
-          nonce:           order.nonce,
-          minFillBps:      order.minFillBps,
-          startPrice:      ethers.BigNumber.from(order.startPrice),
-          decayPerBlock:   order.decayPerBlock,
-          feeTier:         order.feeTier,
-        },
-        sig: order.signature,
-      }
 
       console.log(`${tag} calling executePartialChunk  fillAmount=${fillAmount}  tx pending…`)
       const tx = await reactor.executePartialChunk(signedOrder, fillAmount)

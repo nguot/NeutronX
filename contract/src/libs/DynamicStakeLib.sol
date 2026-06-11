@@ -4,12 +4,10 @@ pragma solidity ^0.8.20;
 import {FullMath} from "@uniswap/v4-core/src/libraries/FullMath.sol";
 
 library DynamicStakeLib {
-    // stakeTable[orderSizeBucket][fillRatioBucket]
     // Order size:  0=<$10k, 1=$10k-$100k, 2=$100k-$1M, 3=>$1M       (4 buckets)
     // Fill ratio:  0=0-2%, 1=2-10%, 2=10-30%, 3=30-70%, 4=70-100%   (5 buckets)
 
     // 1x, 1.5x, 3x, 5x
-
     function _getTimeMultiplier(uint8 tBucket) internal pure returns (uint32) {
         if (tBucket == 0) return 10000;
         if (tBucket == 1) return 15000;
@@ -46,22 +44,42 @@ library DynamicStakeLib {
         return 3;
     }
 
-    function computeStake(
+    /// Registration-time collateral: fillAmount(ceiling) x
+    /// collateralRate[orderSizeBucket] x timeMultiplier. No fill-ratio
+    /// dimension - linear in fillAmount, so a larger ceiling is never
+    /// cheaper than a smaller one (no "ceiling-shopping" discount).
+    function computeCollateral(
         uint256 fillAmount,
         uint256 orderTotal,
         uint256 deadline,
-        uint32[5][4] storage table
+        uint32[4] storage collateralRate
     ) internal view returns (uint256) {
-        uint8 rBucket = getFillRatioBucket(fillAmount, orderTotal);
         uint8 sBucket = getOrderSizeBucket(orderTotal);
         uint8 tBucket = getTimeBucket(deadline);
-        uint32 multBps = table[sBucket][rBucket];
+        uint32 rateBps  = collateralRate[sBucket];
         uint32 timeMult = _getTimeMultiplier(tBucket);
         return
             FullMath.mulDiv(
-                FullMath.mulDiv(fillAmount, multBps, 10000),
+                FullMath.mulDiv(fillAmount, rateBps, 10000),
                 timeMult,
                 10000
             );
+    }
+
+    /// Settlement-time refund: stakeAmount x
+    /// refundTable[orderSizeBucket][fillRatioBucket(actualFillAmount, orderTotal)].
+    /// A small actual fill returns only a small fraction of the collateral
+    /// (the rest is forfeited to the treasury as a "sniping fee"); filling
+    /// >=70% of the order returns it in full.
+    function computeRefund(
+        uint256 stakeAmount,
+        uint256 actualFillAmount,
+        uint256 orderTotal,
+        uint32[5][4] storage refundTable
+    ) internal view returns (uint256) {
+        uint8 sBucket = getOrderSizeBucket(orderTotal);
+        uint8 rBucket = getFillRatioBucket(actualFillAmount, orderTotal);
+        uint32 refundBps = refundTable[sBucket][rBucket];
+        return FullMath.mulDiv(stakeAmount, refundBps, 10000);
     }
 }

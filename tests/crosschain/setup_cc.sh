@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # setup_cc.sh — deploy CC contracts to two chains, fund all accounts
 #
-# Chain A  port 8545  chainId 31337  CrossChainReactor
+# Chain A  port 8545  chainId 31337  EscrowSrcFactory (+ EscrowSrc implementation)
 # Chain B  port 8546  chainId 31338  EscrowDstFactory  (+ EscrowDst implementation)
 #
 # Key difference from the old HTLC approach:
@@ -73,8 +73,8 @@ COSIGNER=$(echo "$SESSION_RESP" | python3 -c "import sys,json; print(json.load(s
 IS_NEW=$(echo   "$SESSION_RESP" | python3 -c "import sys,json; print(json.load(sys.stdin)['isNew'])")
 log OK "Cosigner: $COSIGNER  (isNew=$IS_NEW)"
 
-# ── 3a. Deploy CrossChainReactor on Chain A ───────────────────────────────────
-log STEP "Step 3a — Deploying CrossChainReactor on Chain A"
+# ── 3a. Deploy EscrowSrc impl + EscrowSrcFactory on Chain A ──────────────────
+log STEP "Step 3a — Deploying EscrowSrc + EscrowSrcFactory on Chain A"
 
 DEPLOY_A=$(cd "$PROJECT_ROOT/contract" && \
   PRIVATE_KEY=$PK0 COSIGNER_ADDRESS=$COSIGNER \
@@ -82,9 +82,9 @@ DEPLOY_A=$(cd "$PROJECT_ROOT/contract" && \
     --sig "runChainA()" --rpc-url "$RPC_A" --broadcast 2>&1)
 
 echo "$DEPLOY_A" | tee -a "$LOG_FILE"
-CC_REACTOR=$(echo "$DEPLOY_A" | grep 'CrossChainReactor:' | grep -oP '0x[0-9a-fA-F]{40}' | head -1)
-[ -z "$CC_REACTOR" ] && { log ERROR "Could not parse CrossChainReactor address"; exit 1; }
-log OK "CrossChainReactor on Chain A: $CC_REACTOR"
+ESCROW_SRC_FACTORY=$(echo "$DEPLOY_A" | grep 'EscrowSrcFactory:' | grep -oP '0x[0-9a-fA-F]{40}' | head -1)
+[ -z "$ESCROW_SRC_FACTORY" ] && { log ERROR "Could not parse EscrowSrcFactory address"; exit 1; }
+log OK "EscrowSrcFactory on Chain A: $ESCROW_SRC_FACTORY"
 
 # ── 3b. Deploy EscrowDst impl + EscrowDstFactory on Chain B ──────────────────
 log STEP "Step 3b — Deploying EscrowDst + EscrowDstFactory on Chain B"
@@ -101,7 +101,7 @@ log OK "EscrowDstFactory on Chain B: $FACTORY"
 
 # Save for run_cc.sh
 cat > "$LOG_DIR/.cc_addresses" << EOF
-CC_REACTOR=$CC_REACTOR
+ESCROW_SRC_FACTORY=$ESCROW_SRC_FACTORY
 FACTORY=$FACTORY
 COSIGNER=$COSIGNER
 EOF
@@ -110,7 +110,10 @@ log OK "Saved addresses to $LOG_DIR/.cc_addresses"
 # ── 4. Update backend .env ────────────────────────────────────────────────────
 log STEP "Step 4 — Updating backend/.env and filler .env files"
 
-update_env_var "$PROJECT_ROOT/backend/.env" "CROSS_CHAIN_REACTOR"   "$CC_REACTOR"
+# CROSS_CHAIN_REACTOR now holds the EscrowSrcFactory address (key name kept
+# as-is — backend/src/routes/admin.ts still reads it for the admin UI's
+# "crossChainReactor" display field).
+update_env_var "$PROJECT_ROOT/backend/.env" "CROSS_CHAIN_REACTOR"   "$ESCROW_SRC_FACTORY"
 update_env_var "$PROJECT_ROOT/backend/.env" "CHAIN_B_FACTORY"       "$FACTORY"
 update_env_var "$PROJECT_ROOT/backend/.env" "CHAIN_B_RPC"           "$RPC_B"
 update_env_var "$PROJECT_ROOT/backend/.env" "CHAIN_B_CONFIRMATIONS" "1"
@@ -120,9 +123,9 @@ log OK "backend/.env updated (CHAIN_B_FACTORY=$FACTORY)"
 for FILLER_DIR in "filler/WhaleFiller" "filler/CoWFiller"; do
   ENV_FILE="$PROJECT_ROOT/$FILLER_DIR/.env"
   if [ -f "$ENV_FILE" ]; then
-    update_env_var "$ENV_FILE" "CC_REACTOR"      "$CC_REACTOR"
-    update_env_var "$ENV_FILE" "CHAIN_B_RPC"     "$RPC_B"
-    update_env_var "$ENV_FILE" "CHAIN_B_FACTORY" "$FACTORY"
+    update_env_var "$ENV_FILE" "ESCROW_SRC_FACTORY" "$ESCROW_SRC_FACTORY"
+    update_env_var "$ENV_FILE" "CHAIN_B_RPC"        "$RPC_B"
+    update_env_var "$ENV_FILE" "CHAIN_B_FACTORY"    "$FACTORY"
     log OK "$FILLER_DIR/.env updated with CC vars"
   else
     log WARN "$ENV_FILE not found — skipping (run tests/demo/setup.sh first)"
@@ -139,9 +142,9 @@ run_cmd "ERC-20 approve WETH → Permit2 (Chain A)" \
   cast send "$WETH" "approve(address,uint256)" \
     "$PERMIT2" "$MAX_UINT" --private-key "$PK0" --rpc-url "$RPC_A"
 
-run_cmd "Permit2 allowance WETH → CrossChainReactor" \
+run_cmd "Permit2 allowance WETH → EscrowSrcFactory" \
   cast send "$PERMIT2" "approve(address,address,uint160,uint48)" \
-    "$WETH" "$CC_REACTOR" "10000000000000000000000" "9999999999" \
+    "$WETH" "$ESCROW_SRC_FACTORY" "10000000000000000000000" "9999999999" \
     --private-key "$PK0" --rpc-url "$RPC_A"
 
 WETH_BAL=$(cast call "$WETH" "balanceOf(address)(uint256)" "$ACCOUNT0" --rpc-url "$RPC_A")
@@ -185,7 +188,7 @@ log OK "Chain B — cosigner ETH: $COSIGNER_BAL wei"
 log STEP "Setup complete"
 log RAW ""
 log RAW "  ┌─ Chain A (port 8545, chainId 31337) ────────────────────────"
-log RAW "  │  CrossChainReactor : $CC_REACTOR"
+log RAW "  │  EscrowSrcFactory  : $ESCROW_SRC_FACTORY"
 log RAW "  │  Swapper WETH      : $WETH_BAL wei"
 log RAW "  │"
 log RAW "  ├─ Chain B (port 8546, chainId 31338) ────────────────────────"

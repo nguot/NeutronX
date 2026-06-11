@@ -1,11 +1,18 @@
 #!/usr/bin/env bash
-# run_cc.sh — end-to-end cross-chain swap using EscrowDst clone pattern
+# run_cc.sh — end-to-end cross-chain swap using EscrowSrc/EscrowDst clone pattern
 # Two fillers concurrently fill two different slots of the same order.
 #
-# Chain A (port 8545): CrossChainReactor — swapper locks WETH
-# Chain B (port 8546): EscrowDstFactory  — fillers deploy isolated escrow clones
+# Chain A (port 8545): EscrowSrcFactory — swapper's WETH pulled per-slot via Permit2
+# Chain B (port 8546): EscrowDstFactory — fillers deploy isolated escrow clones
 #
-# Filler flow (NO approve needed), run independently by EACH filler for its own slot:
+# Chain A filler flow, run independently by EACH filler for its own slot:
+#   1. factory.fillSlot(info, swapperSig, cosignerSig, slotIndex, H_i, proof)
+#      with msg.value = safety deposit  (lazily registers the order on its
+#      first call, verifies the Merkle proof, deploys an EscrowSrc clone, and
+#      pulls slotAmount of WETH from the swapper via Permit2)
+#   2. EscrowSrc(escrow).withdraw(S_i)  — once S_i is public on Chain B
+#
+# Chain B filler flow (unchanged, NO approve needed):
 #   1. computeAddress(H_i, filler) → escrowAddr  (free, off-chain)
 #   2. USDC.transfer(escrowAddr, amount)          (tokens land at future clone)
 #   3. factory.deploy(H_i, swapper, USDC, ...)   (deploys clone, verifies balance)
@@ -66,8 +73,8 @@ log STEP "Step 1 — Loading CC contract addresses"
 ADDR_FILE="$LOG_DIR/.cc_addresses"
 [ ! -f "$ADDR_FILE" ] && { log ERROR "$ADDR_FILE not found — run setup_cc.sh first"; exit 1; }
 
-source "$ADDR_FILE"   # CC_REACTOR, FACTORY, COSIGNER
-log OK "Chain A CrossChainReactor : $CC_REACTOR"
+source "$ADDR_FILE"   # ESCROW_SRC_FACTORY, FACTORY, COSIGNER
+log OK "Chain A EscrowSrcFactory  : $ESCROW_SRC_FACTORY"
 log OK "Chain B EscrowDstFactory  : $FACTORY"
 log OK "Cosigner                  : $COSIGNER"
 
@@ -82,7 +89,9 @@ for i in 0 1; do
 done
 
 USDC_SWAPPER_B_BEFORE=$(cast call "$USDC" "balanceOf(address)(uint256)" "$ACCOUNT0" --rpc-url "$RPC_B")
+WETH_SWAPPER_A_BEFORE=$(cast call "$WETH" "balanceOf(address)(uint256)" "$ACCOUNT0" --rpc-url "$RPC_A")
 log INFO "Swapper USDC on Chain B : $USDC_SWAPPER_B_BEFORE"
+log INFO "Swapper WETH on Chain A : $WETH_SWAPPER_A_BEFORE"
 
 # ── 3. Create order via backend ───────────────────────────────────────────────
 log STEP "Step 3 — Creating cross-chain order (1 WETH → 2000 USDC, 2 of 4 slots will be filled)"
@@ -93,6 +102,7 @@ T2_BUFFER=50
 
 INPUT_AMOUNT="1000000000000000000"  # 1 WETH  → SlotLib: 4 slots
 MIN_OUTPUT="2000000000"            # 2000 USDC (6 decimals) → 500 USDC per slot
+NONCE="1"                          # bump if you re-run with the same swapper/amounts
 
 ORDER_RESP=$(curl -sf -X POST "$BACKEND/cc/orders" \
   -H "Content-Type: application/json" \
@@ -103,9 +113,9 @@ ORDER_RESP=$(curl -sf -X POST "$BACKEND/cc/orders" \
     \"outputToken\": \"$USDC\",
     \"minOutput\":   \"$MIN_OUTPUT\",
     \"deadline\":    $DEADLINE,
-    \"nonce\":       \"1\",
+    \"nonce\":       \"$NONCE\",
     \"chainAId\":    31337,
-    \"reactorAddr\": \"$CC_REACTOR\",
+    \"reactorAddr\": \"$ESCROW_SRC_FACTORY\",
     \"t2Buffer\":    $T2_BUFFER
   }")
 
@@ -139,34 +149,41 @@ print('[' + ','.join(proof) + ']')
   log OK "Slot $slot — proof   : ${PROOF_CAST[$i]}"
 done
 
-# ── 5. Swapper calls CrossChainReactor.createOrder() on Chain A ──────────────
-log STEP "Step 5 — Chain A: swapper locks 1 WETH in CrossChainReactor"
+# ── 4b. Compute the swapper's EIP-712 signature over the order hash ─────────
+# In production this is wallet_signTypedData_v4 in the swapper's browser. Here
+# we sign locally with PK0 (the swapper's own dev key), reproducing the exact
+# "\x19\x01" || DOMAIN_SEPARATOR || orderHash digest the contract verifies.
+log STEP "Step 4b — Computing swapper EIP-712 signature over orderHash"
 
-run_cmd "CrossChainReactor.createOrder() on Chain A" \
-  cast send "$CC_REACTOR" \
-    "createOrder((address,address,uint256,address,uint256,uint256,uint256,bytes32,uint8),bytes)" \
-    "($ACCOUNT0,$WETH,$INPUT_AMOUNT,$USDC,$MIN_OUTPUT,$DEADLINE,1,$MERKLE_ROOT,$NUM_SLOTS)" \
-    "$COSIGNER_SIG" --private-key "$PK0" --rpc-url "$RPC_A"
+DOMAIN_SEPARATOR=$(cast call "$ESCROW_SRC_FACTORY" "DOMAIN_SEPARATOR()(bytes32)" --rpc-url "$RPC_A")
+SWAPPER_DIGEST=$(cast keccak "$(cast concat-hex 0x1901 "$DOMAIN_SEPARATOR" "$ORDER_HASH")")
+SWAPPER_SIG=$(cast wallet sign --no-hash "$SWAPPER_DIGEST" --private-key "$PK0")
+log OK "swapperSig: $SWAPPER_SIG"
 
-REACTOR_WETH=$(cast call "$WETH" "balanceOf(address)(uint256)" "$CC_REACTOR" --rpc-url "$RPC_A")
-log OK "CrossChainReactor holds $REACTOR_WETH WETH on Chain A"
+# ── 5. Each filler calls EscrowSrcFactory.fillSlot() on Chain A ──────────────
+# fillSlot() lazily registers the order on its FIRST call (verifying both
+# swapperSig and cosignerSig), then on every call: checks the Merkle proof,
+# deploys an EscrowSrc clone via CREATE2, and redirects slotAmount of the
+# swapper's WETH into it via Permit2. msg.value is the filler's safety deposit.
+log STEP "Step 5 — Chain A: each filler calls fillSlot() (deploys EscrowSrc clone + pulls WETH via Permit2)"
 
-# ── 5b. Both fillers reserve their own slot on Chain A (anti-front-running) ──
-# registerFiller() must be called AFTER createOrder() — the contract verifies
-# the order exists. Each call locks out other fillers from that slot, so only
-# the registering address can later call claimSlot() once S_i is revealed.
-log STEP "Step 5b — Chain A: each filler reserves its own slot (prevents MEV front-run)"
+SAFETY_DEPOSIT="10000000000000000"  # 0.01 ETH per slot
 
+declare -a ESCROW_ADDR_A
 for i in 0 1; do
   slot=${SLOTS[$i]}
-  run_cmd "${FILLER_NAMES[$i]}: registerFiller(orderHash, $slot)" \
-    cast send "$CC_REACTOR" \
-      "registerFiller(bytes32,uint8)" \
-      "$ORDER_HASH" "$slot" \
-      --private-key "${FILLER_PKS[$i]}" \
-      --rpc-url "$RPC_A"
+  name=${FILLER_NAMES[$i]}
+  pk=${FILLER_PKS[$i]}
 
-  log OK "Slot $slot reserved for ${FILLER_NAMES[$i]} (${FILLER_ADDRS[$i]}) — only they can call claimSlot()"
+  run_cmd "$name: fillSlot(info, swapperSig, cosignerSig, slot=$slot, H_$slot, proof)" \
+    cast send "$ESCROW_SRC_FACTORY" \
+      "fillSlot((address,address,uint256,address,uint256,uint256,uint256,bytes32,uint8),bytes,bytes,uint8,bytes32,bytes32[])" \
+      "($ACCOUNT0,$WETH,$INPUT_AMOUNT,$USDC,$MIN_OUTPUT,$DEADLINE,$NONCE,$MERKLE_ROOT,$NUM_SLOTS)" \
+      "$SWAPPER_SIG" "$COSIGNER_SIG" "$slot" "${HASHLOCK[$i]}" "${PROOF_CAST[$i]}" \
+      --value "$SAFETY_DEPOSIT" --private-key "$pk" --rpc-url "$RPC_A"
+
+  ESCROW_ADDR_A[$i]=$(cast call "$ESCROW_SRC_FACTORY" "computeAddress(bytes32,uint8)(address)" "$ORDER_HASH" "$slot" --rpc-url "$RPC_A")
+  log OK "$name — EscrowSrc clone deployed at ${ESCROW_ADDR_A[$i]} (slot $slot) on Chain A"
 done
 
 # ── 6. Both fillers fill their slot via EscrowDstFactory on Chain B ──────────
@@ -307,36 +324,41 @@ PYEOF
   log OK "S_$slot (public on Chain B) = ${SECRET[$i]}"
 done
 
-# ── 10. Each filler calls CrossChainReactor.claimSlot() on Chain A ───────────
-log STEP "Step 10 — Chain A: each filler claims WETH using its own secret"
+# ── 10. Each filler withdraws from its EscrowSrc clone on Chain A ────────────
+# No Merkle proof needed here — (hashlock, slotIndex) was already verified
+# against merkleRoot inside fillSlot(). withdraw() just checks
+# keccak256(secret) == hashlock and pays out the WETH amount + safety deposit.
+log STEP "Step 10 — Chain A: each filler withdraws WETH + safety deposit using its own secret"
 
 for i in 0 1; do
   slot=${SLOTS[$i]}
   name=${FILLER_NAMES[$i]}
   pk=${FILLER_PKS[$i]}
 
-  run_cmd "$name: claimSlot(orderHash, $slot, S_$slot, proof)" \
-    cast send "$CC_REACTOR" \
-      "claimSlot(bytes32,uint8,bytes32,bytes32[])" \
-      "$ORDER_HASH" "$slot" "${SECRET[$i]}" "${PROOF_CAST[$i]}" \
+  run_cmd "$name: EscrowSrc(${ESCROW_ADDR_A[$i]}).withdraw(S_$slot)" \
+    cast send "${ESCROW_ADDR_A[$i]}" \
+      "withdraw(bytes32)" \
+      "${SECRET[$i]}" \
       --private-key "$pk" --rpc-url "$RPC_A"
 done
 
 # ── 11. Verify final balances on both chains ──────────────────────────────────
 log STEP "Step 11 — Verifying final balances"
 
-declare -a WETH_A_AFTER USDC_B_AFTER WETH_GAINED USDC_SPENT
+declare -a WETH_A_AFTER USDC_B_AFTER WETH_GAINED USDC_SPENT ESCROW_STATUS_A
 for i in 0 1; do
   WETH_A_AFTER[$i]=$(cast call "$WETH" "balanceOf(address)(uint256)" "${FILLER_ADDRS[$i]}" --rpc-url "$RPC_A")
   USDC_B_AFTER[$i]=$(cast call  "$USDC" "balanceOf(address)(uint256)" "${FILLER_ADDRS[$i]}" --rpc-url "$RPC_B")
   WETH_GAINED[$i]=$(python3 -c "print(${WETH_A_AFTER[$i]} - ${WETH_A_BEFORE[$i]})")
   USDC_SPENT[$i]=$(python3  -c "print(${USDC_B_BEFORE[$i]} - ${USDC_B_AFTER[$i]})")
+  ESCROW_STATUS_A[$i]=$(cast call "${ESCROW_ADDR_A[$i]}" "status()(string)" --rpc-url "$RPC_A")
 done
 
-USDC_SWAPPER_B_AFTER=$(cast call "$USDC" "balanceOf(address)(uint256)" "$ACCOUNT0"   --rpc-url "$RPC_B")
-REACTOR_WETH_AFTER=$(cast call   "$WETH" "balanceOf(address)(uint256)" "$CC_REACTOR" --rpc-url "$RPC_A")
+USDC_SWAPPER_B_AFTER=$(cast call "$USDC" "balanceOf(address)(uint256)" "$ACCOUNT0" --rpc-url "$RPC_B")
+WETH_SWAPPER_A_AFTER=$(cast call "$WETH" "balanceOf(address)(uint256)" "$ACCOUNT0" --rpc-url "$RPC_A")
 
 USDC_GAINED=$(python3 -c "print($USDC_SWAPPER_B_AFTER - $USDC_SWAPPER_B_BEFORE)")
+WETH_SWAPPER_SPENT=$(python3 -c "print($WETH_SWAPPER_A_BEFORE - $WETH_SWAPPER_A_AFTER)")
 SLOT_WETH=$(python3   -c "print($INPUT_AMOUNT // $NUM_SLOTS)")
 
 log RAW ""
@@ -346,7 +368,7 @@ log RAW "  ╠══════════════════════
 for i in 0 1; do
   log RAW "  ║  Chain A │ ${FILLER_NAMES[$i]} WETH : ${WETH_A_BEFORE[$i]} → ${WETH_A_AFTER[$i]}"
 done
-log RAW "  ║  Chain A │ Reactor  WETH  : $REACTOR_WETH_AFTER remaining"
+log RAW "  ║  Chain A │ Swapper  WETH  : $WETH_SWAPPER_A_BEFORE → $WETH_SWAPPER_A_AFTER"
 log RAW "  ╠══════════════════════════════════════════════════════════════════╣"
 log RAW "  ║  Chain B │ Swapper  USDC  : $USDC_SWAPPER_B_BEFORE → $USDC_SWAPPER_B_AFTER"
 for i in 0 1; do
@@ -371,6 +393,12 @@ for i in 0 1; do
   else
     log ERROR "✖ $name USDC on Chain B did not decrease"; PASS=false
   fi
+
+  if [ "${ESCROW_STATUS_A[$i]}" = "withdrawn" ]; then
+    log OK "✔ $name's EscrowSrc clone (slot ${SLOTS[$i]}) status = withdrawn (safety deposit returned)"
+  else
+    log ERROR "✖ $name's EscrowSrc clone (slot ${SLOTS[$i]}) status = ${ESCROW_STATUS_A[$i]} (expected withdrawn)"; PASS=false
+  fi
 done
 
 if python3 -c "exit(0 if $USDC_SWAPPER_B_AFTER > $USDC_SWAPPER_B_BEFORE else 1)"; then
@@ -379,16 +407,21 @@ else
   log ERROR "✖ Swapper USDC on Chain B did not increase"; PASS=false
 fi
 
+if python3 -c "exit(0 if $WETH_SWAPPER_A_AFTER < $WETH_SWAPPER_A_BEFORE else 1)"; then
+  log OK "✔ Swapper spent $WETH_SWAPPER_SPENT WETH on Chain A (pulled via Permit2 into both EscrowSrc clones)"
+else
+  log ERROR "✖ Swapper WETH on Chain A did not decrease"; PASS=false
+fi
+
 [ "$PASS" != "true" ] && { log ERROR "Balance checks failed"; exit 1; }
 
 log STEP "ALL CHECKS PASSED"
 log RAW ""
-log RAW "  Escrow clone flow confirmed across two Anvil instances with 2 concurrent fillers:"
+log RAW "  EscrowSrc/EscrowDst clone flow confirmed across two Anvil instances with 2 concurrent fillers:"
 log RAW ""
 log RAW "  Chain A (port 8545):"
-log RAW "    swapper locked 1 WETH in CrossChainReactor"
 for i in 0 1; do
-  log RAW "    ${FILLER_NAMES[$i]} claimed slot ${SLOTS[$i]} → received ${WETH_GAINED[$i]} WETH"
+  log RAW "    ${FILLER_NAMES[$i]} fillSlot()'d slot ${SLOTS[$i]} → EscrowSrc ${ESCROW_ADDR_A[$i]} → withdrew ${WETH_GAINED[$i]} WETH + safety deposit"
 done
 log RAW ""
 log RAW "  Chain B (port 8546):"

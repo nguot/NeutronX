@@ -263,7 +263,7 @@ async function ccLoad(){
           const mine=!s.assignedFiller||s.assignedFiller.toLowerCase()==='${wallet.address.toLowerCase()}'
           if(mine)
             return \`<button class="slot-btn available" id="\${id}" onclick="ccClaimSlot('\${o.orderHash}',\${s.index})" title="Backend claimed USDC — collect your WETH on Chain A">Slot \${s.index}<br>⚡ Claim WETH</button>\`
-          return \`<button class="slot-btn locked" id="\${id}" disabled title="Registered to \${s.assignedFiller}">Slot \${s.index}<br>🔒 Other filler</button>\`
+          return \`<button class="slot-btn locked" id="\${id}" disabled title="Filled by \${s.assignedFiller}">Slot \${s.index}<br>🔒 Other filler</button>\`
         }
         return \`<button class="slot-btn claimed" id="\${id}" disabled>Slot \${s.index}<br>✓ done</button>\`
       }).join('')
@@ -292,7 +292,7 @@ async function ccClaimSlot(hash,slotIndex){
   const resultEl=document.getElementById('cc-r-'+hash)
   const btnEl=document.getElementById('cc-btn-'+hash+'-'+slotIndex)
   resultEl.className='result busy'
-  resultEl.textContent='Slot '+slotIndex+': reading S_i from Chain B → claimSlot on Chain A…'
+  resultEl.textContent='Slot '+slotIndex+': reading S_i from Chain B → withdraw on Chain A…'
   if(btnEl){btnEl.disabled=true;btnEl.className='slot-btn busy';btnEl.innerHTML='Slot '+slotIndex+'<br>⏳ claiming'}
   try{
     const r=await fetch('/dev-cc-claim',{method:'POST',headers:{'Content-Type':'application/json'},
@@ -308,7 +308,7 @@ async function ccClaimSlot(hash,slotIndex){
       if(data.txHash==='already-claimed'){
         resultEl.textContent='✔ slot '+slotIndex+' was already claimed on-chain — marked done'
       } else {
-        resultEl.textContent='✔ slot '+slotIndex+' WETH claimed on Chain A  tx: '+data.txHash
+        resultEl.textContent='✔ slot '+slotIndex+' WETH withdrawn on Chain A  tx: '+data.txHash
       }
       if(btnEl){btnEl.className='slot-btn claimed';btnEl.innerHTML='Slot '+slotIndex+'<br>✓ done';btnEl.disabled=true}
       setTimeout(()=>ccLoad(),2000)
@@ -345,7 +345,7 @@ async function ccFillSlot(hash,slotIndex){
   const resultEl=document.getElementById('cc-r-'+hash)
   const btnEl=document.getElementById('cc-btn-'+hash+'-'+slotIndex)
   resultEl.className='result busy'
-  resultEl.textContent='Slot '+slotIndex+': register → fund → deploy escrow → wait S_i → claim (~30s)…'
+  resultEl.textContent='Slot '+slotIndex+': fillSlot → fund Chain B → deploy escrow → wait S_i → withdraw (~30s)…'
   if(btnEl){btnEl.disabled=true;btnEl.className='slot-btn busy';btnEl.innerHTML='Slot '+slotIndex+'<br>⏳ filling'}
   try{
     const r=await fetch('/dev-cc-fill',{method:'POST',headers:{'Content-Type':'application/json'},
@@ -353,7 +353,7 @@ async function ccFillSlot(hash,slotIndex){
     const data=await r.json()
     if(!r.ok) throw new Error(data.error??JSON.stringify(data))
     resultEl.className='result ok'
-    resultEl.textContent='✔ slot '+slotIndex+' WETH claimed on Chain A  tx: '+data.txHash
+    resultEl.textContent='✔ slot '+slotIndex+' WETH withdrawn on Chain A  tx: '+data.txHash
     if(btnEl){btnEl.className='slot-btn claimed';btnEl.innerHTML='Slot '+slotIndex+'<br>✓';btnEl.disabled=true}
     setTimeout(()=>ccLoad(),2000)
   }catch(e){

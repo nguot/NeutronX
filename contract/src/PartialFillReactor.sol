@@ -81,6 +81,16 @@ contract PartialFillReactor is ReentrancyGuard {
         ));
     }
 
+    /// Registers msg.sender as a filler for up to `fillAmount` of `order`.
+    /// orderTotal/deadline are derived from the real signed order, not
+    /// caller input - see exploit.md (registration forgery fix).
+    function register(SignedOrder calldata order, uint256 fillAmount) external payable {
+        bytes32 orderHash = _hashOrder(order.info);
+        fillAuction.register{value: msg.value}(
+            msg.sender, orderHash, fillAmount, order.info.inputAmount, order.info.deadline
+        );
+    }
+
     function executePartialChunk(
         SignedOrder calldata order,
         uint256 fillAmount

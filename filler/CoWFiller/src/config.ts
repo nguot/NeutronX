@@ -8,9 +8,9 @@ export const FILL_AUCTION = process.env.FILL_AUCTION         || ''
 export const REACTOR      = process.env.PARTIAL_FILL_REACTOR || ''
 
 // Cross-chain vars — written by tests/crosschain/setup_cc.sh
-export const CC_REACTOR      = process.env.CC_REACTOR       || ''
-export const CHAIN_B_RPC     = process.env.CHAIN_B_RPC      || ''
-export const CHAIN_B_FACTORY = process.env.CHAIN_B_FACTORY  || ''
+export const ESCROW_SRC_FACTORY = process.env.ESCROW_SRC_FACTORY || ''
+export const CHAIN_B_RPC        = process.env.CHAIN_B_RPC        || ''
+export const CHAIN_B_FACTORY    = process.env.CHAIN_B_FACTORY    || ''
 
 export const DEV_MODE = process.env.DEV_MODE === 'true'
 

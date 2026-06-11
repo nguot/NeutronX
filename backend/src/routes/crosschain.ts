@@ -3,14 +3,28 @@ import {
   getOrCreateSession,
   getSessionWithOrders,
   createCrossChainOrder,
+  setSwapperSig,
   getCrossChainOrder,
   listOpenCCOrders,
   markSlotDone,
   updateSlotFiller,
   resetSlotToAvailable,
+  getTokenDirectory,
 } from '../services/crosschainService'
 
 const router = Router()
+
+// GET /cc/tokens
+// Token directory for the cross-chain swap UI's token-pill selectors:
+// input tokens live on Chain A, output tokens on Chain B.
+router.get('/tokens', async (_req, res) => {
+  try {
+    const dir = await getTokenDirectory()
+    return res.json(dir)
+  } catch (e: any) {
+    return res.status(500).json({ error: e.message })
+  }
+})
 
 // POST /cc/session  { swapper }
 // Create or restore a session for a swapper. Returns cosigner address.
@@ -40,8 +54,10 @@ router.get('/session/:swapper', async (req, res) => {
 
 // POST /cc/orders  { swapper, inputToken, inputAmount, outputToken, minOutput,
 //                    deadline, nonce, chainAId, reactorAddr, t2Buffer }
-// Build Merkle tree, cosign, persist. Returns what the swapper needs to call
-// CrossChainReactor.createOrder() on-chain.
+// Build Merkle tree, cosign, persist. Returns { orderHash, merkleRoot, numSlots,
+// cosignerSig } — the swapper signs orderHash (EIP-712) next and PATCHes it to
+// /cc/orders/:hash/swapperSig. No on-chain tx from the swapper: EscrowSrcFactory
+// registers the order lazily on the first fillSlot() call by a filler.
 router.post('/orders', async (req, res) => {
   try {
     const { swapper, inputToken, inputAmount, outputToken, minOutput,
@@ -76,6 +92,20 @@ router.get('/orders', async (req, res) => {
     return res.json({ orders })
   } catch (e: any) {
     return res.status(500).json({ error: e.message })
+  }
+})
+
+// PATCH /cc/orders/:hash/swapperSig  { swapperSig }
+// Swapper's wallet signs orderHash via EIP-712 (_signTypedData) after order
+// creation. Required by EscrowSrcFactory.fillSlot() alongside cosignerSig.
+router.patch('/orders/:hash/swapperSig', async (req, res) => {
+  try {
+    const { swapperSig } = req.body
+    if (!swapperSig) return res.status(400).json({ error: 'swapperSig required' })
+    await setSwapperSig(req.params.hash, swapperSig)
+    return res.json({ ok: true })
+  } catch (e: any) {
+    return res.status(400).json({ error: e.message })
   }
 })
 

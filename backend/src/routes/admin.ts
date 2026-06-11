@@ -1,10 +1,28 @@
-import { Router, Request, Response } from 'express'
+import { Router, Request, Response, NextFunction } from 'express'
 import { readFileSync, writeFileSync } from 'fs'
 import { resolve } from 'path'
 import { parse as parseEnv } from 'dotenv'
 import { fillerRegistry } from '../services/fillerRegistry'
+import { login, verifyToken } from '../services/adminAuth'
 
 const router = Router()
+
+// ── Auth ───────────────────────────────────────────────────────────────────
+// POST /admin/login  { username, password }
+// Checks credentials against backend/.env (ADMIN_USERNAME / ADMIN_PASSWORD)
+// and returns a token to send back as the x-admin-token header.
+router.post('/login', (req: Request, res: Response) => {
+  const { username, password } = req.body ?? {}
+  if (!username || !password) { res.status(400).json({ error: 'username and password required' }); return }
+  const token = login(username, password)
+  if (!token) { res.status(401).json({ error: 'Invalid credentials' }); return }
+  res.json({ token })
+})
+
+function requireAdmin(req: Request, res: Response, next: NextFunction) {
+  if (!verifyToken(req.header('x-admin-token'))) { res.status(401).json({ error: 'Unauthorized' }); return }
+  next()
+}
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 function readEnvFile(): Record<string, string> {
@@ -50,7 +68,7 @@ router.get('/config', (_req: Request, res: Response) => {
   })
 })
 
-router.post('/config', (req: Request, res: Response) => {
+router.post('/config', requireAdmin, (req: Request, res: Response) => {
   const map: Record<string, string> = {
     partialFillReactor: 'PARTIAL_FILL_REACTOR',
     crossChainReactor:  'CROSS_CHAIN_REACTOR',
@@ -82,7 +100,7 @@ router.get('/fillers', async (_req: Request, res: Response) => {
   res.json({ fillers })
 })
 
-router.post('/fillers', (req: Request, res: Response) => {
+router.post('/fillers', requireAdmin, (req: Request, res: Response) => {
   const { name, url } = req.body
   if (!name || !url) { res.status(400).json({ error: 'name and url required' }); return }
   try {
@@ -91,7 +109,7 @@ router.post('/fillers', (req: Request, res: Response) => {
   } catch (e: any) { res.status(400).json({ error: e.message }) }
 })
 
-router.delete('/fillers/:name', (req: Request, res: Response) => {
+router.delete('/fillers/:name', requireAdmin, (req: Request, res: Response) => {
   try {
     fillerRegistry.remove(req.params['name'])
     res.json({ ok: true })
@@ -99,7 +117,7 @@ router.delete('/fillers/:name', (req: Request, res: Response) => {
 })
 
 // ── Block mining ───────────────────────────────────────────────────────────
-router.post('/mine', async (req: Request, res: Response) => {
+router.post('/mine', requireAdmin, async (req: Request, res: Response) => {
   const blocks   = Math.max(1, parseInt(req.body.blocks   ?? '1'))
   const interval = Math.max(0, parseInt(req.body.interval ?? '0'))
   const rpcUrl   = process.env.RPC_URL || 'http://127.0.0.1:8545'

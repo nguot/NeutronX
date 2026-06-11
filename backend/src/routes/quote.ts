@@ -40,17 +40,22 @@ async function quoteFromAlphaRouter(
   return { estOut, impact, source: 'alpha_router' as const }
 }
 
+async function fetchTokenPriceUsd(address: string): Promise<number | undefined> {
+  const url = `https://api.coingecko.com/api/v3/simple/token_price/ethereum` +
+    `?contract_addresses=${address.toLowerCase()}&vs_currencies=usd`
+  const res  = await withTimeout(fetch(url), 5000)
+  const data = await res.json() as Record<string, { usd: number }>
+  return data[address.toLowerCase()]?.usd
+}
+
 async function quoteFromCoinGecko(
   inputToken:  string, inputDecimals:  number,
   outputToken: string, outputDecimals: number,
   inputAmountWei: bigint,
 ) {
-  const url = `https://api.coingecko.com/api/v3/simple/token_price/ethereum` +
-    `?contract_addresses=${inputToken.toLowerCase()},${outputToken.toLowerCase()}&vs_currencies=usd`
-  const res    = await withTimeout(fetch(url), 5000)
-  const prices = await res.json() as Record<string, { usd: number }>
-  const pIn    = prices[inputToken.toLowerCase()]?.usd
-  const pOut   = prices[outputToken.toLowerCase()]?.usd
+  // CoinGecko's free tier caps /simple/token_price at one contract address per
+  // request, so the two tokens must be fetched separately rather than batched.
+  const [pIn, pOut] = await Promise.all([fetchTokenPriceUsd(inputToken), fetchTokenPriceUsd(outputToken)])
   if (!pIn || !pOut) throw new Error('Token not found on CoinGecko')
 
   const inHuman  = Number(inputAmountWei) / 10 ** inputDecimals

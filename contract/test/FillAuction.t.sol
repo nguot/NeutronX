@@ -11,6 +11,16 @@ contract MockReactor {
         auction = FillAuction(_auction);
     }
 
+    function callRegister(
+        address filler,
+        bytes32 orderHash,
+        uint256 fillAmount,
+        uint256 orderTotal,
+        uint256 deadline
+    ) external payable {
+        auction.register{value: msg.value}(filler, orderHash, fillAmount, orderTotal, deadline);
+    }
+
     function callOnFillSuccess(
         bytes32 orderHash,
         address filler,
@@ -29,12 +39,12 @@ contract FillAuctionTest is Test {
     address public slasher  = makeAddr("slasher");
 
     bytes32 constant ORDER_HASH  = keccak256("order1");
-    uint256 constant ORDER_TOTAL = 1000e6;  // 1000 USDC
-    uint256 constant FILL_AMOUNT = 400e6;   // 400 USDC
+    uint256 constant ORDER_TOTAL = 1000e6;  // 1000 USDC, sBucket 0 (<$10k)
+    uint256 constant FILL_AMOUNT = 400e6;   // 400 USDC ceiling (40% of total)
     uint256 constant DEADLINE    = 1000;
 
-    // stake = 1% fillAmount = 4e6
-    uint256 constant STAKE = 4e6;
+    // collateral = FILL_AMOUNT * collateralRate[0] (2000bps = 20%) * timeMult (1x, tBucket 0)
+    uint256 constant STAKE = 80e6;
 
     function setUp() public {
         reactor = new MockReactor();
@@ -42,20 +52,15 @@ contract FillAuctionTest is Test {
         auction.setReactor(address(reactor));
         reactor.setAuction(address(auction));
 
-        // set tất cả bucket = 100 bps (1%)
-        for (uint8 s = 0; s < 4; s++) {
-            for (uint8 r = 0; r < 5; r++) {
-                auction.setStakeTable(s, r, 100);
-            }
-        }
-
+        // Constructor defaults: collateralRate = [2000, 5000, 10000, 30000],
+        // refundTable per DynamicStakeLibStake.md.
         vm.roll(100);
     }
 
     function _register() internal {
         vm.deal(filler, 1 ether);
         vm.prank(filler);
-        auction.register{value: STAKE}(ORDER_HASH, FILL_AMOUNT, ORDER_TOTAL, DEADLINE);
+        reactor.callRegister{value: STAKE}(filler, ORDER_HASH, FILL_AMOUNT, ORDER_TOTAL, DEADLINE);
     }
 
     // ── register() ──
@@ -69,7 +74,7 @@ contract FillAuctionTest is Test {
         uint256 excess = 1 ether;
         vm.deal(filler, STAKE + excess);
         vm.prank(filler);
-        auction.register{value: STAKE + excess}(ORDER_HASH, FILL_AMOUNT, ORDER_TOTAL, DEADLINE);
+        reactor.callRegister{value: STAKE + excess}(filler, ORDER_HASH, FILL_AMOUNT, ORDER_TOTAL, DEADLINE);
         assertEq(auction.pendingReturns(filler), excess);
     }
 
@@ -78,7 +83,7 @@ contract FillAuctionTest is Test {
         vm.deal(filler, 1 ether);
         vm.prank(filler);
         vm.expectRevert("deadline passed");
-        auction.register{value: STAKE}(ORDER_HASH, FILL_AMOUNT, ORDER_TOTAL, DEADLINE);
+        reactor.callRegister{value: STAKE}(filler, ORDER_HASH, FILL_AMOUNT, ORDER_TOTAL, DEADLINE);
     }
 
     function test_register_revert_alreadyRegistered() public {
@@ -86,14 +91,21 @@ contract FillAuctionTest is Test {
         vm.deal(filler, 1 ether);
         vm.prank(filler);
         vm.expectRevert("already registered");
-        auction.register{value: STAKE}(ORDER_HASH, FILL_AMOUNT, ORDER_TOTAL, DEADLINE);
+        reactor.callRegister{value: STAKE}(filler, ORDER_HASH, FILL_AMOUNT, ORDER_TOTAL, DEADLINE);
     }
 
     function test_register_revert_insufficientStake() public {
         vm.deal(filler, 1 ether);
         vm.prank(filler);
         vm.expectRevert("insufficient stake");
-        auction.register{value: STAKE - 1}(ORDER_HASH, FILL_AMOUNT, ORDER_TOTAL, DEADLINE);
+        reactor.callRegister{value: STAKE - 1}(filler, ORDER_HASH, FILL_AMOUNT, ORDER_TOTAL, DEADLINE);
+    }
+
+    function test_register_revert_onlyReactor() public {
+        vm.deal(filler, 1 ether);
+        vm.prank(filler);
+        vm.expectRevert("only reactor");
+        auction.register{value: STAKE}(filler, ORDER_HASH, FILL_AMOUNT, ORDER_TOTAL, DEADLINE);
     }
 
     // ── slash() ──
@@ -150,16 +162,56 @@ contract FillAuctionTest is Test {
 
     // ── onFillSuccess() ──
 
-    function test_onFillSuccess_returnsStake() public {
+    // actualFillAmount = FILL_AMOUNT = 400e6 = 40% of ORDER_TOTAL -> rBucket 3
+    // (30-70%) -> refundTable[0][3] = 5000bps = 50% refund.
+    function test_onFillSuccess_partialFill_refundsHalfStake() public {
         _register();
         reactor.callOnFillSuccess(ORDER_HASH, filler, FILL_AMOUNT);
-        assertEq(auction.pendingReturns(filler), STAKE);
+
+        uint256 refund    = STAKE * 5000 / 10000;
+        uint256 forfeited = STAKE - refund;
+        assertEq(auction.pendingReturns(filler), refund);
+        assertEq(auction.pendingReturns(treasury), forfeited);
+        assertFalse(auction.hasValidRegistration(ORDER_HASH, filler, FILL_AMOUNT));
     }
 
-    function test_onFillSuccess_revert_filledTooLittle() public {
+    // A "sniper" who only manages a tiny actual fill (1% of ORDER_TOTAL,
+    // < 2% -> rBucket 0 -> refundTable[0][0] = 500bps = 5% refund) forfeits
+    // most of their collateral to the treasury.
+    function test_onFillSuccess_smallActualFill_forfeitsMostStake() public {
         _register();
-        uint256 tooLittle = FILL_AMOUNT * 89 / 100;
-        vm.expectRevert("filled too little");
-        reactor.callOnFillSuccess(ORDER_HASH, filler, tooLittle);
+        uint256 tinyFill = ORDER_TOTAL * 1 / 100;
+        reactor.callOnFillSuccess(ORDER_HASH, filler, tinyFill);
+
+        uint256 refund    = STAKE * 500 / 10000;
+        uint256 forfeited = STAKE - refund;
+        assertEq(auction.pendingReturns(filler), refund);
+        assertEq(auction.pendingReturns(treasury), forfeited);
+    }
+
+    // Filling >=70% of ORDER_TOTAL -> rBucket 4 -> refundTable[0][4] =
+    // 10000bps = 100% refund, nothing forfeited.
+    function test_onFillSuccess_largeActualFill_returnsFullStake() public {
+        _register();
+        uint256 bigFill = ORDER_TOTAL * 70 / 100;
+        reactor.callOnFillSuccess(ORDER_HASH, filler, bigFill);
+
+        assertEq(auction.pendingReturns(filler), STAKE);
+        assertEq(auction.pendingReturns(treasury), 0);
+    }
+
+    // ── hasValidRegistration() ──
+
+    function test_hasValidRegistration_allowsSmallerFillAmount() public {
+        _register();
+        // Registered fillAmount acts as a ceiling: a smaller remaining
+        // amount (e.g. after a front-running fill shrank what's left)
+        // still matches the registration.
+        assertTrue(auction.hasValidRegistration(ORDER_HASH, filler, FILL_AMOUNT - 1));
+    }
+
+    function test_hasValidRegistration_revert_largerFillAmount() public {
+        _register();
+        assertFalse(auction.hasValidRegistration(ORDER_HASH, filler, FILL_AMOUNT + 1));
     }
 }

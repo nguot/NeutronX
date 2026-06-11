@@ -24,6 +24,7 @@ export async function initCrossChainSchema(): Promise<void> {
       num_slots     SMALLINT NOT NULL,
       merkle_root   VARCHAR(66) NOT NULL,
       cosigner_sig  TEXT NOT NULL,
+      swapper_sig   TEXT,
       t2_expiry     INTEGER NOT NULL,
       reactor_addr  VARCHAR(42) NOT NULL,
       chain_a_id    INTEGER NOT NULL,
@@ -56,6 +57,61 @@ export async function initCrossChainSchema(): Promise<void> {
     END
     $$
   `)
+  // Migration: add swapper_sig for existing installs
+  await db.query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'cc_orders' AND column_name = 'swapper_sig'
+      ) THEN
+        ALTER TABLE cc_orders ADD COLUMN swapper_sig TEXT;
+      END IF;
+    END
+    $$
+  `)
+
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS cc_tokens (
+      id        SERIAL PRIMARY KEY,
+      chain_id  INTEGER NOT NULL,
+      role      VARCHAR(10) NOT NULL,   -- 'input' (Chain A) or 'output' (Chain B)
+      symbol    VARCHAR(16) NOT NULL,
+      address   VARCHAR(42) NOT NULL,
+      decimals  SMALLINT NOT NULL,
+      UNIQUE (chain_id, address, role)
+    )
+  `)
+  for (const t of DEFAULT_CC_TOKENS) {
+    await db.query(`
+      INSERT INTO cc_tokens (chain_id, role, symbol, address, decimals)
+      VALUES ($1,$2,$3,$4,$5)
+      ON CONFLICT (chain_id, address, role) DO NOTHING
+    `, [t.chainId, t.role, t.symbol, t.address, t.decimals])
+  }
+}
+
+// ─── Token directory ───────────────────────────────────────────────────────────
+// Backs the token-pill selectors in the cross-chain swap UI. Seeded from the
+// same devnet addresses used by tests/crosschain/setup_cc.sh.
+
+export interface CCTokenInfo { symbol: string; address: string; decimals: number; chainId: number }
+
+const DEFAULT_CC_TOKENS: (CCTokenInfo & { role: 'input' | 'output' })[] = [
+  { role: 'input',  chainId: 31337, symbol: 'WETH', address: '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2', decimals: 18 },
+  { role: 'output', chainId: 31338, symbol: 'USDC', address: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', decimals: 6  },
+]
+
+export async function getTokenDirectory(): Promise<{ inputTokens: CCTokenInfo[]; outputTokens: CCTokenInfo[] }> {
+  const r = await db.query('SELECT chain_id, role, symbol, address, decimals FROM cc_tokens ORDER BY id')
+  const inputTokens: CCTokenInfo[] = []
+  const outputTokens: CCTokenInfo[] = []
+  for (const row of r.rows) {
+    const t: CCTokenInfo = { symbol: row.symbol, address: row.address, decimals: row.decimals, chainId: row.chain_id }
+    if (row.role === 'input') inputTokens.push(t)
+    else outputTokens.push(t)
+  }
+  return { inputTokens, outputTokens }
 }
 
 // ─── Crypto helpers (mirrors key_distributor/src/crypto/) ─────────────────────
@@ -266,6 +322,29 @@ export async function createCrossChainOrder(p: CreateOrderParams): Promise<Order
   return { orderHash: structHash, merkleRoot, numSlots, cosignerSig }
 }
 
+// Swapper's wallet signs orderHash (EIP-712, _signTypedData) once the order is
+// created. EscrowSrcFactory.fillSlot() requires this alongside cosignerSig.
+export async function setSwapperSig(orderHash: string, swapperSig: string): Promise<void> {
+  const o = await db.query(
+    'SELECT swapper, reactor_addr, chain_a_id FROM cc_orders WHERE order_hash = $1', [orderHash]
+  )
+  if (!o.rows.length) throw new Error('Order not found')
+  const { swapper, reactor_addr, chain_a_id } = o.rows[0]
+
+  const digest = ethers.utils.keccak256(
+    ethers.utils.solidityPack(
+      ['string','bytes32','bytes32'],
+      ['\x19\x01', computeDomainSeparator(chain_a_id, reactor_addr), orderHash]
+    )
+  )
+  const recovered = ethers.utils.recoverAddress(digest, swapperSig)
+  if (recovered.toLowerCase() !== swapper.toLowerCase()) {
+    throw new Error('swapperSig does not match order.swapper')
+  }
+
+  await db.query('UPDATE cc_orders SET swapper_sig = $1 WHERE order_hash = $2', [swapperSig, orderHash])
+}
+
 // ─── Query helpers ────────────────────────────────────────────────────────────
 
 export async function getSessionWithOrders(swapper: string) {
@@ -327,6 +406,7 @@ export async function getCrossChainOrder(orderHash: string) {
     numSlots:    row.num_slots,
     merkleRoot:  row.merkle_root,
     cosignerSig: row.cosigner_sig,
+    swapperSig:  row.swapper_sig,
     t2Expiry:    row.t2_expiry,
     slots: slots.rows.map(s => ({
       index:          s.slot_index,

@@ -2,45 +2,12 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { ethers } from 'ethers'
 import type { WalletState } from '../hooks/useWallet'
 import { useAppConfig } from '../context/AppConfig'
-
-const TOKENS = {
-  WETH: { symbol: 'WETH', address: '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2', decimals: 18 },
-  USDC: { symbol: 'USDC', address: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', decimals: 6  },
-  USDT: { symbol: 'USDT', address: '0xdAC17F958D2ee523a2206206994597C13D831ec7', decimals: 6  },
-  DAI:  { symbol: 'DAI',  address: '0x6B175474E89094C44Da98b954EedeAC495271d0F', decimals: 18 },
-}
-type TK = keyof typeof TOKENS
+import { TOKENS, type TK, toWei, fromWei, calcStartPrice, humanPriceToContract, TokenPill } from '../lib/tokens'
+import { AuctionChart, colorForFiller } from '../components/AuctionChart'
 
 const PERMIT2 = '0x000000000022D473030F116dDEE9F6B43aC78BA3'
 const P2_ABI  = ['function allowance(address,address,address) view returns (uint160,uint48,uint48)', 'function approve(address,address,uint160,uint48)']
 const ERC_ABI = ['function allowance(address,address) view returns (uint256)', 'function approve(address,uint256) returns (bool)']
-
-function toWei(val: string, dec: number): bigint {
-  try { return ethers.utils.parseUnits(val || '0', dec).toBigInt() } catch { return 0n }
-}
-function fromWei(wei: bigint, dec: number): string {
-  return parseFloat(ethers.utils.formatUnits(wei.toString(), dec)).toLocaleString(undefined, { maximumFractionDigits: 6 })
-}
-// startPrice_contract = (outWei / inWei) * 1e18
-function calcStartPrice(inWei: bigint, outWei: bigint): bigint {
-  if (inWei === 0n) return 0n
-  return (outWei * BigInt(1e18)) / inWei
-}
-// humanDecay (output/input per block) → contract decay
-// contract units same as startPrice: decay_contract = humanDecay * 10^(outDec - inDec + 18) / 1e18
-// simpler: decay_contract = (decayOutWei_per_inWei_per_block) * 1e18 / 1e18
-// For USDC/WETH: humanDecay * 10^6 (per 1 input token)  → divide by 10^inDec then *1e18
-function humanDecayToContract(humanDecay: number, inDec: number, outDec: number): bigint {
-  // startPrice units = outWei / inWei * 1e18
-  // For 1 human output/input drop per block: = 10^outDec / 10^inDec * 1e18
-  const num = BigInt(Math.round(humanDecay * 1e6)) * BigInt(10 ** outDec) * BigInt(10 ** 12)
-  const den = BigInt(10 ** inDec) * BigInt(1e6)
-  return num / den
-}
-function contractToHumanPrice(price: bigint, inDec: number, outDec: number): number {
-  // humanPrice = price / 1e18 * 10^inDec / 10^outDec
-  return Number(price) / 1e18 * (10 ** inDec) / (10 ** outDec)
-}
 
 interface Fill { id: number; filler: string; fillAmount: string; blockNumber: number | null; createdAt: string }
 interface ActiveOrder {
@@ -144,7 +111,7 @@ export default function DutchAuction({ wallet }: { wallet: WalletState }) {
     setErr(''); setStep('busy'); setMsg('Sign in wallet…')
     const deadline = wallet.blockNumber + 200
     const sp = calcStartPrice(inW, outW)
-    const dp = humanDecayToContract(parseFloat(decay || '0'), inT.decimals, outT.decimals)
+    const dp = humanPriceToContract(parseFloat(decay || '0'), inT.decimals, outT.decimals)
     const orderBody = {
       swapper: wallet.account, inputToken: inT.address, inputAmount: inW.toString(),
       outputToken: outT.address, minOutputAmount: outW.toString(),
@@ -194,12 +161,6 @@ export default function DutchAuction({ wallet }: { wallet: WalletState }) {
     const inDec = TOKENS[order.inKey].decimals, outDec = TOKENS[order.outKey].decimals
     const filled = order.fills.reduce((s, f) => s + BigInt(f.fillAmount), 0n)
     const pct    = order.inWei > 0n ? Number(filled * 100n / order.inWei) : 0
-    const curPrice = contractToHumanPrice(
-      order.startPriceContract > order.decayContract * BigInt(Math.max(0, order.curBlock - order.startBlock))
-        ? order.startPriceContract - order.decayContract * BigInt(Math.max(0, order.curBlock - order.startBlock))
-        : 0n,
-      inDec, outDec
-    )
 
     return (
       <div className="uni-page">
@@ -219,16 +180,25 @@ export default function DutchAuction({ wallet }: { wallet: WalletState }) {
           </div>
 
           {/* chart */}
-          <AuctionChart order={order} inDec={inDec} outDec={outDec} curPrice={curPrice} />
+          <AuctionChart
+            startBlock={order.startBlock} deadline={order.deadline}
+            startPriceContract={order.startPriceContract} decayContract={order.decayContract}
+            curBlock={order.curBlock} inDec={inDec} outDec={outDec}
+            inSym={TOKENS[order.inKey].symbol} outSym={TOKENS[order.outKey].symbol}
+            fills={order.fills} totalAmount={order.inWei}
+          />
 
-          {/* fill bar */}
+          {/* fill bar — one segment per fill, colored to match the chart dots */}
           <div className="uni-fill-section">
             <div className="uni-fill-label">
               <span>Filled</span>
               <span>{fromWei(filled, inDec)} / {fromWei(order.inWei, inDec)} {TOKENS[order.inKey].symbol} <strong>{pct.toFixed(0)}%</strong></span>
             </div>
             <div className="uni-fill-track">
-              <div className="uni-fill-bar" style={{ width: `${Math.min(100, pct)}%` }} />
+              {order.fills.map(f => {
+                const segPct = order.inWei > 0n ? Number(BigInt(f.fillAmount) * 1000n / order.inWei) / 10 : 0
+                return <div key={f.id} className="uni-fill-segment" style={{ width: `${segPct}%`, background: colorForFiller(f.filler) }} />
+              })}
             </div>
           </div>
 
@@ -237,7 +207,7 @@ export default function DutchAuction({ wallet }: { wallet: WalletState }) {
             ? <p className="uni-waiting">Waiting for fillers…</p>
             : order.fills.map(f => (
               <div key={f.id} className="uni-fill-row">
-                <span className="uni-fill-dot" />
+                <span className="uni-fill-dot" style={{ background: colorForFiller(f.filler) }} />
                 <span className="uni-fill-filler">{f.filler.slice(0, 8)}…{f.filler.slice(-4)}</span>
                 <span className="uni-fill-info">{fromWei(BigInt(f.fillAmount), inDec)} {TOKENS[order.inKey].symbol}</span>
                 <span className="uni-fill-block">{f.blockNumber ? `#${f.blockNumber}` : new Date(f.createdAt).toLocaleTimeString()}</span>
@@ -331,104 +301,6 @@ export default function DutchAuction({ wallet }: { wallet: WalletState }) {
 
         <SwapButton />
       </div>
-    </div>
-  )
-}
-
-// ── Auction SVG chart ────────────────────────────────────────────────────────
-function AuctionChart({ order, inDec, outDec, curPrice }: {
-  order: ActiveOrder; inDec: number; outDec: number; curPrice: number
-}) {
-  const W = 440, H = 160
-  const PL = 8, PR = 8, PT = 12, PB = 28
-  const cW = W - PL - PR, cH = H - PT - PB
-
-  const { startBlock, deadline, startPriceContract, decayContract, curBlock } = order
-  const span = Math.max(1, deadline - startBlock)
-
-  const startP = contractToHumanPrice(startPriceContract, inDec, outDec)
-
-  const bx = (b: number) => PL + Math.min(1, Math.max(0, (b - startBlock) / span)) * cW
-  const py = (p: number) => PT + (1 - Math.min(1, Math.max(0, p / startP))) * cH
-
-  // curve points
-  const pts: string[] = []
-  for (let i = 0; i <= 60; i++) {
-    const b = startBlock + (i / 60) * span
-    const dc = decayContract * BigInt(Math.round(b - startBlock))
-    const pc = startPriceContract > dc ? startPriceContract - dc : 0n
-    const ph = contractToHumanPrice(pc, inDec, outDec)
-    pts.push(`${bx(b).toFixed(1)},${py(ph).toFixed(1)}`)
-    if (ph <= 0) break
-  }
-
-  const cx = bx(Math.min(deadline, Math.max(startBlock, curBlock)))
-  const cy = py(Math.max(0, curPrice))
-
-  const inSym  = TOKENS[order.inKey].symbol
-  const outSym = TOKENS[order.outKey].symbol
-
-  return (
-    <div className="uni-chart-wrap">
-      <div className="uni-chart-label">
-        <span>Price decay</span>
-        <span className="uni-chart-price">{curPrice.toFixed(2)} {outSym}/{inSym}</span>
-      </div>
-      <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{ display: 'block' }}>
-        <defs>
-          <linearGradient id="cg" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#7c3aed" stopOpacity="0.12" />
-            <stop offset="100%" stopColor="#7c3aed" stopOpacity="0" />
-          </linearGradient>
-        </defs>
-
-        {/* fill */}
-        {pts.length > 1 && (
-          <path d={`M ${pts.join(' L ')} L ${pts[pts.length-1].split(',')[0]},${PT+cH} L ${PL},${PT+cH} Z`} fill="url(#cg)" />
-        )}
-        {/* line */}
-        {pts.length > 1 && (
-          <polyline points={pts.join(' ')} fill="none" stroke="#7c3aed" strokeWidth="2" strokeLinecap="round" />
-        )}
-
-        {/* fill event dots */}
-        {order.fills.map(f => {
-          if (!f.blockNumber || f.blockNumber < startBlock || f.blockNumber > deadline) return null
-          const fb = f.blockNumber
-          const dc = decayContract * BigInt(fb - startBlock)
-          const pc = startPriceContract > dc ? startPriceContract - dc : 0n
-          return <circle key={f.id} cx={bx(fb)} cy={py(contractToHumanPrice(pc, inDec, outDec))} r={4} fill="#16a34a" stroke="white" strokeWidth={1.5} />
-        })}
-
-        {/* current dot */}
-        <circle cx={cx} cy={cy} r={9} fill="#7c3aed" opacity={0.12}>
-          <animate attributeName="r" values="7;11;7" dur="2s" repeatCount="indefinite" />
-        </circle>
-        <circle cx={cx} cy={cy} r={5} fill="#7c3aed" stroke="white" strokeWidth={2} />
-
-        {/* x labels */}
-        <text x={PL} y={H-8} fontSize="10" fill="#94a3b8">block {startBlock}</text>
-        <text x={W-PR} y={H-8} textAnchor="end" fontSize="10" fill="#94a3b8">block {deadline}</text>
-        <text x={cx} y={H-8} textAnchor="middle" fontSize="10" fill="#7c3aed">now</text>
-      </svg>
-      {/* timeline bar */}
-      <div className="uni-timeline">
-        <div className="uni-timeline-fill" style={{ width: `${Math.min(100, Math.max(0, (curBlock - startBlock) / span * 100))}%` }} />
-      </div>
-    </div>
-  )
-}
-
-// ── Token pill ───────────────────────────────────────────────────────────────
-function TokenPill({ value, onChange, exclude }: { value: TK; onChange: (k: TK) => void; exclude: TK }) {
-  return (
-    <div className="uni-token-pill">
-      <select value={value} onChange={e => onChange(e.target.value as TK)}>
-        {(Object.keys(TOKENS) as TK[]).filter(k => k !== exclude).map(k => (
-          <option key={k} value={k}>{k}</option>
-        ))}
-      </select>
-      <span className="uni-pill-arrow">▾</span>
     </div>
   )
 }

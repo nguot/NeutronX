@@ -1,46 +1,52 @@
-giao dien => lam them giao dien cho cac filler cho tuong tac de hon 
-lam them 1 nut mine cho trang admin (quan ly blockchain) => de tuong tac 
 1 test case the hien he thong minh chong phan manh order boi MEV bot => chung minh stake hoat dong tot (loadtest)
-1 giao dien de xem don minh dang duoc filler fill dan (1 do thi Oxy)
-1 test case cross chain => chứng minh chia slot theo merkle tree (2 mũ) hoạt động tốt 
+1 test case cross chain => chứng minh chia slot theo merkle tree (2 mũ) hoạt động tốt  (test lại)
 
+1 filler là copy của alpha router nhưng có data từ các pool khác ? 
 filler ban chat la mang tien minh di trade xong lay duoc tien >= so tien minh muon => filler an phan lai => van de la trade o dau 
 
-design filler = strategy + source (nguon trade o dau = CoW la orderbook, Whale la vo han tien) + cong thuc tinh lai + 1 simulate (quoter) + danh sach contract (ABI)
+design filler = strategy (công thức tính lãi) + source (nguon trade o dau = CoW la orderbook, Whale la vo han tien) + 1 simulate (quoter) + danh sach contract (ABI)
 
-còn cross chain thì sao nhỉ ? 
+check token 
+////////////////////////////////
+Front running
+1. Filler A registers (and stakes) to fill the full order.
+2. An MEV bot front-runs with its own (cheap, small-bucket) registration + execute() for a tiny slice of the same order.
+3. The order's remaining amount is now less than A's registered fillAmount → A's execute() reverts (can never match exactly anymore) → A gets slashed after the window, losing a much larger (100%-bucket) stake — and the bot can call slash() itself to collect the 10% reward.
 
-cd ~/Documents/DATN/dex-aggregator/frontend
-npm run dev          # starts Vite on port 5173 by default
-Then open the printed http://localhost:5173 URL from a WSL-side browser.
-
-(Note: my memory had npx serve . -p 8080 recorded for the frontend — that's for serving a built static bundle, not for active development. npm run dev is the right command while you're iterating on pages like the ones I just added.)
-
-For the full app (Swap / Cross-Chain tabs need these too)
-
-docker start neutronx-db                 # 1. DB
-cd ~/Documents/DATN/dex-aggregator/backend && npm start          # 2. backend (port 3000)
-cd ~/Documents/DATN/dex-aggregator/frontend && npm run dev       # 4. frontend
-The new Explore tab works standalone (static directory, no backend needed); Simulate needs the backend + filler services running to get real quotes back.
+This isn't about the multiplier table being "too small" — it's a logic gap (exact-amount matching + no way to adjust a registration), and a bond-size invariant wouldn't catch it.
+///////////////
+bash -lc 'export PATH="$PATH:/home/nguot/.foundry/bin" && cast call 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48 "balanceOf(address)(uint256)" 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266 --rpc-url http://127.0.0.1:8546'
 
 
-Test based on which page I'm doing 
+Here are the documented steps for mksglu/context-mode — but a few things worth flagging before you run them, since this isn't a passive logging tool.
 
-For "Swap" tab (normal Dutch-auction swap) → use tests/demo/
+What it actually installs
 
-bash tests/demo/v1_neutral_anvil.sh   # Terminal 1: Anvil fork
-bash tests/demo/setup.sh              # Terminal 2: deploys + writes addresses
-setup.sh deploys FillAuction / PartialFillReactor / FallbackExecutor and auto-writes them into backend/.env (and filler/*/.env, solver/.env) — that's the "copy to backend" part, fully automated. Addresses also land in tests/demo/logs/.addresses for reference.
+- A third-party plugin marketplace (mksglu/context-mode) added to your Claude Code config
+- An MCP server with 11 tools, including ctx_execute, ctx_execute_file, ctx_batch_execute — these run code in a sandbox on your machine
+- 4 hooks (SessionStart, PreToolUse, PostToolUse, PreCompact) that fire on every tool call I make, rerouting output through their sandbox
 
-For "Cross-Chain" tab → use tests/crosschain/
+That's a meaningful trust boundary — every file read, bash command, etc. in future sessions gets intercepted/processed by this third-party code before reaching me. Worth a quick look at https://github.com/mksglu/context-mode source/issues first if you haven't.
 
-bash tests/crosschain/chaina_anvil.sh   # Terminal 1: Chain A
-bash tests/crosschain/chainb_anvil.sh   # Terminal 2: Chain B
-bash tests/crosschain/setup_cc.sh       # Terminal 3: deploys + writes addresses
-setup_cc.sh deploys CrossChainReactor / EscrowDstFactory and auto-writes CROSS_CHAIN_REACTOR, CHAIN_B_FACTORY, CHAIN_B_RPC into backend/.env — same deal, automated. Addresses also land in tests/crosschain/logs/.cc_addresses.
+Steps (run these yourself in the Claude Code CLI)
 
-"Copy to frontend" — there is no copy step
+1. Check your Claude Code version (needs ≥ v1.0.33):
+claude --version
+1. Update if needed: npm update -g @anthropic-ai/claude-code
+2. Add the marketplace and install the plugin:
+/plugin marketplace add mksglu/context-mode
+/plugin install context-mode@context-mode
+3. Restart Claude Code (or run /reload-plugins)
+4. Verify:
+/context-mode:ctx-doctor
+4. All checks should show checkmarks (validates runtimes, hooks, FTS5 db, plugin registration).
+5. (Optional) Add a status-bar savings indicator — edit ~/.claude/settings.json:
+{
+  "statusLine": { "type": "command", "command": "context-mode statusline" }
+}
+5. then restart.
 
-The frontend has no .env. Both DutchAuction.tsx and CrossChain.tsx take the reactor address as a manual text input field in the UI ("PartialFillReactor Address" / "CrossChainReactor (Chain A)"). After running setup, you paste the printed address into that field — that's by design (no build-time config needed, redeploy-friendly).
+These are Claude Code slash commands you type directly into the CLI — I can't run /plugin commands myself via Bash. If you want, I can wait here and you can paste back the ctx-doctor output if anything fails.
 
-So: pick demo/ for Swap, crosschain/ for Cross-Chain — run their respective *_anvil.sh + setup*.sh, then (re)start the backend so it picks up the freshly-written .env, then paste the printed reactor address into the frontend's input field. Don't run both demo sets simultaneously — they reuse the same Anvil ports/chain IDs in places and will collide.
+Sources:
+- mksglu/context-mode (https://github.com/mksglu/context-mode)

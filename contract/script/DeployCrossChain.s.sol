@@ -2,7 +2,8 @@
 pragma solidity ^0.8.20;
 
 import "forge-std/Script.sol";
-import "../src/crosschain/CrossChainReactor.sol";
+import "../src/crosschain/EscrowSrc.sol";
+import "../src/crosschain/EscrowSrcFactory.sol";
 import "../src/crosschain/EscrowDst.sol";
 import "../src/crosschain/EscrowDstFactory.sol";
 
@@ -20,17 +21,21 @@ import "../src/crosschain/EscrowDstFactory.sol";
 contract DeployCrossChain is Script {
     address constant PERMIT2 = 0x000000000022D473030F116dDEE9F6B43aC78BA3;
 
-    // Chain A — CrossChainReactor holds swapper's WETH and verifies Merkle proofs.
+    // Chain A — EscrowSrc is the clone template; EscrowSrcFactory verifies
+    // signatures + Merkle proofs and deploys one clone per filled slot,
+    // pulling the swapper's WETH via Permit2 redirect.
     // Requires env: PRIVATE_KEY, COSIGNER_ADDRESS
     function runChainA() external {
         uint256 deployerKey = vm.envUint("PRIVATE_KEY");
         address cosigner    = vm.envAddress("COSIGNER_ADDRESS");
 
         vm.startBroadcast(deployerKey);
-        CrossChainReactor reactor = new CrossChainReactor(PERMIT2, cosigner);
+        EscrowSrc        impl    = new EscrowSrc();
+        EscrowSrcFactory factory = new EscrowSrcFactory(address(impl), PERMIT2, cosigner);
         vm.stopBroadcast();
 
-        console.log("CrossChainReactor:", address(reactor));
+        console.log("EscrowSrc impl:  ", address(impl));
+        console.log("EscrowSrcFactory:", address(factory));
     }
 
     // Chain B — EscrowDst is the clone template; EscrowDstFactory deploys one
