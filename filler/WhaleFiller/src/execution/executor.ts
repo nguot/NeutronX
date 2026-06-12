@@ -12,7 +12,8 @@ const ORDER_TYPE_HASH = ethers.utils.keccak256(
     'PartialFillOrder(' +
     'address swapper,address inputToken,uint256 inputAmount,' +
     'address outputToken,uint256 minOutputAmount,' +
-    'uint256 deadline,uint256 nonce,uint16 minFillBps' +
+    'uint256 deadline,uint256 nonce,uint16 minFillBps,' +
+    'uint128 startPrice,uint32 decayPerBlock,uint24 feeTier' +
     ')'
   )
 )
@@ -20,9 +21,10 @@ const ORDER_TYPE_HASH = ethers.utils.keccak256(
 function computeOrderHash(order: OrderInfo): string {
   return ethers.utils.keccak256(
     ethers.utils.defaultAbiCoder.encode(
-      ['bytes32','address','address','uint256','address','uint256','uint256','uint256','uint16'],
+      ['bytes32','address','address','uint256','address','uint256','uint256','uint256','uint16','uint128','uint32','uint24'],
       [ORDER_TYPE_HASH, order.swapper, order.inputToken, order.inputAmount,
-       order.outputToken, order.minOutput, order.deadline, order.nonce, order.minFillBps]
+       order.outputToken, order.minOutput, order.deadline, order.nonce, order.minFillBps,
+       order.startPrice, order.decayPerBlock, order.feeTier]
     )
   )
 }
@@ -54,9 +56,11 @@ function getTimeMultiplier(deadline: number, currentBlock: number): number {
   const left = deadline - currentBlock
   if (left > 50) return 10_000; if (left > 20) return 15_000; if (left > 5) return 30_000; return 50_000
 }
-async function computeRequiredStake(fill: bigint, total: bigint, deadline: number, block: number): Promise<bigint> {
-  const rateBps: number = await fillAuction.collateralRate(getOrderSizeBucket(total))
-  return (fill * BigInt(rateBps) / 10_000n) * BigInt(getTimeMultiplier(deadline, block)) / 10_000n
+async function computeRequiredStake(order: OrderInfo, fill: bigint): Promise<bigint> {
+  // D-1: exact ETH collateral from the auction (TWAP + decimals handled on-chain).
+  return (await fillAuction.previewCollateral(
+    order.inputToken, order.feeTier, fill, order.deadline
+  )).toBigInt()
 }
 
 async function ensureApproval(tokenAddress: string, amount: bigint): Promise<void> {
@@ -126,7 +130,12 @@ export class Executor {
     console.log(`${tag} on-chain remaining=${remainingPct}%  blocksLeft=${order.deadline - currentBlock}`)
 
     if (onChainRemaining === 0n) {
-      console.log(`${tag} fully filled — dropping`)
+      await this.reclaimStake(order, orderHash, 'fully filled by others')
+      this.watching.delete(hash); this.registered.delete(hash); return
+    }
+
+    if (this.registered.has(hash) && await reactor.isCancelled(orderHash)) {
+      await this.reclaimStake(order, orderHash, 'cancelled')
       this.watching.delete(hash); this.registered.delete(hash); return
     }
 
@@ -144,9 +153,7 @@ export class Executor {
       const fillAmount = decision.fillAmount < onChainRemaining
         ? decision.fillAmount : onChainRemaining
 
-      const stake = await computeRequiredStake(
-        fillAmount, BigInt(order.inputAmount), order.deadline, currentBlock
-      )
+      const stake = await computeRequiredStake(order, fillAmount)
 
       // Optimistic lock — prevents duplicate tx when multiple blocks fire before first tx mines
       this.registered.set(hash, { fillAmount, registeredAt: currentBlock })
@@ -194,6 +201,23 @@ export class Executor {
       this.watching.delete(hash)
       this.registered.delete(hash)
       console.log(`${tag} done  watching=${this.watching.size}  registered=${this.registered.size}`)
+    }
+  }
+
+  /// We registered (staked) for this order but did not win the fill — the order
+  /// was satisfied by another filler or cancelled. Under the new contract the
+  /// stake stays locked until releaseRegistration moves it to pendingReturns;
+  /// the periodic withdraw() then returns it. Without this, lost-race stake
+  /// would be stuck forever.
+  private async reclaimStake(order: OrderInfo, orderHash: string, why: string): Promise<void> {
+    const tag = `[Executor] ${order.hash.slice(0,10)}…`
+    if (!this.registered.has(order.hash)) { console.log(`${tag} ${why} — dropping`); return }
+    try {
+      const tx = await fillAuction.releaseRegistration(orderHash, wallet.address)
+      await tx.wait()
+      console.log(`${tag} ${why} — released stake, reclaim via withdraw()`)
+    } catch {
+      console.log(`${tag} ${why} — drop (stake already resolved)`)
     }
   }
 }

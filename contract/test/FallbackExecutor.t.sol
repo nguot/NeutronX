@@ -41,7 +41,8 @@ contract FallbackExecutorTest is Test {
     FallbackExecutor public fallbackExecutor;
 
     address public treasury = makeAddr("treasury");
-    address public cosigner = makeAddr("cosigner");
+    uint256 cosignerKey = 0xA11CE;
+    address public cosigner = vm.addr(cosignerKey);
     address public swapper = makeAddr("swapper");
     address public caller = makeAddr("caller");
 
@@ -52,7 +53,7 @@ contract FallbackExecutorTest is Test {
         vm.createSelectFork(vm.envString("ALCHEMY_RPC_URL"));
 
         // deploy contracts
-        fillAuction = new FillAuction(treasury);
+        fillAuction = new FillAuction(treasury, WETH, address(0), 0); // input is WETH → oracle short-circuits 1:1
         reactor = new PartialFillReactor(
             PERMIT2,
             address(fillAuction),
@@ -103,7 +104,20 @@ contract FallbackExecutorTest is Test {
                 decayPerBlock: 0,
                 feeTier: 500
             });
-        return PartialFillReactor.SignedOrder({info: info, sig: bytes("")});
+        return PartialFillReactor.SignedOrder({info: info, sig: _signOrder(info)});
+    }
+
+    function _signOrder(PartialFillReactor.OrderInfo memory info) internal view returns (bytes memory) {
+        bytes32 structHash = keccak256(abi.encode(
+            reactor.ORDER_TYPE_HASH(),
+            info.swapper, info.inputToken, info.inputAmount,
+            info.outputToken, info.minOutputAmount,
+            info.deadline, info.nonce, info.minFillBps,
+            info.startPrice, info.decayPerBlock, info.feeTier
+        ));
+        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", reactor.DOMAIN_SEPARATOR(), structHash));
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(cosignerKey, digest);
+        return abi.encodePacked(r, s, v);
     }
 
     function test_fallback_swapsSuccessfully() public {
@@ -159,8 +173,10 @@ contract FallbackExecutorTest is Test {
         PartialFillReactor.SignedOrder memory order = _makeOrder();
         vm.roll(block.number + 200); // qua deadline
 
+        // C-2: signature validation now runs first, so an expired order is
+        // caught by _validateOrder ("expired") before the executor's own check.
         vm.prank(caller);
-        vm.expectRevert("order expired");
+        vm.expectRevert("expired");
         fallbackExecutor.executeFallback(order, bytes(""), 0);
     }
 }

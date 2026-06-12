@@ -3,12 +3,16 @@ export const FILL_AUCTION_ABI = [
   'function hasValidRegistration(bytes32, address, uint256) view returns (bool)',
   'function pendingReturns(address) view returns (uint256)',
   'function withdraw() external',
+  // D-1: exact ETH collateral for a fill (handles the TWAP + token decimals)
+  'function previewCollateral(address inputToken, uint24 feeTier, uint256 fillAmount, uint256 deadline) view returns (uint256)',
+  'function releaseRegistration(bytes32 orderHash, address filler) external',
 ]
 
 export const REACTOR_ABI = [
   'function executePartialChunk(tuple(tuple(address swapper, address inputToken, uint256 inputAmount, address outputToken, uint256 minOutputAmount, uint256 deadline, uint256 nonce, uint16 minFillBps, uint128 startPrice, uint32 decayPerBlock, uint24 feeTier) info, bytes sig) order, uint256 fillAmount) external',
   'function register(tuple(tuple(address swapper, address inputToken, uint256 inputAmount, address outputToken, uint256 minOutputAmount, uint256 deadline, uint256 nonce, uint16 minFillBps, uint128 startPrice, uint32 decayPerBlock, uint24 feeTier) info, bytes sig) order, uint256 fillAmount) external payable',
   'function remainingInput(bytes32, uint256) view returns (uint256)',
+  'function isCancelled(bytes32) view returns (bool)',
   'function fillAuction() view returns (address)',
 ]
 

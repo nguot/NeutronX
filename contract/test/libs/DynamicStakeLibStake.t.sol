@@ -38,7 +38,7 @@ contract DynamicStakeLibStakeTest is Test {
             }
         }
 
-        FillAuction auction = new FillAuction(makeAddr("treasury"));
+        FillAuction auction = new FillAuction(makeAddr("treasury"), address(0), address(0), 0);
         for (uint8 s = 0; s < 4; s++) {
             liveCollateralRate[s] = auction.collateralRate(s);
             for (uint8 r = 0; r < 5; r++) {
@@ -99,8 +99,9 @@ contract DynamicStakeLibStakeTest is Test {
             uint256 fillLo = fillHi - 1;
             if (fillLo < 1) continue;
 
-            uint256 refundLo = DynamicStakeLib.computeRefund(stakeAmount, fillLo, orderTotal, t);
-            uint256 refundHi = DynamicStakeLib.computeRefund(stakeAmount, fillHi, orderTotal, t);
+            uint32[5] memory row = t[DynamicStakeLib.getOrderSizeBucket(orderTotal)];
+            uint256 refundLo = DynamicStakeLib.computeRefund(stakeAmount, fillLo, orderTotal, row);
+            uint256 refundHi = DynamicStakeLib.computeRefund(stakeAmount, fillHi, orderTotal, row);
             assertLe(refundLo, refundHi, "refund must not decrease across a fill-ratio bucket boundary");
         }
     }
@@ -128,7 +129,7 @@ contract DynamicStakeLibStakeTest is Test {
     function testFuzz_computeRefund_fullFillReturnsFullStake(uint256 stakeAmount, uint256 orderTotal) public view {
         stakeAmount = bound(stakeAmount, 1, type(uint128).max);
         orderTotal  = bound(orderTotal, 1, 10_000_000e6);
-        assertEq(DynamicStakeLib.computeRefund(stakeAmount, orderTotal, orderTotal, liveRefundTable), stakeAmount);
+        assertEq(DynamicStakeLib.computeRefund(stakeAmount, orderTotal, orderTotal, liveRefundTable[DynamicStakeLib.getOrderSizeBucket(orderTotal)]), stakeAmount);
     }
 
     // ── computeCollateral: linear in fillAmount, no ratio dimension ──
@@ -151,8 +152,10 @@ contract DynamicStakeLibStakeTest is Test {
         if (fillAmount1 > fillAmount2) (fillAmount1, fillAmount2) = (fillAmount2, fillAmount1);
         uint256 deadline = block.number + bound(deadlineOffset, 1, 1000);
 
-        uint256 c1 = DynamicStakeLib.computeCollateral(fillAmount1, orderTotal, deadline, liveCollateralRate);
-        uint256 c2 = DynamicStakeLib.computeCollateral(fillAmount2, orderTotal, deadline, liveCollateralRate);
+        // D-1: collateral is now sized off an ETH notional; treat the (bounded)
+        // fillAmount as that notional. Monotonicity in the ceiling still holds.
+        uint256 c1 = DynamicStakeLib.computeCollateral(fillAmount1, deadline, liveCollateralRate);
+        uint256 c2 = DynamicStakeLib.computeCollateral(fillAmount2, deadline, liveCollateralRate);
         assertLe(c1, c2, "collateral must not decrease as the registered ceiling grows");
     }
 
@@ -170,8 +173,10 @@ contract DynamicStakeLibStakeTest is Test {
         uint256 smallCeiling = orderTotal * 1 / 100;  // 1%
         uint256 bigCeiling   = orderTotal * 71 / 100; // 71%
 
-        uint256 stakeSmall = DynamicStakeLib.computeCollateral(smallCeiling, orderTotal, deadline, liveCollateralRate);
-        uint256 stakeBig   = DynamicStakeLib.computeCollateral(bigCeiling, orderTotal, deadline, liveCollateralRate);
+        // D-1: both ceilings fall in the same ETH-notional bucket, so the rate is
+        // identical and cost scales exactly with the ceiling (no discount).
+        uint256 stakeSmall = DynamicStakeLib.computeCollateral(smallCeiling, deadline, liveCollateralRate);
+        uint256 stakeBig   = DynamicStakeLib.computeCollateral(bigCeiling, deadline, liveCollateralRate);
 
         // The bigger ceiling costs proportionally more, never less.
         assertGe(stakeBig, stakeSmall);
@@ -184,8 +189,9 @@ contract DynamicStakeLibStakeTest is Test {
         uint256 orderTotal = 2_000_000e6;  // sBucket 3 (>$1M)
         uint256 stake      = 100e18;
 
-        uint256 refundSmall = DynamicStakeLib.computeRefund(stake, orderTotal * 1 / 100, orderTotal, liveRefundTable);
-        uint256 refundFull  = DynamicStakeLib.computeRefund(stake, orderTotal * 70 / 100, orderTotal, liveRefundTable);
+        uint8 sBucket = DynamicStakeLib.getOrderSizeBucket(orderTotal);
+        uint256 refundSmall = DynamicStakeLib.computeRefund(stake, orderTotal * 1 / 100, orderTotal, liveRefundTable[sBucket]);
+        uint256 refundFull  = DynamicStakeLib.computeRefund(stake, orderTotal * 70 / 100, orderTotal, liveRefundTable[sBucket]);
 
         assertEq(refundSmall, stake * 100 / 10000); // refundTable[3][0] == 100 bps == 1% kept
         assertEq(refundFull, stake);                // refundTable[3][4] == 10000 bps == 100% kept

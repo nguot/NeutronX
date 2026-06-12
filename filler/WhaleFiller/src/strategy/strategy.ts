@@ -37,11 +37,20 @@ export async function decide(order: OrderInfo, currentBlock: number): Promise<Fi
     `  auctionPrice=${auctionPriceHuman.toFixed(4)}  blocksLeft=${blocksLeft}`
   )
 
-  // ── DEV_MODE: skip spread + inventory checks, fill 100% ──────────────────
+  // ── DEV_MODE: skip spread checks, but still size by real capacity ────────
+  // so a large order no single filler can afford is filled across fillers in
+  // partial chunks (instead of blindly attempting 100% and reverting on payout).
   if (DEV_MODE) {
-    const inputAmount = BigInt(order.inputAmount)
-    console.log(`${tag} ✔ FILL [DEV]  fill=100%  price=${auctionPriceHuman.toFixed(4)}`)
-    return { shouldFill: true, fillAmount: inputAmount, currentPrice, reason: 'dev mode' }
+    const inputAmount   = BigInt(order.inputAmount)
+    const outputBalance = (await erc20(order.outputToken).balanceOf(wallet.address)).toBigInt()
+    const usable        = (outputBalance * BigInt(INVENTORY.MAX_INVENTORY_USE_BPS)) / 10_000n
+    const capacity      = (usable * 10n ** 18n) / currentPrice
+    const fillAmount    = capacity < inputAmount ? capacity : inputAmount
+    if (fillAmount === 0n) return no('zero inventory of outputToken (dev)')
+
+    const pct = (Number(fillAmount) / Number(inputAmount) * 100).toFixed(1)
+    console.log(`${tag} ✔ FILL [DEV]  fill=${pct}% (capacity-capped)  price=${auctionPriceHuman.toFixed(4)}`)
+    return { shouldFill: true, fillAmount, currentPrice, reason: 'dev mode (capacity-capped)' }
   }
 
   // ── Market spread check ───────────────────────────────────────────────────

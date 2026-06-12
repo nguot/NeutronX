@@ -16,7 +16,8 @@ const ORDER_TYPE_HASH = ethers.utils.keccak256(
     'PartialFillOrder(' +
     'address swapper,address inputToken,uint256 inputAmount,' +
     'address outputToken,uint256 minOutputAmount,' +
-    'uint256 deadline,uint256 nonce,uint16 minFillBps' +
+    'uint256 deadline,uint256 nonce,uint16 minFillBps,' +
+    'uint128 startPrice,uint32 decayPerBlock,uint24 feeTier' +
     ')'
   )
 )
@@ -24,7 +25,7 @@ const ORDER_TYPE_HASH = ethers.utils.keccak256(
 function computeOrderHash(order: OrderInfo): string {
   return ethers.utils.keccak256(
     ethers.utils.defaultAbiCoder.encode(
-      ['bytes32', 'address', 'address', 'uint256', 'address', 'uint256', 'uint256', 'uint256', 'uint16'],
+      ['bytes32', 'address', 'address', 'uint256', 'address', 'uint256', 'uint256', 'uint256', 'uint16', 'uint128', 'uint32', 'uint24'],
       [
         ORDER_TYPE_HASH,
         order.swapper,
@@ -35,6 +36,9 @@ function computeOrderHash(order: OrderInfo): string {
         order.deadline,
         order.nonce,
         order.minFillBps,
+        order.startPrice,
+        order.decayPerBlock,
+        order.feeTier,
       ]
     )
   )

@@ -42,7 +42,7 @@ contract RegistrationForgeryTest is Test {
 
     function setUp() public {
         permit2 = new MockPermit2();
-        auction = new FillAuction(treasury);
+        auction = new FillAuction(treasury, address(0), address(0), 0); // oracle-disabled (1:1) mode
         inputToken = new MockERC20("USDC", "USDC");
         outputToken = new MockERC20("WETH", "WETH");
 
@@ -88,7 +88,8 @@ contract RegistrationForgeryTest is Test {
             reactor.ORDER_TYPE_HASH(),
             info.swapper, info.inputToken, info.inputAmount,
             info.outputToken, info.minOutputAmount,
-            info.deadline, info.nonce, info.minFillBps
+            info.deadline, info.nonce, info.minFillBps,
+            info.startPrice, info.decayPerBlock, info.feeTier
         ));
         bytes32 digest = keccak256(abi.encodePacked("\x19\x01", reactor.DOMAIN_SEPARATOR(), structHash));
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(cosignerKey, digest);
@@ -100,22 +101,26 @@ contract RegistrationForgeryTest is Test {
             reactor.ORDER_TYPE_HASH(),
             info.swapper, info.inputToken, info.inputAmount,
             info.outputToken, info.minOutputAmount,
-            info.deadline, info.nonce, info.minFillBps
+            info.deadline, info.nonce, info.minFillBps,
+            info.startPrice, info.decayPerBlock, info.feeTier
         ));
     }
 
-    /// Mirrors FillAuction.register()'s computeCollateral().
-    function _collateral(uint256 fillAmount, uint256 orderTotal, uint256 deadline) internal view returns (uint256) {
-        uint8 sBucket = DynamicStakeLib.getOrderSizeBucket(orderTotal);
+    /// Mirrors FillAuction.register()'s computeCollateral() (D-1: ETH notional,
+    /// oracle-disabled here so notional == fillAmount).
+    function _collateral(uint256 fillAmount, uint256 deadline) internal view returns (uint256) {
+        uint8 sBucket = DynamicStakeLib.getOrderSizeBucketETH(fillAmount);
         uint8 tBucket = DynamicStakeLib.getTimeBucket(deadline);
         uint32 rate = auction.collateralRate(sBucket);
         uint32 timeMult = DynamicStakeLib._getTimeMultiplier(tBucket);
         return (fillAmount * rate / 10000) * timeMult / 10000;
     }
 
-    /// Mirrors FillAuction.onFillSuccess()'s computeRefund().
-    function _refund(uint256 stakeAmount, uint256 actualFillAmount, uint256 orderTotal) internal view returns (uint256) {
-        uint8 sBucket = DynamicStakeLib.getOrderSizeBucket(orderTotal);
+    /// Mirrors FillAuction.onFillSuccess()'s computeRefund(). sBucket comes from
+    /// the registered fill's notional (the snapshotted row); rBucket from the
+    /// actual fill ratio of the order.
+    function _refund(uint256 stakeAmount, uint256 actualFillAmount, uint256 registeredFill, uint256 orderTotal) internal view returns (uint256) {
+        uint8 sBucket = DynamicStakeLib.getOrderSizeBucketETH(registeredFill);
         uint8 rBucket = DynamicStakeLib.getFillRatioBucket(actualFillAmount, orderTotal);
         uint32 refundBps = auction.refundTable(sBucket, rBucket);
         return stakeAmount * refundBps / 10000;
@@ -127,29 +132,28 @@ contract RegistrationForgeryTest is Test {
         bytes32 orderHash = _orderHash(_makeOrder(INPUT_AMOUNT, 1).info);
         vm.prank(evil);
         vm.expectRevert("only reactor");
-        auction.register{value: 1 ether}(evil, orderHash, FILL_CHUNK, FILL_CHUNK, DEADLINE);
+        auction.register{value: 1 ether}(evil, orderHash, FILL_CHUNK, FILL_CHUNK, DEADLINE, address(inputToken), uint24(3000));
     }
 
-    /// Filling 1% of a 2,000,000 USDC order via reactor.register(order,
-    /// fillAmount) always lands in sBucket 3 (collateralRate[3] = 30000, 3x)
-    /// and refundTable[3][0] (1% refund) — the "honest" outcome from the
-    /// original exploit.md PoC, now the *only* reachable outcome. There is
-    /// no orderTotal/deadline parameter left for a filler to under-report.
+    /// Registering via reactor.register(order, fillAmount) derives orderTotal /
+    /// deadline from the *real, hashed* order — a filler cannot under-report them.
+    /// (D-1: collateral is now the fill's ETH notional × rate; with the oracle
+    /// disabled the notional is the raw FILL_CHUNK, sBucket 0.)
     function test_reactorRegister_derivesOrderTotalAndDeadlineFromRealOrder() public {
         PartialFillReactor.SignedOrder memory order = _makeOrder(INPUT_AMOUNT, 1);
 
-        uint256 collateral = _collateral(FILL_CHUNK, INPUT_AMOUNT, DEADLINE);
+        uint256 collateral = _collateral(FILL_CHUNK, DEADLINE);
         vm.prank(filler);
         reactor.register{value: collateral}(order, FILL_CHUNK);
         vm.prank(filler);
         reactor.executePartialChunk(order, FILL_CHUNK);
 
-        // sBucket(2,000,000) = 3 -> collateralRate[3] = 30000 (3x)
-        assertEq(collateral, FILL_CHUNK * 3);
+        // notional FILL_CHUNK -> sBucket 0 -> collateralRate[0] = 2000 (0.2x), 1x time
+        assertEq(collateral, FILL_CHUNK * 2000 / 10000);
 
-        // 1% fill of 2,000,000 -> rBucket 0 -> refundTable[3][0] = 100bps (1%)
-        uint256 refund = _refund(collateral, FILL_CHUNK, INPUT_AMOUNT);
-        assertEq(refund, collateral / 100);
+        // 1% fill of the order -> rBucket 0 -> refundTable[0][0] = 500bps (5%)
+        uint256 refund = _refund(collateral, FILL_CHUNK, FILL_CHUNK, INPUT_AMOUNT);
+        assertEq(refund, collateral * 500 / 10000);
         assertEq(auction.pendingReturns(filler), refund);
 
         emit log_named_uint("collateral posted", collateral);
@@ -168,7 +172,7 @@ contract RegistrationForgeryTest is Test {
 
         assertTrue(_orderHash(realOrder.info) != _orderHash(fakeOrder.info));
 
-        uint256 cheapCollateral = _collateral(FILL_CHUNK, FILL_CHUNK, DEADLINE);
+        uint256 cheapCollateral = _collateral(FILL_CHUNK, DEADLINE);
         vm.prank(evil);
         reactor.register{value: cheapCollateral}(fakeOrder, FILL_CHUNK);
 

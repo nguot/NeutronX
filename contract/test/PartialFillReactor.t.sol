@@ -37,7 +37,10 @@ contract PartialFillReactorTest is Test {
                 info.minOutputAmount,
                 info.deadline,
                 info.nonce,
-                info.minFillBps
+                info.minFillBps,
+                info.startPrice,
+                info.decayPerBlock,
+                info.feeTier
             )
         );
         bytes32 digest = keccak256(
@@ -160,7 +163,10 @@ contract PartialFillReactorTest is Test {
                 uint256(0),
                 DEADLINE,
                 uint256(1),
-                uint16(0)
+                uint16(0),
+                uint128(START_PRICE),
+                DECAY_PER_BLOCK,
+                uint24(3000)
             )
         );
 

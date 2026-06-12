@@ -11,7 +11,8 @@ const ORDER_TYPE_HASH = ethers.utils.keccak256(
     'PartialFillOrder(' +
     'address swapper,address inputToken,uint256 inputAmount,' +
     'address outputToken,uint256 minOutputAmount,' +
-    'uint256 deadline,uint256 nonce,uint16 minFillBps' +
+    'uint256 deadline,uint256 nonce,uint16 minFillBps,' +
+    'uint128 startPrice,uint32 decayPerBlock,uint24 feeTier' +
     ')'
   )
 )
@@ -19,9 +20,10 @@ const ORDER_TYPE_HASH = ethers.utils.keccak256(
 function computeOrderHash(order: OrderInfo): string {
   return ethers.utils.keccak256(
     ethers.utils.defaultAbiCoder.encode(
-      ['bytes32','address','address','uint256','address','uint256','uint256','uint256','uint16'],
+      ['bytes32','address','address','uint256','address','uint256','uint256','uint256','uint16','uint128','uint32','uint24'],
       [ORDER_TYPE_HASH, order.swapper, order.inputToken, order.inputAmount,
-       order.outputToken, order.minOutput, order.deadline, order.nonce, order.minFillBps]
+       order.outputToken, order.minOutput, order.deadline, order.nonce, order.minFillBps,
+       order.startPrice, order.decayPerBlock, order.feeTier]
     )
   )
 }
@@ -97,8 +99,10 @@ export async function devFill(orderBackendHash: string, fillBps: number): Promis
     console.log(`[DevFill] approved ${order.outputToken}`)
   }
 
-  const rateBps: number = await fillAuction.collateralRate(getOrderSizeBucket(BigInt(order.inputAmount)))
-  const stake = (fillAmount * BigInt(rateBps) / 10_000n) * BigInt(getTimeMultiplier(order.deadline, currentBlock)) / 10_000n
+  // D-1: ask the auction for the exact ETH collateral (handles TWAP + decimals).
+  const stake = (await fillAuction.previewCollateral(
+    order.inputToken, order.feeTier, fillAmount, order.deadline
+  )).toBigInt()
 
   const signedOrder = {
     info: {

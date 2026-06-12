@@ -16,7 +16,7 @@ contract FillAuctionInvariantTest is Test {
     address public treasury = makeAddr("treasury");
 
     function setUp() public {
-        auction = new FillAuction(treasury);
+        auction = new FillAuction(treasury, address(0), address(0), 0); // oracle-disabled (1:1) mode
 
         address[] memory actors = new address[](4);
         actors[0] = makeAddr("alice");

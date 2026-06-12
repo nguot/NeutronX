@@ -354,3 +354,76 @@ failed `createOrder`) without colliding on `orderHash` or producing the same
 `S_i`/`H_i` set. If you need a *hard* anti-replay guarantee independent of
 `deadline`/`merkleRoot`, that would require adding an explicit
 `usedNonce[swapper][nonce]` check in `createOrder` — it doesn't exist today.
+
+## 4. Cross-chain timelock ordering (`T2 < T1`) — 🟠 High, not enforced on-chain
+
+**Location:** `EscrowDst.refund` (l.117–132, and the comment at l.121–122),
+`EscrowDst.expiry` (filler-supplied via `EscrowDstFactory.deploy`),
+`EscrowSrc.expiry` (= `order.deadline` = `T1`, set in
+`EscrowSrcFactory.fillSlot` l.276).
+
+`EscrowDst.sol` states the safety assumption the whole HTLC rests on:
+
+```solidity
+// T2 < T1 invariant guarantees this can always happen before the swapper
+// reclaims on Chain A.
+```
+
+The protocol's atomicity depends on the **destination** escrow (Chain B, where
+the secret is revealed first) expiring *before* the **source** escrow (Chain A,
+where the filler then redeems with that secret). That window is what guarantees
+the filler — who acts second — always has time to claim their input-token leg
+after they've already paid out the output-token leg. **Two defects break it:**
+
+1. **The invariant is never enforced.** `EscrowDst.expiry` (`T2`) is a free
+   parameter the filler passes to `EscrowDstFactory.deploy`, validated only as
+   `> block.number` (`EscrowDst.sol:85`). `EscrowSrc.expiry` (`T1`) is
+   `order.deadline`. No code anywhere requires `T2 < T1` (it cannot live in one
+   contract — the two escrows are on different chains — so it must be enforced
+   at parameter-selection time and is currently left entirely to the off-chain
+   server's discretion).
+
+2. **`block.number` is not comparable across chains.** `T1` is a block height on
+   Chain A; `T2` is a block height on Chain B. They are independent counters
+   advancing at different block times (e.g. Ethereum ~12 s vs. an L2 at sub-second).
+   A *safe gap* is a wall-clock quantity and cannot be expressed as a relationship
+   between two heterogeneous chains' raw block numbers. This is exactly why
+   production HTLC / Fusion+-style designs key their timelocks to **timestamps**
+   plus an explicit finality-lock window, not block heights.
+
+**Exploit / failure mode (atomicity break, "free option" for the swapper).**
+Pick `T2 ≥ T1` — which the contracts happily accept:
+
+- At `T1` the source escrow is past expiry, so the swapper calls
+  `EscrowSrc.cancel()` and reclaims their input token (e.g. WETH).
+- Because `T2 ≥ T1`, the destination escrow is *still active*, so the backend
+  (or anyone) can still call `EscrowDst.claim(S_i)` and pay the output token
+  (e.g. USDC) to the swapper.
+
+The swapper walks away with **both legs**; the filler paid USDC on Chain B and
+recovers nothing on Chain A. Even with the *intended* `T2 < T1` ordering, if the
+gap is too small relative to the two chains' real block times, the same race
+opens up near the boundary — the point is that nothing on-chain bounds it.
+
+**Recommendation.**
+- Switch both escrows' expiries to `block.timestamp` and have the server choose
+  `T2` and `T1` with a conservative wall-clock gap that exceeds Chain A's
+  finality + a redemption margin.
+- Add a `minSrcExtraTime` to the source-side parameters and assert
+  `T1 ≥ revealDeadline + margin` where it *can* be checked, and document the
+  `T2 < T1` selection as a hard server-side invariant with a test.
+- Defense in depth: have the source escrow refuse `cancel()` until a margin past
+  `T1`, giving a late-revealed filler a guaranteed redemption window.
+
+A reproduction is in `test/crosschain/CrossChainTimelock.t.sol`
+(`test_T2geqT1_swapperTakesBothLegs`): with `T2 > T1` the swapper is refunded on
+the source escrow *and* paid on the destination escrow in the same scenario,
+while the filler loses the leg they funded.
+
+### Bottom line
+
+The single most load-bearing assumption in the cross-chain design (`T2 < T1`)
+lives only in a code comment and in the off-chain server's parameter choices,
+and is expressed in a unit (`block.number`) that isn't even meaningful across
+two chains. Move the timelocks to timestamps and enforce the gap explicitly
+before any real-value deployment.

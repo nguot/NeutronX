@@ -18,7 +18,8 @@ contract MockReactor {
         uint256 orderTotal,
         uint256 deadline
     ) external payable {
-        auction.register{value: msg.value}(filler, orderHash, fillAmount, orderTotal, deadline);
+        // inputToken/feeTier irrelevant here: auction was deployed oracle-disabled.
+        auction.register{value: msg.value}(filler, orderHash, fillAmount, orderTotal, deadline, address(0), uint24(0));
     }
 
     function callOnFillSuccess(
@@ -27,6 +28,20 @@ contract MockReactor {
         uint256 fillAmount
     ) external {
         auction.onFillSuccess(orderHash, filler, fillAmount);
+    }
+
+    // IReactorView surface used by FillAuction.slash / releaseRegistration.
+    // Defaults model an order that is still open and not cancelled.
+    bool public cancelledFlag;
+    uint256 public remainingOverride = type(uint256).max; // sentinel: "use orderAmount"
+
+    function setCancelled(bool v) external { cancelledFlag = v; }
+    function setRemaining(uint256 v) external { remainingOverride = v; }
+
+    function isCancelled(bytes32) external view returns (bool) { return cancelledFlag; }
+
+    function remainingInput(bytes32, uint256 orderAmount) external view returns (uint256) {
+        return remainingOverride == type(uint256).max ? orderAmount : remainingOverride;
     }
 }
 
@@ -48,7 +63,7 @@ contract FillAuctionTest is Test {
 
     function setUp() public {
         reactor = new MockReactor();
-        auction = new FillAuction(treasury);
+        auction = new FillAuction(treasury, address(0), address(0), 0); // oracle-disabled (1:1) mode
         auction.setReactor(address(reactor));
         reactor.setAuction(address(auction));
 
@@ -105,7 +120,7 @@ contract FillAuctionTest is Test {
         vm.deal(filler, 1 ether);
         vm.prank(filler);
         vm.expectRevert("only reactor");
-        auction.register{value: STAKE}(filler, ORDER_HASH, FILL_AMOUNT, ORDER_TOTAL, DEADLINE);
+        auction.register{value: STAKE}(filler, ORDER_HASH, FILL_AMOUNT, ORDER_TOTAL, DEADLINE, address(0), uint24(0));
     }
 
     // ── slash() ──

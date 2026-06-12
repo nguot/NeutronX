@@ -40,13 +40,21 @@ contract FillAuctionHandler is Test {
     /// Mirrors FillAuction.register()'s computeCollateral(): no fill-ratio
     /// dimension, just the registered ceiling x order-size rate x time
     /// multiplier.
-    function _stakeFor(uint256 fillAmount, uint256 orderTotal, uint256 deadline) internal view returns (uint256) {
-        uint8 sBucket = DynamicStakeLib.getOrderSizeBucket(orderTotal);
+    function _stakeFor(uint256 fillAmount, uint256 deadline) internal view returns (uint256) {
+        // D-1: auction deployed oracle-disabled, so notional == fillAmount and the
+        // size bucket is on the ETH-scale thresholds.
+        uint8 sBucket = DynamicStakeLib.getOrderSizeBucketETH(fillAmount);
         uint8 tBucket = DynamicStakeLib.getTimeBucket(deadline);
         uint32 rateBps  = auction.collateralRate(sBucket);
         uint32 timeMult = DynamicStakeLib._getTimeMultiplier(tBucket);
         return (fillAmount * rateBps / 10000) * timeMult / 10000;
     }
+
+    // IReactorView surface used by FillAuction.slash. Orders driven here are
+    // never cancelled and are modelled as still-open (remaining > 0), so the
+    // registrant genuinely abandoned committed volume and is slashable.
+    function isCancelled(bytes32) external pure returns (bool) { return false; }
+    function remainingInput(bytes32, uint256 orderAmount) external pure returns (uint256) { return orderAmount; }
 
     /// Register `actor` for a random fill of a random order, sized so the
     /// stake matches exactly what FillAuction itself will compute.
@@ -65,10 +73,10 @@ contract FillAuctionHandler is Test {
         uint256 fillAmount = bound(fillAmountSeed, 1, orderTotal);
         uint256 deadline   = block.number + bound(deadlineSeed, 1, 1000);
 
-        uint256 stake = _stakeFor(fillAmount, orderTotal, deadline);
+        uint256 stake = _stakeFor(fillAmount, deadline);
 
         vm.deal(address(this), stake);
-        auction.register{value: stake}(actor, orderHash, fillAmount, orderTotal, deadline);
+        auction.register{value: stake}(actor, orderHash, fillAmount, orderTotal, deadline, address(0), uint24(0));
 
         registered[orderHash][actor] = true;
         regStake[orderHash][actor] = stake;

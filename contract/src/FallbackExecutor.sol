@@ -4,6 +4,7 @@ pragma solidity ^0.8.20;
 import { ReentrancyGuard } from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import { FullMath } from "@uniswap/v4-core/src/libraries/FullMath.sol";
 
 import { PartialFillReactor } from "./PartialFillReactor.sol";
 
@@ -14,11 +15,14 @@ contract FallbackExecutor is ReentrancyGuard {
 
     uint256 public constant FALLBACK_WINDOW = 10; // blocks trước deadline
 
+    // C-1: must match PartialFillReactor.ORDER_TYPE_HASH (price curve included)
+    // so the orderHash this contract derives matches the reactor's accounting.
     bytes32 private constant ORDER_TYPE_HASH = keccak256(
         "PartialFillOrder("
         "address swapper,address inputToken,uint256 inputAmount,"
         "address outputToken,uint256 minOutputAmount,"
-        "uint256 deadline,uint256 nonce,uint16 minFillBps"
+        "uint256 deadline,uint256 nonce,uint16 minFillBps,"
+        "uint128 startPrice,uint32 decayPerBlock,uint24 feeTier"
         ")"
     );
 
@@ -47,12 +51,18 @@ contract FallbackExecutor is ReentrancyGuard {
     ) external nonReentrant {
         bytes32 orderHash = _hashOrder(order.info);
 
+        // C-2: authenticate the order (cosigner sig, deadline, nonce) before
+        // moving any swapper funds — the fallback path was previously unsigned.
+        reactor.verifyOrderSignature(order);
+
         require(block.number <= order.info.deadline,          "order expired");
         require(order.info.deadline - block.number <= FALLBACK_WINDOW, "too early");
 
         uint256 rem = reactor.remainingInput(orderHash, order.info.inputAmount);
         require(rem > 0, "already filled");
 
+        // C-2: marks fallback AND drives remaining to 0 atomically, so a registered
+        // filler can no longer pull the same `rem` via executePartialChunk.
         reactor.markFallbackInitiated(orderHash);
 
         permit2.transferFrom(
@@ -71,7 +81,11 @@ contract FallbackExecutor is ReentrancyGuard {
         require(ok, "swap failed");
 
         uint256 amountOut = IERC20(order.info.outputToken).balanceOf(order.info.swapper) - balBefore;
+        // C-1: enforce the swapper's signed floor (pro-rata for the remaining
+        // input), not just the solver-supplied minAmountOut.
+        uint256 signedFloor = FullMath.mulDiv(order.info.minOutputAmount, rem, order.info.inputAmount);
         require(amountOut >= minAmountOut, "insufficient output");
+        require(amountOut >= signedFloor,  "below signed min output");
 
         emit FallbackExecuted(orderHash, rem, amountOut);
     }
@@ -83,7 +97,8 @@ contract FallbackExecutor is ReentrancyGuard {
             ORDER_TYPE_HASH,
             info.swapper, info.inputToken, info.inputAmount,
             info.outputToken, info.minOutputAmount,
-            info.deadline, info.nonce, info.minFillBps
+            info.deadline, info.nonce, info.minFillBps,
+            info.startPrice, info.decayPerBlock, info.feeTier
         ));
     }
 }

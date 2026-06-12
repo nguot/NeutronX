@@ -35,7 +35,7 @@ contract FrontRunGriefingTest is Test {
 
     function setUp() public {
         permit2 = new MockPermit2();
-        auction = new FillAuction(treasury);
+        auction = new FillAuction(treasury, address(0), address(0), 0); // oracle-disabled (1:1) mode
         inputToken = new MockERC20("USDC", "USDC");
         outputToken = new MockERC20("WETH", "WETH");
 
@@ -87,7 +87,8 @@ contract FrontRunGriefingTest is Test {
             reactor.ORDER_TYPE_HASH(),
             info.swapper, info.inputToken, info.inputAmount,
             info.outputToken, info.minOutputAmount,
-            info.deadline, info.nonce, info.minFillBps
+            info.deadline, info.nonce, info.minFillBps,
+            info.startPrice, info.decayPerBlock, info.feeTier
         ));
         bytes32 digest = keccak256(abi.encodePacked("\x19\x01", reactor.DOMAIN_SEPARATOR(), structHash));
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(cosignerKey, digest);
@@ -99,7 +100,8 @@ contract FrontRunGriefingTest is Test {
             reactor.ORDER_TYPE_HASH(),
             info.swapper, info.inputToken, info.inputAmount,
             info.outputToken, info.minOutputAmount,
-            info.deadline, info.nonce, info.minFillBps
+            info.deadline, info.nonce, info.minFillBps,
+            info.startPrice, info.decayPerBlock, info.feeTier
         ));
     }
 
