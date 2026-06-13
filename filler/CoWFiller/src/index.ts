@@ -4,6 +4,8 @@ import { OrderListener } from './listener/orderListener'
 import { Executor } from './execution/executor'
 import { startQuoteServer } from './quote/quoteServer'
 import { logOrderbook, getOrderbook } from './orderbook/mockOrderbook'
+import { DEV_MODE } from './config'
+import { seedInventory } from './dev/seed'
 import type { OrderInfo } from './types'
 
 const listener = new OrderListener()
@@ -17,15 +19,25 @@ provider.on('block', async (blockNumber: number) => {
   await executor.onBlock(blockNumber).catch(e => console.error('[Main] onBlock error:', e))
 })
 
-listener.start()
-startQuoteServer()
-console.log('[Main] CoWFiller started')
+async function bootstrap() {
+  // DEV_MODE: refill the wallet with inventory on every (re)start so it can
+  // fill any order. Non-fatal if a token can't be sourced.
+  if (DEV_MODE) {
+    try { await seedInventory() } catch (e) { console.error('[Seed] failed:', e) }
+  }
 
-// Log the mock orderbook on startup so it's visible in console
-const WETH = '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2'
-const USDC = '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48'
-const book = getOrderbook(WETH, USDC)
-if (book) logOrderbook(book)
+  listener.start()
+  startQuoteServer()
+  console.log('[Main] CoWFiller started')
+
+  // Log the mock orderbook on startup so it's visible in console
+  const WETH = '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2'
+  const USDC = '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48'
+  const book = getOrderbook(WETH, USDC)
+  if (book) logOrderbook(book)
+}
+
+bootstrap()
 
 // Reclaim returned ETH stakes every ~5 minutes
 setInterval(async () => {

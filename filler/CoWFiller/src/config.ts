@@ -34,4 +34,7 @@ export const SUPPORTED_TOKENS: Record<string, { symbol: string; decimals: number
   ['0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48']: { symbol: 'USDC', decimals: 6  },
   ['0xdAC17F958D2ee523a2206206994597C13D831ec7']: { symbol: 'USDT', decimals: 6  },
   ['0x6B175474E89094C44Da98b954EedeAC495271d0F']: { symbol: 'DAI',  decimals: 18 },
+  ['0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599']: { symbol: 'WBTC', decimals: 8  },
+  ['0x514910771AF9Ca656af840dff83E8264EcF986CA']: { symbol: 'LINK', decimals: 18 },
+  ['0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984']: { symbol: 'UNI',  decimals: 18 },
 }

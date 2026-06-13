@@ -17,6 +17,8 @@ const SYMBOLS: Record<string,string> = {
   '0xdac17f958d2ee523a2206206994597c13d831ec7':'USDT',
   '0x6b175474e89094c44da98b954eedeac495271d0f':'DAI',
   '0x2260fac5e5542a773aa44fbcfedf7c193bc2c599':'WBTC',
+  '0x514910771af9ca656af840dff83e8264ecf986ca':'LINK',
+  '0x1f9840a85d5af5bf1d1762f925bdaddc4201f984':'UNI',
 }
 const DECIMALS: Record<string,number> = {
   '0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2':18,
@@ -24,67 +26,90 @@ const DECIMALS: Record<string,number> = {
   '0xdac17f958d2ee523a2206206994597c13d831ec7':6,
   '0x6b175474e89094c44da98b954eedeac495271d0f':18,
   '0x2260fac5e5542a773aa44fbcfedf7c193bc2c599':8,
+  '0x514910771af9ca656af840dff83e8264ecf986ca':18,
+  '0x1f9840a85d5af5bf1d1762f925bdaddc4201f984':18,
 }
 
-// ── Dev UI HTML ───────────────────────────────────────────────────────────────
+// ── Dev UI HTML (PowerShell-console aesthetic) ─────────────────────────────────
 function buildHtml(): string {
   const syms = JSON.stringify(SYMBOLS)
   const decs = JSON.stringify(DECIMALS)
+
+  // ASCII box banner, width derived from the title so the borders always align.
+  const title = `NeutronX · ${FILLER_NAME} · dev console`
+  const inner = ` ${title} `
+  const banner =
+    `┌${'─'.repeat(inner.length)}┐\n` +
+    `│${inner}│\n` +
+    `└${'─'.repeat(inner.length)}┘`
+
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>${FILLER_NAME} Dev UI</title>
+<title>${FILLER_NAME} · PS</title>
 <style>
+  :root{
+    --accent:#c586c0; --prompt:#569cd6; --hi:#dcdcaa;
+    --ok:#4ec9b0; --no:#f48771; --busy:#dcdcaa;
+    --bg:#012456; --panel:#001a3f; --fg:#d6dbe8; --dim:#6079a8; --line:#214a8c;
+  }
   *{box-sizing:border-box;margin:0;padding:0}
-  body{font-family:monospace;background:#0f172a;color:#e2e8f0;padding:24px}
-  h1{color:#a78bfa;margin-bottom:4px}
-  .sub{color:#64748b;font-size:13px;margin-bottom:20px}
-  .toolbar{display:flex;gap:10px;margin-bottom:20px;align-items:center}
-  button{background:#7c3aed;color:#fff;border:none;padding:8px 16px;border-radius:6px;cursor:pointer;font-family:monospace;font-size:12px}
-  button:hover{background:#6d28d9}
-  button.fill-btn{background:#059669}
-  button.fill-btn:hover{background:#047857}
-  .order{background:#1e293b;border:1px solid #334155;border-radius:8px;padding:16px;margin-bottom:12px}
-  .order-header{display:flex;gap:12px;align-items:center;margin-bottom:8px;flex-wrap:wrap}
-  .hash{color:#a78bfa;font-weight:bold;font-size:13px}
-  .badge{font-size:11px;padding:2px 8px;border-radius:999px;background:#334155;color:#94a3b8}
-  .badge.pending{background:#1e3a5f;color:#60a5fa}
-  .badge.active{background:#1a3a2a;color:#34d399}
-  .pair{font-size:13px;color:#e2e8f0;font-weight:bold}
-  .meta{color:#64748b;font-size:12px;margin-bottom:10px;display:flex;gap:16px;flex-wrap:wrap}
-  .prog-wrap{background:#0f172a;border-radius:4px;height:8px;margin-bottom:6px;overflow:hidden}
-  .prog-bar{height:100%;border-radius:4px;background:linear-gradient(90deg,#7c3aed,#a78bfa);transition:width 0.3s}
-  .prog-label{font-size:11px;color:#94a3b8;margin-bottom:10px}
-  .controls{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
-  input[type=range]{flex:1;min-width:100px;accent-color:#7c3aed}
-  .pct{min-width:40px;color:#a78bfa;font-weight:bold;font-size:13px}
-  .result{margin-top:10px;padding:8px 12px;background:#0f172a;border-radius:6px;font-size:12px;color:#64748b;min-height:28px;word-break:break-all}
-  .result.ok{color:#34d399}
-  .result.no{color:#f87171}
-  .result.busy{color:#fbbf24}
-  .empty{color:#475569;text-align:center;padding:40px}
-  .section-title{color:#a78bfa;font-size:15px;font-weight:bold;margin:28px 0 4px;border-top:1px solid #1e293b;padding-top:20px}
-  .slot-grid{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0}
-  .slot-btn{min-width:64px;padding:6px 4px;border-radius:6px;border:1px solid #334155;font-size:11px;cursor:pointer;font-family:monospace;text-align:center;line-height:1.4}
-  .slot-btn.available{background:#2d1b69;color:#a78bfa;border-color:#7c3aed}
-  .slot-btn.available:hover{background:#4c1d95}
-  .slot-btn.locked{background:#1c2030;color:#64748b;cursor:not-allowed;border-color:#1e293b}
-  .slot-btn.claimed{background:#0f2820;color:#34d399;cursor:not-allowed;border-color:#1e3a2a}
-  .slot-btn.busy{background:#1c1a10;color:#fbbf24;cursor:not-allowed;border-color:#451a03}
+  body{font-family:Consolas,'Courier New',monospace;background:var(--bg);color:var(--fg);
+       padding:20px;font-size:13px;line-height:1.5}
+  .banner{color:var(--accent);white-space:pre;font-size:13px}
+  .prompt{margin-top:6px}
+  .prompt .ps{color:var(--prompt)}
+  .prompt .cmd{color:var(--fg)}
+  .sub{color:var(--dim);margin:4px 0 16px}
+  .toolbar{margin-bottom:16px;display:flex;gap:10px;align-items:center}
+  button{background:transparent;color:var(--fg);border:1px solid var(--line);
+         padding:3px 10px;cursor:pointer;font-family:inherit;font-size:12px}
+  button:hover{background:var(--fg);color:var(--bg)}
+  #blocknum{color:var(--dim);font-size:12px}
+  .order{border:1px solid var(--line);background:var(--panel);padding:12px 14px;margin-bottom:10px}
+  .order-header{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:6px}
+  .hash{color:var(--hi);font-weight:bold;word-break:break-all}
+  .badge{font-size:11px;padding:0 7px;border:1px solid var(--line);color:var(--prompt)}
+  .badge.active{color:var(--ok);border-color:#2a6a4a}
+  .badge.pending{color:var(--prompt)}
+  .pair{color:var(--fg);font-weight:bold}
+  .dim{color:var(--dim);font-size:11px}
+  .prog{color:var(--accent);white-space:pre;margin:6px 0 2px;letter-spacing:1px}
+  .prog-label{color:var(--dim);font-size:12px;margin-bottom:8px}
+  .controls{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:4px}
+  input[type=range]{flex:1;min-width:120px;accent-color:var(--hi);height:6px}
+  .pct{min-width:44px;color:var(--hi);font-weight:bold}
+  .result{margin-top:8px;color:var(--dim);min-height:20px;word-break:break-all}
+  .result::before{content:'> ';color:var(--dim)}
+  .result.ok{color:var(--ok)} .result.ok::before{content:'> ';color:var(--ok)}
+  .result.no{color:var(--no)} .result.no::before{content:'! ';color:var(--no)}
+  .result.busy{color:var(--busy)} .result.busy::before{content:'… ';color:var(--busy)}
+  .empty{color:var(--dim);padding:24px;text-align:center}
+  .section-title{color:var(--accent);font-weight:bold;margin:24px 0 4px;
+                 border-top:1px dashed var(--line);padding-top:16px}
+  .slot-grid{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}
+  .slot-btn{min-width:74px;padding:5px 4px;border:1px solid var(--line);background:transparent;
+            color:var(--fg);font-family:inherit;font-size:11px;cursor:pointer;text-align:center;line-height:1.4}
+  .slot-btn.available{color:var(--ok);border-color:#2a6a4a}
+  .slot-btn.available:hover{background:var(--ok);color:var(--bg)}
+  .slot-btn.locked{color:var(--dim);border-color:var(--line);cursor:not-allowed}
+  .slot-btn.claimed{color:var(--ok);border-color:var(--line);cursor:not-allowed}
+  .slot-btn.busy{color:var(--busy);border-color:#5a4a1a;cursor:not-allowed}
 </style>
 </head>
 <body>
-<h1>🐋 ${FILLER_NAME}</h1>
-<div class="sub">Dev UI · port ${PORT} · wallet ${wallet.address}</div>
+<pre class="banner">${banner}</pre>
+<div class="prompt"><span class="ps">PS C:\\NeutronX\\${FILLER_NAME}&gt;</span> <span class="cmd">Watch-Orders -Status pending,active</span></div>
+<div class="sub">wallet ${wallet.address} · port ${PORT}</div>
 <div class="toolbar">
-  <button onclick="load()">↻ Refresh</button>
-  <span id="blocknum" style="color:#64748b;font-size:12px"></span>
+  <button onclick="load()">[ ↻ refresh ]</button>
+  <span id="blocknum"></span>
 </div>
 <div id="orders"><div class="empty">Loading…</div></div>
 
 <div class="section-title">⛓ Cross-Chain Orders</div>
-<div style="color:#64748b;font-size:12px;margin-bottom:12px">Orders with available Merkle slots — fill a slot to earn WETH on Chain A by locking USDC on Chain B</div>
+<div class="dim" style="margin-bottom:12px">Orders with available Merkle slots — fill a slot to earn WETH on Chain A by locking USDC on Chain B</div>
 <div id="cc-orders"><div class="empty">Loading…</div></div>
 
 <script>
@@ -94,7 +119,28 @@ const DECS=${decs}
 
 function sym(addr){return SYMS[addr.toLowerCase()]??addr.slice(0,8)+'…'}
 function dec(addr){return DECS[addr.toLowerCase()]??18}
-function human(raw,addr){return (Number(BigInt(raw||'0'))/10**dec(addr)).toFixed(4)}
+// Full-precision token amount (wei -> decimal string), no rounding/truncation —
+// .toFixed(4) used to show "0.0000" for genuinely-nonzero high-decimal amounts (e.g. WBTC).
+function human(raw,addr){
+  const d=dec(addr)
+  const s=BigInt(raw||'0').toString().padStart(d+1,'0')
+  const intPart=s.slice(0,s.length-d)
+  const frac=s.slice(s.length-d).replace(/0+$/,'')
+  return frac?intPart+'.'+frac:intPart
+}
+// Full-precision non-negative ratio -> decimal string.
+function ratio(num,den,precision){
+  let intPart=num/den, rem=num%den, frac=''
+  for(let i=0;i<precision&&rem>0n;i++){rem*=10n;frac+=(rem/den).toString();rem%=den}
+  frac=frac.replace(/0+$/,'')
+  return frac?intPart.toString()+'.'+frac:intPart.toString()
+}
+// price is the contract's 1e18-scaled outputWei/inputWei rate (OrderInfo.startPrice units);
+// human price = price/1e18 * 10^inDec/10^outDec, matching tokens.tsx's contractToHumanPrice.
+function priceHumanStr(price,inAddr,outAddr){
+  return ratio(price*10n**BigInt(dec(inAddr)), 10n**18n*10n**BigInt(dec(outAddr)), 18)
+}
+function bar(pct){var n=24;var f=Math.max(0,Math.min(n,Math.round(pct/100*n)));return '['+'█'.repeat(f)+'░'.repeat(n-f)+']'}
 
 async function load(){
   const [r1,r2,blk]=await Promise.all([
@@ -108,12 +154,10 @@ async function load(){
   const div=document.getElementById('orders')
   if(!orders.length){div.innerHTML='<div class="empty">No open orders.</div>';return}
 
-  // Fetch full detail for each order to get fill amounts
   const details=await Promise.all(
     orders.map(o=>fetch(BACKEND+'/orders/'+o.hash).then(r=>r.json()).catch(()=>null))
   )
 
-  // Preserve current slider values so they don't reset to 50% on reload
   const saved={}
   document.querySelectorAll('input[type=range]').forEach(el=>{if(el.id.startsWith('sl-'))saved[el.id.slice(3)]=el.value})
 
@@ -122,49 +166,45 @@ async function load(){
     const inSym=sym(o.inputToken), outSym=sym(o.outputToken)
     const inputAmt=BigInt(o.inputAmount||'0')
 
-    // Filled amount from fill details
     const fills=d?.fills??[]
     const filled=fills.reduce((s,f)=>s+BigInt(f.fillAmount??'0'),0n)
     const remaining=inputAmt>filled?inputAmt-filled:0n
     const filledPct=inputAmt>0n?Number(filled*100n/inputAmt):0
 
-    // Current decayed price
     const lastFillBlock=fills.length>0?(fills[fills.length-1].blockNumber??currentBlock):currentBlock
     const blocksPassed=Math.max(0,currentBlock-lastFillBlock)
     const sp=BigInt(d?.startPrice??o.startPrice??'0')
     const dpb=BigInt(d?.decayPerBlock??o.decayPerBlock??'0')
     const price=sp>dpb*BigInt(blocksPassed)?sp-dpb*BigInt(blocksPassed):0n
-    const priceHuman=(Number(price)/10**dec(o.outputToken)).toFixed(4)
+    const priceHuman=priceHumanStr(price,o.inputToken,o.outputToken)
 
     const blocksLeft=Math.max(0,o.deadline-currentBlock)
 
     return \`<div class="order" id="o-\${o.hash}">
       <div class="order-header">
-        <span class="hash">\${o.hash.slice(0,12)}…</span>
+        <span class="hash">\${o.hash}</span>
         <span class="badge \${o.status}">\${o.status}</span>
         <span class="pair">\${inSym} → \${outSym}</span>
-        <span style="color:#475569;font-size:11px">\${blocksLeft} blocks left</span>
+        <span class="dim">\${blocksLeft} blocks left</span>
       </div>
-      <div class="prog-wrap"><div class="prog-bar" style="width:\${filledPct}%"></div></div>
+      <div class="prog">\${bar(filledPct)} \${filledPct.toFixed(1)}%</div>
       <div class="prog-label">
-        \${filledPct.toFixed(1)}% filled &nbsp;·&nbsp;
         \${human(filled.toString(),o.inputToken)} \${inSym} filled &nbsp;·&nbsp;
         \${human(remaining.toString(),o.inputToken)} \${inSym} remaining
-        \${price>0n?' &nbsp;·&nbsp; price: '+priceHuman+' '+outSym+'/'+ inSym:''}
+        \${price>0n?' &nbsp;·&nbsp; price: '+priceHuman+' '+outSym+'/'+inSym:''}
       </div>
       <div class="controls">
-        <button onclick="simulate('\${o.hash}')">Simulate</button>
+        <button onclick="simulate('\${o.hash}')">[ sim ]</button>
         <input type="range" min="10" max="100" step="10" value="50"
           oninput="document.getElementById('p-\${o.hash}').textContent=this.value+'%'"
           id="sl-\${o.hash}">
         <span class="pct" id="p-\${o.hash}">50%</span>
-        <button class="fill-btn" onclick="fill('\${o.hash}')">Fill</button>
+        <button onclick="fill('\${o.hash}')">[ fill ]</button>
       </div>
-      <div class="result" id="r-\${o.hash}">—</div>
+      <div class="result" id="r-\${o.hash}">idle</div>
     </div>\`
   }).join('')
 
-  // Restore slider positions and labels after re-render
   for(const[hash,val]of Object.entries(saved)){
     const sl=document.getElementById('sl-'+hash)
     const p=document.getElementById('p-'+hash)
@@ -181,25 +221,23 @@ async function simulate(hash){
       fetch('/health').then(r=>r.json()).catch(()=>({}))
     ])
     const currentBlock=blk.block??0
-    const sliderPct=parseInt(document.getElementById('sl-'+hash).value) // 10..100
+    const sliderPct=parseInt(document.getElementById('sl-'+hash).value)
 
     const fills=detail.fills??[]
     const filled=fills.reduce((s,f)=>s+BigInt(f.fillAmount??'0'),0n)
     const inputAmt=BigInt(detail.inputAmount||'0')
     const remaining=inputAmt>filled?inputAmt-filled:0n
 
-    if(remaining===0n){el.className='result no';el.textContent='✗ order already fully filled';return}
+    if(remaining===0n){el.className='result no';el.textContent='order already fully filled';return}
 
-    // On the first fill the reactor sets cursor at startPrice; on subsequent fills price decays from last fill block
     const lastBlock=fills.length>0?(fills[fills.length-1].blockNumber??currentBlock):currentBlock
     const blocksPassed=BigInt(Math.max(0,currentBlock-lastBlock))
     const sp=BigInt(detail.startPrice||'0')
     const dpb=BigInt(detail.decayPerBlock||'0')
     const price=sp>dpb*blocksPassed?sp-dpb*blocksPassed:0n
 
-    if(price===0n){el.className='result no';el.textContent='✗ price decayed to zero';return}
+    if(price===0n){el.className='result no';el.textContent='price decayed to zero';return}
 
-    // fillAmt = sliderPct% of remaining, but at least minFill
     const fillAmt=remaining*BigInt(sliderPct)/100n
     const minFill=inputAmt*BigInt(detail.minFillBps||100)/10000n
     const actualFill=fillAmt<minFill?minFill:fillAmt
@@ -207,10 +245,10 @@ async function simulate(hash){
     const filledPctAfter=inputAmt>0n?Number((filled+actualFill)*100n/inputAmt):0
 
     const inSym=sym(detail.inputToken),outSym=sym(detail.outputToken)
-    const priceH=(Number(price)/10**dec(detail.outputToken)).toFixed(4)
+    const priceH=priceHumanStr(price,detail.inputToken,detail.outputToken)
 
     el.className='result ok'
-    el.textContent='✔ receive '+human(actualFill.toString(),detail.inputToken)+' '+inSym
+    el.textContent='receive '+human(actualFill.toString(),detail.inputToken)+' '+inSym
       +' · you provide '+human(outputNeeded.toString(),detail.outputToken)+' '+outSym
       +' · price '+priceH+' '+outSym+'/'+inSym
       +' · fills to '+filledPctAfter.toFixed(1)+'%'
@@ -227,14 +265,13 @@ async function fill(hash){
     const data=await r.json()
     if(!r.ok) throw new Error(data.error??JSON.stringify(data))
     el.className='result ok'
-    el.textContent='✔ tx: '+data.txHash+' — waiting for indexer…'
-    // Poll until backend indexer picks up the PartialFillExecuted event
+    el.textContent='tx: '+data.txHash+' — waiting for indexer…'
     let n=5
     const poll=()=>{load();if(--n>0)setTimeout(poll,1500)}
     setTimeout(poll,1000)
   }catch(e){
     el.className='result no'
-    el.textContent='✗ '+(e.message??String(e)).slice(0,400)
+    el.textContent=(e.message??String(e)).slice(0,400)
   }
 }
 
@@ -269,22 +306,22 @@ async function ccLoad(){
       }).join('')
       return \`<div class="order" id="cco-\${o.orderHash}">
         <div class="order-header">
-          <span class="hash">\${o.orderHash.slice(0,12)}…</span>
-          <span class="badge" style="background:#2d1b69;color:#a78bfa">cross-chain</span>
+          <span class="hash">\${o.orderHash}</span>
+          <span class="badge active">cross-chain</span>
           <span class="pair">\${inSym} → \${outSym}</span>
-          <span style="color:#475569;font-size:11px">\${blocksLeft} blocks left</span>
+          <span class="dim">\${blocksLeft} blocks left</span>
         </div>
-        <div style="font-size:12px;color:#94a3b8;margin-bottom:10px">
+        <div class="prog-label">
           \${human(o.inputAmount,o.inputToken)} \${inSym} total
           &nbsp;·&nbsp; \${human(slotAmt.toString(),o.outputToken)} \${outSym}/slot
           &nbsp;·&nbsp; \${o.numSlots} slots
         </div>
         <div class="slot-grid">\${slotsHtml}</div>
-        <div class="result" id="cc-r-\${o.orderHash}">—</div>
+        <div class="result" id="cc-r-\${o.orderHash}">idle</div>
       </div>\`
     }).join('')
   }catch(e){
-    ccDiv.innerHTML='<div class="empty" style="color:#475569">CC unavailable: '+e.message+'</div>'
+    ccDiv.innerHTML='<div class="empty">CC unavailable: '+e.message+'</div>'
   }
 }
 
@@ -306,16 +343,16 @@ async function ccClaimSlot(hash,slotIndex){
     } else {
       resultEl.className='result ok'
       if(data.txHash==='already-claimed'){
-        resultEl.textContent='✔ slot '+slotIndex+' was already claimed on-chain — marked done'
+        resultEl.textContent='slot '+slotIndex+' was already claimed on-chain — marked done'
       } else {
-        resultEl.textContent='✔ slot '+slotIndex+' WETH withdrawn on Chain A  tx: '+data.txHash
+        resultEl.textContent='slot '+slotIndex+' WETH withdrawn on Chain A  tx: '+data.txHash
       }
       if(btnEl){btnEl.className='slot-btn claimed';btnEl.innerHTML='Slot '+slotIndex+'<br>✓ done';btnEl.disabled=true}
       setTimeout(()=>ccLoad(),2000)
     }
   }catch(e){
     resultEl.className='result no'
-    resultEl.textContent='✗ slot '+slotIndex+': '+(e.message??String(e)).slice(0,500)
+    resultEl.textContent='slot '+slotIndex+': '+(e.message??String(e)).slice(0,500)
     if(btnEl){btnEl.className='slot-btn available';btnEl.innerHTML='Slot '+slotIndex+'<br>⚡ Claim WETH';btnEl.disabled=false}
   }
 }
@@ -336,7 +373,7 @@ async function ccResetLocked(hash,slotIndex){
     setTimeout(()=>ccLoad(),500)
   }catch(e){
     resultEl.className='result no'
-    resultEl.textContent='✗ reset failed: '+(e.message??String(e))
+    resultEl.textContent='reset failed: '+(e.message??String(e))
     if(btnEl){btnEl.disabled=false;btnEl.className='slot-btn locked';btnEl.innerHTML='Slot '+slotIndex+'<br>↺ Reset'}
   }
 }
@@ -353,12 +390,12 @@ async function ccFillSlot(hash,slotIndex){
     const data=await r.json()
     if(!r.ok) throw new Error(data.error??JSON.stringify(data))
     resultEl.className='result ok'
-    resultEl.textContent='✔ slot '+slotIndex+' WETH withdrawn on Chain A  tx: '+data.txHash
+    resultEl.textContent='slot '+slotIndex+' WETH withdrawn on Chain A  tx: '+data.txHash
     if(btnEl){btnEl.className='slot-btn claimed';btnEl.innerHTML='Slot '+slotIndex+'<br>✓';btnEl.disabled=true}
     setTimeout(()=>ccLoad(),2000)
   }catch(e){
     resultEl.className='result no'
-    resultEl.textContent='✗ slot '+slotIndex+': '+(e.message??String(e)).slice(0,500)
+    resultEl.textContent='slot '+slotIndex+': '+(e.message??String(e)).slice(0,500)
     if(btnEl){btnEl.className='slot-btn available';btnEl.innerHTML='Slot '+slotIndex+'<br>▶ Fill';btnEl.disabled=false}
   }
 }
@@ -371,8 +408,6 @@ setInterval(ccLoad,15000)
 </body>
 </html>`
 }
-
-// ── Server ────────────────────────────────────────────────────────────────────
 
 interface QuoteRequest {
   inputToken:    string

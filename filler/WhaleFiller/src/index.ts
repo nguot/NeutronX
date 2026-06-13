@@ -3,6 +3,8 @@ import { provider, wallet, fillAuction } from './contract/contracts'
 import { OrderListener } from './listener/orderListener'
 import { Executor } from './execution/executor'
 import { startQuoteServer } from './quote/quoteServer'
+import { DEV_MODE } from './config'
+import { seedInventory } from './dev/seed'
 import type { OrderInfo } from './types'
 
 const listener = new OrderListener()
@@ -16,9 +18,19 @@ provider.on('block', async (blockNumber: number) => {
   await executor.onBlock(blockNumber).catch(e => console.error('[Main] onBlock error:', e))
 })
 
-listener.start()
-startQuoteServer()
-console.log('[Main] WhaleFiller started')
+async function bootstrap() {
+  // DEV_MODE: refill the wallet with inventory on every (re)start so it can
+  // fill any order. Non-fatal if a token can't be sourced.
+  if (DEV_MODE) {
+    try { await seedInventory() } catch (e) { console.error('[Seed] failed:', e) }
+  }
+
+  listener.start()
+  startQuoteServer()
+  console.log('[Main] WhaleFiller started')
+}
+
+bootstrap()
 
 // Reclaim returned ETH stakes every ~5 minutes
 setInterval(async () => {

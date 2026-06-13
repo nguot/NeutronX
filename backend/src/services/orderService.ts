@@ -12,6 +12,12 @@ import { readFileSync } from 'fs'
 import { resolve } from 'path'
 import { parse as parseEnv } from 'dotenv'
 
+const ERC20_ABI = ['function balanceOf(address) view returns (uint256)', 'function symbol() view returns (string)', 'function decimals() view returns (uint8)']
+
+function getProvider(): ethers.providers.JsonRpcProvider {
+  return new ethers.providers.JsonRpcProvider(process.env.ALCHEMY_RPC_URL || process.env.RPC_URL || 'http://127.0.0.1:8545')
+}
+
 const ORDER_TYPE_HASH = ethers.utils.keccak256(
   ethers.utils.toUtf8Bytes(
     // C-1: price curve (startPrice/decayPerBlock/feeTier) is now part of the
@@ -91,6 +97,19 @@ function hashOrder(order: CreateOrderRequest['order'], signature: string): strin
 
 export async function createOrder(dto: CreateOrderRequest): Promise<CreateOrderResponse> {
   const { order } = dto
+
+  // Reject orders the swapper can't fulfill — a valid Permit2 approval with zero
+  // token balance produces a "pending" order that no filler can ever fill.
+  const erc = new ethers.Contract(order.inputToken, ERC20_ABI, getProvider())
+  const balance: ethers.BigNumber = await erc.balanceOf(order.swapper)
+  if (balance.lt(order.inputAmount)) {
+    const decimals = await erc.decimals().catch(() => 18)
+    const symbol   = await erc.symbol().catch(() => order.inputToken)
+    throw new Error(
+      `Insufficient ${symbol} balance: have ${ethers.utils.formatUnits(balance, decimals)}, ` +
+      `need ${ethers.utils.formatUnits(order.inputAmount, decimals)}`
+    )
+  }
 
   const cosignerSig = await signOrder(order)
   const structHash = ethers.utils.keccak256(

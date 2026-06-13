@@ -28,6 +28,101 @@ function computeOrderHash(order: OrderInfo): string {
   )
 }
 
+// Maps PartialFillReactor / FillAuction revert reasons to detailed, actionable
+// explanations. Matched by substring (ordered most-specific first) since ethers
+// sometimes wraps the raw require() string, e.g. "execution reverted: min output".
+function explainRevertReason(rawReason: string, ctx: {
+  order: OrderInfo
+  fillAmount: bigint
+  remaining: bigint
+  currentBlock: number
+  currentPrice: bigint
+  minFill: bigint
+}): string {
+  const { order, fillAmount, remaining, currentBlock, currentPrice, minFill } = ctx
+  const reason = rawReason || ''
+
+  const explanations: [string, string][] = [
+    ['min output total',
+      `This would be the final chunk, but the order's cumulative output would still fall short of ` +
+      `minOutputAmount=${order.minOutput}. This order may be unfillable as configured — the swapper ` +
+      `should cancel it and re-create with a less aggressive price curve.`],
+
+    ['min output', (() => {
+      const floorPrice = (BigInt(order.minOutput) * 10n ** 18n) / BigInt(order.inputAmount)
+      return `The Dutch-auction price has decayed to ${currentPrice} (raw units), but the swapper's minimum ` +
+        `acceptable rate is ${floorPrice} (= minOutputAmount * 1e18 / inputAmount). Any fill priced below this ` +
+        `floor is rejected. Price only decreases over time (startPrice=${order.startPrice}, ` +
+        `decayPerBlock=${order.decayPerBlock}), so once it drops below the floor the remaining ${remaining} can ` +
+        `never be filled — this order is effectively dead. The swapper should cancel it and create a new order ` +
+        `with startPrice comfortably above minOutputAmount and/or a smaller decayPerBlock.`
+    })()],
+
+    ['fill < minimum',
+      `Requested fill (${fillAmount}) is below this order's minimum chunk size ` +
+      `(${minFill} = ${order.minFillBps / 100}% of total input ${order.inputAmount}).`],
+
+    ['fill > remaining',
+      `Requested fill (${fillAmount}) exceeds what's left unfilled (${remaining}).`],
+
+    ['fill > total',
+      `Requested fill (${fillAmount}) exceeds the order's total input amount (${order.inputAmount}).`],
+
+    ['not registered',
+      `You have not registered (or registered for less than fillAmount=${fillAmount}) for this order. ` +
+      `register() must succeed before executePartialChunk().`],
+
+    ['already registered',
+      `This filler already registered/filled this order. Each filler can only fill an order once — ` +
+      `use the other filler for a second partial fill.`],
+
+    ['fallback initiated',
+      `This order already fell back to the cross-chain fallback path and can no longer take partial fills here.`],
+
+    ['nonce invalidated',
+      `The swapper invalidated nonce ${order.nonce} for this order (e.g. by cancelling). It can no longer be filled.`],
+
+    ['already cancelled',
+      `This order was already cancelled by the swapper.`],
+
+    ['cancelled',
+      `The swapper cancelled this order. It can no longer be filled.`],
+
+    ['invalid sig recovery',
+      `The order's cosigner signature could not be recovered to any address — the signature data is malformed.`],
+
+    ['invalid sig',
+      `The cosigner signature does not match the current PartialFillReactor's domain separator — likely a ` +
+      `stale order signed against a previously-deployed reactor (e.g. after a redeploy via setup.sh). ` +
+      `Cancel this order and create a new one.`],
+
+    ['deadline passed',
+      `Order expired: deadline was block #${order.deadline}, current block is #${currentBlock}. ` +
+      `This order can no longer be filled by anyone.`],
+
+    ['expired',
+      `Order expired: deadline was block #${order.deadline}, current block is #${currentBlock}. ` +
+      `This order can no longer be filled by anyone.`],
+
+    ['insufficient stake',
+      `The ETH collateral sent was less than the auction currently requires — price/volatility moved since ` +
+      `the stake was previewed. Try again.`],
+
+    ['zero fill',
+      `Computed fill amount is zero — internal bug in the filler's sizing logic.`],
+
+    ['fill overflow',   `Internal overflow guard tripped ("${reason}") — fillAmount is unexpectedly large.`],
+    ['fill too large',  `Internal overflow guard tripped ("${reason}") — fillAmount is unexpectedly large.`],
+    ['total too large', `Internal overflow guard tripped ("${reason}") — order's inputAmount is unexpectedly large.`],
+    ['stake too large',  `Internal overflow guard tripped ("${reason}") — required stake is unexpectedly large.`],
+  ]
+
+  for (const [key, explanation] of explanations) {
+    if (reason.includes(key)) return explanation
+  }
+  return reason || 'unknown revert reason'
+}
+
 function getOrderSizeBucket(total: bigint): number {
   if (total < 10_000n * 10n**6n) return 0
   if (total < 100_000n * 10n**6n) return 1
@@ -129,13 +224,7 @@ export async function devFill(orderBackendHash: string, fillBps: number): Promis
       { value: ethers.BigNumber.from(stake) }
     ).catch((e: any) => {
       const reason: string = e?.error?.reason ?? e?.reason ?? e?.message ?? ''
-      if (reason.includes('already registered')) {
-        throw new Error(
-          'This filler already filled this order. ' +
-          'Each filler can only fill an order once — use the other filler for a second partial fill.'
-        )
-      }
-      throw e
+      throw new Error(`Register would revert: ${explainRevertReason(reason, { order, fillAmount, remaining, currentBlock, currentPrice, minFill })}`)
     })
     await regTx.wait()
     console.log(`[DevFill] registered  fill=${fillAmount}  stake=${ethers.utils.formatEther(stake)} ETH`)
@@ -145,7 +234,8 @@ export async function devFill(orderBackendHash: string, fillBps: number): Promis
 
   await reactor.callStatic.executePartialChunk(signedOrder, ethers.BigNumber.from(fillAmount))
     .catch((e: any) => {
-      throw new Error(`Fill would revert: ${e?.reason ?? e?.error?.reason ?? e?.message ?? String(e)}`)
+      const reason: string = e?.reason ?? e?.error?.reason ?? e?.message ?? String(e)
+      throw new Error(`Fill would revert: ${explainRevertReason(reason, { order, fillAmount, remaining, currentBlock, currentPrice, minFill })}`)
     })
 
   const tx = await reactor.executePartialChunk(signedOrder, ethers.BigNumber.from(fillAmount))

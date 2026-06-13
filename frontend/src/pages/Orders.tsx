@@ -240,7 +240,7 @@ function OrderDetailPanel({ order }: { order: OrderDetail }) {
               <span style={{ color: '#64748b', fontSize: '0.72rem' }}>Output:</span>{' '}
               <code>{f.outputAmount}</code>
               {f.txHash && (
-                <span>&nbsp;&nbsp;<span style={{ color: '#64748b', fontSize: '0.72rem' }}>Tx:</span>{' '}<code>{f.txHash.slice(0, 14)}…</code></span>
+                <span>&nbsp;&nbsp;<span style={{ color: '#64748b', fontSize: '0.72rem' }}>Tx:</span>{' '}<code style={{ wordBreak: 'break-all' }}>{f.txHash}</code></span>
               )}
               {f.blockNumber && (
                 <span>&nbsp;&nbsp;<span style={{ color: '#64748b', fontSize: '0.72rem' }}>Block:</span>{' '}{f.blockNumber}</span>

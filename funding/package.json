@@ -1,0 +1,24 @@
+{
+  "name": "funding",
+  "version": "1.0.0",
+  "description": "Funds every standard Anvil dev account with ETH + major ERC20 tokens for local testing",
+  "main": "src/fund.ts",
+  "scripts": {
+    "fund": "ts-node src/fund.ts",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "ts-node": {
+    "transpileOnly": true,
+    "compilerOptions": { "module": "commonjs" }
+  },
+  "license": "ISC",
+  "devDependencies": {
+    "@types/node": "^25.9.1",
+    "ts-node": "^10.9.2",
+    "typescript": "^6.0.3"
+  },
+  "dependencies": {
+    "dotenv": "^17.4.2",
+    "ethers": "^5.8.0"
+  }
+}

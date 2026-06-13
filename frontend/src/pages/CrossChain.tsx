@@ -11,7 +11,10 @@ function toWei(val: string, dec: number): bigint {
   try { return ethers.utils.parseUnits(val || '0', dec).toBigInt() } catch { return 0n }
 }
 function fromWei(wei: bigint, dec: number): string {
-  return parseFloat(ethers.utils.formatUnits(wei.toString(), dec)).toLocaleString(undefined, { maximumFractionDigits: 6 })
+  const [intPart, fracPart = ''] = ethers.utils.formatUnits(wei.toString(), dec).split('.')
+  const frac = fracPart.replace(/0+$/, '')
+  const grouped = BigInt(intPart).toLocaleString()
+  return frac ? `${grouped}.${frac}` : grouped
 }
 function short(addr: string) { return addr ? `${addr.slice(0, 8)}…${addr.slice(-4)}` : '—' }
 

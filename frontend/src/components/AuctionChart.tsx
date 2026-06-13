@@ -1,4 +1,4 @@
-import { contractToHumanPrice } from '../lib/tokens'
+import { contractToHumanPrice, formatPrice } from '../lib/tokens'
 
 interface FillDot { id: number; filler: string; fillAmount: string; blockNumber: number | null }
 
@@ -66,7 +66,7 @@ export function AuctionChart({
     <div className="uni-chart-wrap">
       <div className="uni-chart-label">
         <span>Price decay</span>
-        <span className="uni-chart-price">{curPrice.toFixed(4)} {outSym}/{inSym}</span>
+        <span className="uni-chart-price">{formatPrice(curPrice)} {outSym}/{inSym}</span>
       </div>
       <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{ display: 'block' }}>
         <defs>

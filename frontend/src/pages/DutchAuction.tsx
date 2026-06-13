@@ -2,12 +2,12 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { ethers } from 'ethers'
 import type { WalletState } from '../hooks/useWallet'
 import { useAppConfig } from '../context/AppConfig'
-import { TOKENS, type TK, toWei, fromWei, calcStartPrice, humanPriceToContract, TokenPill } from '../lib/tokens'
+import { TOKENS, type TK, toWei, fromWei, calcStartPrice, humanPriceToContract, maxHumanDecay, DECAY_PER_BLOCK_MAX, TokenPill } from '../lib/tokens'
 import { AuctionChart, colorForFiller } from '../components/AuctionChart'
 
 const PERMIT2 = '0x000000000022D473030F116dDEE9F6B43aC78BA3'
 const P2_ABI  = ['function allowance(address,address,address) view returns (uint160,uint48,uint48)', 'function approve(address,address,uint160,uint48)']
-const ERC_ABI = ['function allowance(address,address) view returns (uint256)', 'function approve(address,uint256) returns (bool)']
+const ERC_ABI = ['function allowance(address,address) view returns (uint256)', 'function approve(address,uint256) returns (bool)', 'function balanceOf(address) view returns (uint256)']
 
 interface Fill { id: number; filler: string; fillAmount: string; blockNumber: number | null; createdAt: string }
 interface ActiveOrder {
@@ -35,9 +35,12 @@ export default function DutchAuction({ wallet }: { wallet: WalletState }) {
   const [err,    setErr]    = useState('')
   const [order,  setOrder]  = useState<ActiveOrder | null>(null)
   const poll = useRef<ReturnType<typeof setInterval> | null>(null)
+  const [inBalance,  setInBalance]  = useState<bigint | null>(null)
+  const [outBalance, setOutBalance] = useState<bigint | null>(null)
 
   const inT = TOKENS[inKey], outT = TOKENS[outKey]
   const inW = toWei(inAmt, inT.decimals), outW = toWei(outAmt, outT.decimals)
+  const insufficientBalance = inBalance !== null && inW > inBalance
 
   // ── approvals ──────────────────────────────────────────────────────────────
   const checkApproval = useCallback(async () => {
@@ -55,6 +58,20 @@ export default function DutchAuction({ wallet }: { wallet: WalletState }) {
   }, [wallet.provider, wallet.account, partialFillReactor, inT.address])
 
   useEffect(() => { if (wallet.connected && partialFillReactor && !order) checkApproval() }, [wallet.connected, partialFillReactor, inKey, order])
+
+  // ── balances ───────────────────────────────────────────────────────────────
+  const fetchBalances = useCallback(async () => {
+    if (!wallet.provider || !wallet.account) { setInBalance(null); setOutBalance(null); return }
+    try {
+      const inErc  = new ethers.Contract(inT.address, ERC_ABI, wallet.provider)
+      const outErc = new ethers.Contract(outT.address, ERC_ABI, wallet.provider)
+      const [inBal, outBal] = await Promise.all([inErc.balanceOf(wallet.account), outErc.balanceOf(wallet.account)])
+      setInBalance(inBal.toBigInt())
+      setOutBalance(outBal.toBigInt())
+    } catch { setInBalance(null); setOutBalance(null) }
+  }, [wallet.provider, wallet.account, inT.address, outT.address])
+
+  useEffect(() => { fetchBalances() }, [fetchBalances, order])
 
   // ── auto-quote ─────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -112,6 +129,16 @@ export default function DutchAuction({ wallet }: { wallet: WalletState }) {
     const deadline = wallet.blockNumber + 200
     const sp = calcStartPrice(inW, outW)
     const dp = humanPriceToContract(parseFloat(decay || '0'), inT.decimals, outT.decimals)
+    if (dp > DECAY_PER_BLOCK_MAX) {
+      const max = maxHumanDecay(inT.decimals, outT.decimals)
+      setErr(
+        `Price decay too high for ${inT.symbol}/${outT.symbol}: ${decay} ${outT.symbol}/${inT.symbol}/block ` +
+        `would overflow the contract's decayPerBlock field (uint32). Max for this pair is ` +
+        `~${max.toExponential(3)} ${outT.symbol}/${inT.symbol}/block — use 0 for a flat (non-decaying) price.`
+      )
+      setStep('ready')
+      return
+    }
     const orderBody = {
       swapper: wallet.account, inputToken: inT.address, inputAmount: inW.toString(),
       outputToken: outT.address, minOutputAmount: outW.toString(),
@@ -168,7 +195,7 @@ export default function DutchAuction({ wallet }: { wallet: WalletState }) {
           {/* top bar */}
           <div className="uni-header">
             <button className="uni-back" onClick={() => { setOrder(null); setStep('idle') }}>←</button>
-            <span className="uni-hash">{order.hash.slice(0, 8)}…{order.hash.slice(-6)}</span>
+            <span className="uni-hash">{order.hash}</span>
             <span className={`uni-status ${order.status}`}>{order.status}</span>
           </div>
 
@@ -208,7 +235,7 @@ export default function DutchAuction({ wallet }: { wallet: WalletState }) {
             : order.fills.map(f => (
               <div key={f.id} className="uni-fill-row">
                 <span className="uni-fill-dot" style={{ background: colorForFiller(f.filler) }} />
-                <span className="uni-fill-filler">{f.filler.slice(0, 8)}…{f.filler.slice(-4)}</span>
+                <span className="uni-fill-filler">{f.filler}</span>
                 <span className="uni-fill-info">{fromWei(BigInt(f.fillAmount), inDec)} {TOKENS[order.inKey].symbol}</span>
                 <span className="uni-fill-block">{f.blockNumber ? `#${f.blockNumber}` : new Date(f.createdAt).toLocaleTimeString()}</span>
               </div>
@@ -220,7 +247,7 @@ export default function DutchAuction({ wallet }: { wallet: WalletState }) {
   }
 
   // ── render: swap form ──────────────────────────────────────────────────────
-  const canSwap = wallet.connected && !!partialFillReactor && inW > 0n && outW > 0n && step === 'ready'
+  const canSwap = wallet.connected && !!partialFillReactor && inW > 0n && outW > 0n && step === 'ready' && !insufficientBalance
 
   function SwapButton() {
     if (!wallet.connected)      return <button className="uni-btn" disabled>Connect wallet</button>
@@ -229,6 +256,7 @@ export default function DutchAuction({ wallet }: { wallet: WalletState }) {
     if (step === 'busy')        return <button className="uni-btn" disabled>{msg}</button>
     if (step === 'erc20')       return <button className="uni-btn" onClick={doApproveERC20}>Approve {inT.symbol}</button>
     if (step === 'p2')          return <button className="uni-btn" onClick={doApproveP2}>Enable spending</button>
+    if (insufficientBalance)    return <button className="uni-btn" disabled>Insufficient {inT.symbol} balance</button>
     if (!canSwap)               return <button className="uni-btn" disabled>Enter amounts</button>
     return <button className="uni-btn active" onClick={doSwap}>Swap</button>
   }
@@ -240,7 +268,15 @@ export default function DutchAuction({ wallet }: { wallet: WalletState }) {
 
         {/* Sell box */}
         <div className="uni-input-box">
-          <div className="uni-input-label">You sell</div>
+          <div className="uni-input-label" style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <span>You sell</span>
+            {wallet.connected && inBalance !== null && (
+              <span className="uni-balance">
+                Balance: {fromWei(inBalance, inT.decimals)}
+                <button className="uni-max-btn" onClick={() => setInAmt(ethers.utils.formatUnits(inBalance, inT.decimals))}>MAX</button>
+              </span>
+            )}
+          </div>
           <div className="uni-input-row">
             <input className="uni-amount" type="number" placeholder="0" value={inAmt}
               onChange={e => setInAmt(e.target.value)} />
@@ -262,10 +298,15 @@ export default function DutchAuction({ wallet }: { wallet: WalletState }) {
         <div className="uni-input-box">
           <div className="uni-input-label" style={{ display: 'flex', justifyContent: 'space-between' }}>
             <span>You receive <span className="uni-label-muted">(minimum)</span></span>
-            {quoting && <span className="uni-quoting">fetching price…</span>}
-            {!quoting && quote && (
-              <span className="uni-quote-src">via {quote.source === 'alpha_router' ? 'Uniswap V3' : 'CoinGecko'}</span>
-            )}
+            <span>
+              {quoting && <span className="uni-quoting">fetching price…</span>}
+              {!quoting && quote && (
+                <span className="uni-quote-src">via {quote.source === 'alpha_router' ? 'Uniswap V3' : 'CoinGecko'}</span>
+              )}
+              {wallet.connected && outBalance !== null && (
+                <span className="uni-balance">Balance: {fromWei(outBalance, outT.decimals)}</span>
+              )}
+            </span>
           </div>
           <div className="uni-input-row">
             <input className="uni-amount" type="number" placeholder="0" value={outAmt}
@@ -290,7 +331,9 @@ export default function DutchAuction({ wallet }: { wallet: WalletState }) {
         {inW > 0n && outW > 0n && (
           <div className="uni-detail-row">
             <span className="uni-detail-label">
-              Price decay <span className="uni-label-muted">({outT.symbol}/{inT.symbol}/block)</span>
+              Price decay <span className="uni-label-muted">
+                ({outT.symbol}/{inT.symbol}/block, max ~{maxHumanDecay(inT.decimals, outT.decimals).toExponential(2)})
+              </span>
             </span>
             <input className="uni-detail-input" type="number" min="0" placeholder="0"
               value={decay} onChange={e => setDecay(e.target.value)} />

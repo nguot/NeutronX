@@ -144,7 +144,25 @@
       "PowerShell(wsl bash -lc 'cd /mnt/c/Users/vutie/Documents/DATN/dex-aggregator/contract && ~/.foundry/bin/forge test --match-path \"test/CoreGuards.t.sol\" -vv 2>&1 | tail -45')",
       "PowerShell(wsl bash -lc 'cd /mnt/c/Users/vutie/Documents/DATN/dex-aggregator/contract && ~/.foundry/bin/forge test --match-path \"test/CoreGuards.t.sol\" 2>&1 | tail -6')",
       "PowerShell(wsl bash -lc 'cd /mnt/c/Users/vutie/Documents/DATN/dex-aggregator/contract && ~/.foundry/bin/forge coverage --ir-minimum --report summary --no-match-path \"test/{TwapManipulation,TwapCollateral,FallbackExecutor}.t.sol\" > /tmp/cov3.txt 2>/tmp/cov3.err; echo EXIT=$?')",
-      "PowerShell(wsl bash -lc \"cat /tmp/cov3.txt | grep -E 'File|Reactor|FillAuction|StakeLib|DecayCursor|RemainingLib|ScaledOutput|Total'\")"
+      "PowerShell(wsl bash -lc \"cat /tmp/cov3.txt | grep -E 'File|Reactor|FillAuction|StakeLib|DecayCursor|RemainingLib|ScaledOutput|Total'\")",
+      "Bash(echo \"EXIT=$?\")",
+      "Bash(node -e ' *)",
+      "Bash(cd \"C:/Users/vutie/Documents/DATN/dex-aggregator\")",
+      "Bash(ls graphify-out *)",
+      "Bash(find tests *)",
+      "Bash(find . -path ./node_modules -prune -o -iname \"*seed*order*\" -print)",
+      "Bash(cd \"C:/Users/vutie/Documents/DATN/dex-aggregator/tests/race\")",
+      "Bash(tail -60 logs/run_multi.log)",
+      "Bash(tail -30 logs/run_one.log)",
+      "Bash(node node_modules/typescript/lib/tsc.js --noEmit -p tsconfig.json)",
+      "Bash(chmod +x setup.sh)",
+      "Bash(bash -n setup.sh)",
+      "Bash(command -v cast forge anvil)",
+      "Bash(powershell.exe -NoProfile -Command \"Get-CimInstance Win32_Process -Filter \\\\\"name='node.exe'\\\\\" | Select-Object ProcessId,CreationDate,CommandLine | Format-Table -AutoSize -Wrap\")",
+      "Bash(command -v wsl.exe wsl)",
+      "Bash(node verify_sig.js)",
+      "Bash(docker exec *)",
+      "Bash(node node_modules/typescript/bin/tsc --noEmit)"
     ]
   }
 }
