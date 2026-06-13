@@ -1,7 +1,8 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { ethers } from 'ethers'
 import type { WalletState } from '../hooks/useWallet'
 import { useAppConfig } from '../context/AppConfig'
+import { HashRow } from '../components/CrossChainOrders'
 
 const PERMIT2 = '0x000000000022D473030F116dDEE9F6B43aC78BA3'
 const P2_ABI  = ['function allowance(address,address,address) view returns (uint160,uint48,uint48)', 'function approve(address,address,uint160,uint48)']
@@ -10,43 +11,18 @@ const ERC_ABI = ['function allowance(address,address) view returns (uint256)', '
 function toWei(val: string, dec: number): bigint {
   try { return ethers.utils.parseUnits(val || '0', dec).toBigInt() } catch { return 0n }
 }
-function fromWei(wei: bigint, dec: number): string {
-  const [intPart, fracPart = ''] = ethers.utils.formatUnits(wei.toString(), dec).split('.')
-  const frac = fracPart.replace(/0+$/, '')
-  const grouped = BigInt(intPart).toLocaleString()
-  return frac ? `${grouped}.${frac}` : grouped
-}
 function short(addr: string) { return addr ? `${addr.slice(0, 8)}…${addr.slice(-4)}` : '—' }
 
 interface CCTokenInfo { symbol: string; address: string; decimals: number; chainId: number }
 
-interface Slot {
-  index:          number
-  hashlock:       string
-  status:         string
-  assignedFiller: string | null
-  escrowAddr:     string | null
-}
-
-interface CCOrder {
-  orderHash:   string
-  inputToken:  string
-  inputAmount: string
-  outputToken: string
-  minOutput:   string
-  deadline:    number
-  numSlots:    number
-  t2Expiry:    number
-  slots:       Slot[]
-}
-
 type Step = 'idle' | 'checking' | 'erc20' | 'p2' | 'ready' | 'busy'
 
 export default function CrossChain({ wallet }: { wallet: WalletState }) {
-  const { backendUrl, crossChainReactor } = useAppConfig()
+  const { backendUrl, crossChainReactor, chainId } = useAppConfig()
 
-  const [inputTokens,  setInputTokens]  = useState<CCTokenInfo[]>([])
-  const [outputTokens, setOutputTokens] = useState<CCTokenInfo[]>([])
+  const [allTokens, setAllTokens] = useState<CCTokenInfo[]>([])
+  const [srcChain, setSrcChain] = useState(0)
+  const [dstChain, setDstChain] = useState(0)
   const [inKey,  setInKey]  = useState('')
   const [outKey, setOutKey] = useState('')
   const [inAmt,  setInAmt]  = useState('')
@@ -62,26 +38,52 @@ export default function CrossChain({ wallet }: { wallet: WalletState }) {
   const [msg,  setMsg]  = useState('')
   const [err,  setErr]  = useState('')
   const [orderStatus, setOrderStatus] = useState<{ msg: string; cls: string } | null>(null)
-  const [orders, setOrders] = useState<CCOrder[]>([])
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
+  const chains       = [...new Set(allTokens.map(t => t.chainId))].sort((a, b) => a - b)
+  const inputTokens  = allTokens.filter(t => t.chainId === srcChain)
+  const outputTokens = allTokens.filter(t => t.chainId === dstChain)
   const inT  = inputTokens.find(t => t.symbol === inKey)
   const outT = outputTokens.find(t => t.symbol === outKey)
   const inW  = inT  ? toWei(inAmt,  inT.decimals)  : 0n
   const outW = outT ? toWei(outAmt, outT.decimals) : 0n
 
-  // ── token directory ─────────────────────────────────────────────────────────
+  // Pick a source chain (must host the reactor) and a different destination chain.
+  const chooseSrc = (c: number) => {
+    setSrcChain(c); setStep('idle')
+    if (c === dstChain) { const o = chains.find(x => x !== c); if (o !== undefined) setDstChain(o) }
+  }
+  const chooseDst = (c: number) => {
+    setDstChain(c)
+    if (c === srcChain) { const o = chains.find(x => x !== c); if (o !== undefined) setSrcChain(o) }
+  }
+
+  // ── token directory (every chain, straight from the DB) ──────────────────────
   useEffect(() => {
-    fetch(`${backendUrl}/cc/tokens`)
+    fetch(`${backendUrl}/tokens?chainId=all`)
       .then(r => r.json())
       .then(data => {
-        setInputTokens(data.inputTokens ?? [])
-        setOutputTokens(data.outputTokens ?? [])
-        if (data.inputTokens?.[0])  setInKey(data.inputTokens[0].symbol)
-        if (data.outputTokens?.[0]) setOutKey(data.outputTokens[0].symbol)
+        const toks: CCTokenInfo[] = data.tokens ?? []
+        setAllTokens(toks)
+        const cs = [...new Set(toks.map(t => t.chainId))].sort((a, b) => a - b)
+        // Source must host the reactor (the configured Chain A); destination is another chain.
+        const src = cs.includes(Number(chainId)) ? Number(chainId) : (cs[0] ?? 0)
+        const dst = cs.find(c => c !== src) ?? src
+        setSrcChain(src); setDstChain(dst)
+        const fi = toks.find(t => t.chainId === src); if (fi) setInKey(fi.symbol)
+        const fo = toks.find(t => t.chainId === dst); if (fo) setOutKey(fo.symbol)
       })
       .catch(() => {})
-  }, [backendUrl])
+  }, [backendUrl, chainId])
+
+  // Keep the selected token valid when its chain changes.
+  useEffect(() => {
+    if (inputTokens.length && !inputTokens.some(t => t.symbol === inKey)) setInKey(inputTokens[0].symbol)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [srcChain, allTokens])
+  useEffect(() => {
+    if (outputTokens.length && !outputTokens.some(t => t.symbol === outKey)) setOutKey(outputTokens[0].symbol)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dstChain, allTokens])
 
   // ── approvals (Permit2, same pattern as the Swap page) ──────────────────────
   const checkApproval = useCallback(async () => {
@@ -121,16 +123,13 @@ export default function CrossChain({ wallet }: { wallet: WalletState }) {
   }
 
   // ── session (auto init/restore — no manual button) ──────────────────────────
+  // Submitted orders are listed on the Orders page (<CrossChainOrders/>); here we
+  // only need the cosigner address for signing.
   const ensureSession = useCallback(async () => {
     if (!wallet.account) return
     try {
       const res = await fetch(`${backendUrl}/cc/session/${wallet.account}`)
-      if (res.ok) {
-        const data = await res.json()
-        setCosignerAddr(data.cosignerAddr)
-        setOrders(data.orders ?? [])
-        return
-      }
+      if (res.ok) { setCosignerAddr((await res.json()).cosignerAddr); return }
     } catch { /* fall through to create */ }
     try {
       const res  = await fetch(`${backendUrl}/cc/session`, {
@@ -144,27 +143,15 @@ export default function CrossChain({ wallet }: { wallet: WalletState }) {
 
   useEffect(() => { ensureSession() }, [ensureSession])
 
-  const fetchOrders = useCallback(async () => {
-    if (!wallet.account) return
-    try {
-      const res  = await fetch(`${backendUrl}/cc/session/${wallet.account}`)
-      if (!res.ok) return
-      const data = await res.json()
-      setOrders(data.orders ?? [])
-    } catch {}
-  }, [wallet.account, backendUrl])
-
-  const anyPending = orders.some(o => o.slots.some(s => s.status !== 'done'))
-  useEffect(() => {
-    if (anyPending && !pollRef.current) pollRef.current = setInterval(fetchOrders, 4000)
-    if (!anyPending && pollRef.current) { clearInterval(pollRef.current); pollRef.current = null }
-    return () => { if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null } }
-  }, [anyPending, fetchOrders])
-
   // ── submit ───────────────────────────────────────────────────────────────────
   async function doSwap() {
     if (!wallet.signer || !crossChainReactor || !inT || !outT) return
     if (!cosignerAddr) { setErr('Session is still being set up — try again in a moment.'); return }
+    if (srcChain !== Number(chainId)) {
+      setErr(`Source must be ${chainLabel(Number(chainId))} — the chain hosting the cross-chain reactor. Settlement locks funds there.`)
+      return
+    }
+    if (srcChain === dstChain) { setErr('Source and destination must be different chains.'); return }
 
     setErr(''); setStep('busy'); setMsg('Requesting Merkle tree…')
     const deadline = adv.deadline ? parseInt(adv.deadline) : wallet.blockNumber + 200
@@ -178,7 +165,7 @@ export default function CrossChain({ wallet }: { wallet: WalletState }) {
           inputToken: inT.address, inputAmount: inW.toString(),
           outputToken: outT.address, minOutput: outW.toString(),
           deadline, nonce,
-          chainAId: inT.chainId, reactorAddr: crossChainReactor,
+          chainAId: srcChain, reactorAddr: crossChainReactor,
           t2Buffer: parseInt(adv.t2Buffer || '50'),
         }),
       })
@@ -189,7 +176,7 @@ export default function CrossChain({ wallet }: { wallet: WalletState }) {
       // EscrowSrcFactory registers the order lazily on the first fillSlot()
       // call by a filler, which requires both this signature and cosignerSig.
       setMsg('Sign order in wallet…')
-      const domain = { name: 'NeutronX CrossChain', chainId: inT.chainId, verifyingContract: crossChainReactor }
+      const domain = { name: 'NeutronX CrossChain', chainId: srcChain, verifyingContract: crossChainReactor }
       const types = {
         CrossChainOrder: [
           { name: 'swapper',     type: 'address' },
@@ -220,9 +207,8 @@ export default function CrossChain({ wallet }: { wallet: WalletState }) {
       const sigData = await sigRes.json()
       if (!sigRes.ok) throw new Error(sigData.error)
 
-      setOrderStatus({ msg: `✔ Order signed — ${data.numSlots} slots, ready for fillers · ${short(data.orderHash)}`, cls: 'ok' })
+      setOrderStatus({ msg: `✔ Order signed — ${data.numSlots} slots, ready for fillers · ${short(data.orderHash)} · track it on the Orders page`, cls: 'ok' })
       setInAmt(''); setOutAmt('')
-      await fetchOrders()
     } catch (e: any) {
       setErr(e.reason ?? e.message)
     }
@@ -246,7 +232,6 @@ export default function CrossChain({ wallet }: { wallet: WalletState }) {
     <div>
       <div className="page-header">
         <div className="page-title">Cross-Chain Swap</div>
-        <div className="page-sub">Lock on Chain A, claim on Chain B — settled via HTLC slot escrows</div>
       </div>
 
       {!crossChainReactor && (
@@ -258,23 +243,22 @@ export default function CrossChain({ wallet }: { wallet: WalletState }) {
       <div className="uni-page">
         <div className="uni-card">
           <div className="uni-header">
-            <span className="uni-title">Cross-Chain Swap</span>
+            <span className="uni-title">Swap</span>
             <button className="uni-info-btn" title="Session &amp; contract details" onClick={() => setShowInfo(s => !s)}>ⓘ</button>
           </div>
 
           {showInfo && (
             <div className="uni-info-panel">
-              <div>Reactor (Chain A): <code>{crossChainReactor || '—'}</code></div>
-              {cosignerAddr && <div>Cosigner: <code>{cosignerAddr}</code></div>}
-              {inT  && <div>Input chain id: <code>{inT.chainId}</code></div>}
-              {outT && <div>Output chain id: <code>{outT.chainId}</code></div>}
+              <HashRow label="Reactor" value={crossChainReactor} accent />
+              <HashRow label="Cosigner" value={cosignerAddr} />
             </div>
           )}
 
-          {/* Send box (Chain A) */}
+          {/* Send box — source chain + token */}
           <div className="uni-input-box">
-            <div className="uni-input-label">
-              You send <span className="uni-label-muted">· Chain {inT?.chainId ?? '—'}</span>
+            <div className="uni-input-label" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span>You send</span>
+              <ChainPill chains={chains} value={srcChain} onChange={chooseSrc} />
             </div>
             <div className="uni-input-row">
               <input className="uni-amount" type="number" placeholder="0" value={inAmt}
@@ -285,13 +269,14 @@ export default function CrossChain({ wallet }: { wallet: WalletState }) {
           </div>
 
           <div className="uni-flip-wrap">
-            <div className="uni-flip" style={{ cursor: 'default' }} title="Chain A → Chain B">↓</div>
+            <div className="uni-flip" style={{ cursor: 'default' }} title={`${chainLabel(srcChain)} → ${chainLabel(dstChain)}`}>↓</div>
           </div>
 
-          {/* Receive box (Chain B) */}
+          {/* Receive box — destination chain + token */}
           <div className="uni-input-box">
-            <div className="uni-input-label">
-              You receive <span className="uni-label-muted">(minimum) · Chain {outT?.chainId ?? '—'}</span>
+            <div className="uni-input-label" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span>You receive <span className="uni-label-muted">(minimum)</span></span>
+              <ChainPill chains={chains} value={dstChain} onChange={chooseDst} />
             </div>
             <div className="uni-input-row">
               <input className="uni-amount" type="number" placeholder="0" value={outAmt}
@@ -324,24 +309,24 @@ export default function CrossChain({ wallet }: { wallet: WalletState }) {
           {orderStatus && <div className={`status ${orderStatus.cls}`}>{orderStatus.msg}</div>}
         </div>
       </div>
+    </div>
+  )
+}
 
-      {/* Active orders */}
-      {orders.length > 0 && (
-        <div className="card" style={{ maxWidth: 464, margin: '20px auto 0' }}>
-          <div className="flex-between" style={{ marginBottom: 12 }}>
-            <h2 style={{ margin: 0 }}>Your Cross-Chain Orders</h2>
-            <button className="ghost sm" onClick={fetchOrders}>↻ Refresh</button>
-          </div>
-          {anyPending && (
-            <div className="status info" style={{ marginBottom: 12, fontSize: '0.78rem' }}>
-              Keep this tab and the backend running — secrets are auto-revealed when fillers lock on Chain B.
-            </div>
-          )}
-          {orders.map(o => (
-            <CCOrderCard key={o.orderHash} order={o} inputTokens={inputTokens} outputTokens={outputTokens} />
-          ))}
-        </div>
-      )}
+// ── Chain selector ─────────────────────────────────────────────────────────
+const CHAIN_NAMES: Record<number, string> = { 31337: 'Chain A', 31338: 'Chain B' }
+function chainLabel(id: number) {
+  if (!id) return '—'
+  return CHAIN_NAMES[id] ? `${CHAIN_NAMES[id]} · ${id}` : `Chain ${id}`
+}
+
+function ChainPill({ chains, value, onChange }: { chains: number[]; value: number; onChange: (c: number) => void }) {
+  return (
+    <div className="uni-token-pill" style={{ background: '#eef2ff' }}>
+      <select value={value} onChange={e => onChange(Number(e.target.value))}>
+        {chains.map(c => <option key={c} value={c}>{chainLabel(c)}</option>)}
+      </select>
+      <span className="uni-pill-arrow">▾</span>
     </div>
   )
 }
@@ -358,51 +343,3 @@ function CCTokenPill({ tokens, value, onChange }: { tokens: CCTokenInfo[]; value
   )
 }
 
-// ── Order card — slot/HTLC details hidden behind a toggle ────────────────────
-function CCOrderCard({ order, inputTokens, outputTokens }: {
-  order: CCOrder; inputTokens: CCTokenInfo[]; outputTokens: CCTokenInfo[]
-}) {
-  const [open, setOpen] = useState(false)
-  const inT  = inputTokens.find(t => t.address.toLowerCase() === order.inputToken.toLowerCase())
-  const outT = outputTokens.find(t => t.address.toLowerCase() === order.outputToken.toLowerCase())
-  const done = order.slots.filter(s => s.status === 'done' || s.status === 'claimed').length
-  const pct  = order.numSlots > 0 ? Math.min(100, (done / order.numSlots) * 100) : 0
-  const status = done === order.numSlots ? 'filled' : order.slots.some(s => s.status !== 'available') ? 'active' : 'pending'
-
-  return (
-    <div className="slot-card" style={{ marginTop: 0, marginBottom: 10 }}>
-      <div className="flex-between">
-        <span style={{ fontSize: '0.85rem' }}>
-          {fromWei(BigInt(order.inputAmount), inT?.decimals ?? 18)} <strong>{inT?.symbol ?? '?'}</strong>
-          <span className="uni-arrow"> → </span>
-          min {fromWei(BigInt(order.minOutput), outT?.decimals ?? 18)} <strong>{outT?.symbol ?? '?'}</strong>
-        </span>
-        <span className={`uni-status ${status}`}>{status}</span>
-      </div>
-
-      <div className="uni-fill-track" style={{ marginTop: 10 }}>
-        <div className="uni-fill-bar" style={{ width: `${pct}%` }} />
-      </div>
-
-      <div className="flex-between" style={{ marginTop: 8 }}>
-        <span className="text-muted">{done}/{order.numSlots} slots done · <code>{short(order.orderHash)}</code></span>
-        <button className="ghost sm" onClick={() => setOpen(o => !o)}>{open ? '▲ hide' : '▾ details'}</button>
-      </div>
-
-      {open && (
-        <div style={{ marginTop: 10 }}>
-          <div className="text-muted" style={{ marginBottom: 6 }}>T2 expiry: block {order.t2Expiry} · deadline: block {order.deadline}</div>
-          {order.slots.map(slot => (
-            <div key={slot.index} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0', fontSize: '0.78rem' }}>
-              <span className={`tag ${slot.status === 'locked' ? 'locked' : (slot.status === 'claimed' || slot.status === 'done') ? 'claimed' : 'available'}`}>
-                {slot.status}
-              </span>
-              <span>Slot {slot.index}</span>
-              {slot.escrowAddr && <code style={{ marginLeft: 'auto' }}>{short(slot.escrowAddr)}</code>}
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}

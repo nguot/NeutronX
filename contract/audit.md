@@ -63,7 +63,7 @@ these changes). A full per-test catalogue is in **`testcase.md`**. Off-chain Typ
 | L-2 | ✅ **Completely fixed** | Explicit `uint128`/`uint160` range guards in `register`/`executePartialChunk`; `setCollateralRate`/`setRefundTable` bounded (`MAX_COLLATERAL_RATE`, `MAX_REFUND_BPS`, bucket bounds). |
 | L-3 | 🟡 **Partial** | Nonce invalidation **fixed** (`invalidateNonce`, checked on register + every fill; regression `test_L3_invalidateNonce_blocksFill`). EIP-712 domain `version` field **deferred** — purely cosmetic, and changing the domain separator would destabilize signing across the 5 on/off-chain sites for no security gain. |
 | D-1 | ✅ **Completely fixed** | Collateral is now an ETH-denominated notional via a Uniswap V3 TWAP over the order's `feeTier` (WETH input short-circuits 1:1; `factory==0` = mock mode). `previewCollateral` view added for clients. Decimals/price are normalized away, so the stake is correct for any token. Verified for USDC on a mainnet fork (`test/TwapCollateral.t.sol`). |
-| D-2 | 🟡 **Not fixed (tolerated)** | Out of scope for this pass — the snapshotted row (M-2) and ETH bucketing (D-1) change *which* row is used but the refund is still keyed to actual-fill ÷ orderTotal. Tolerable for the thesis demo; the cure (key refund to actual-fill ÷ *committed* fill) is recommended follow-up. |
+| D-2 | ✅ **Completely fixed** | `onFillSuccess` now keys the refund to `actualFill ÷ committedFill` (the filler's own commitment), not the whole order — honouring any-size commitment returns the full stake; only under-delivery vs. what you promised forfeits. Fragmentation is now controlled by the order's `minFillBps` (the proper lever). Tests: `FillAuction::test_onFillSuccess_*`, `FrontRunGriefing`, `MevFiller::test_snipeSmallChunk_fullyRefunded` + `test_minFillBps_blocksDustFill`. |
 | D-3 | 🟡 **Not fixed (tolerated)** | Low severity; the dominant deterrent is the refund forfeiture, not the time multiplier. Tolerable. |
 
 ## New findings introduced / surfaced by the remediation
@@ -343,7 +343,12 @@ Since this is a general aggregator meant to list many tokens, this is a latent H
 - Root-cause cure: normalize order size and collateral to a single canonical value unit — convert the order's notional to ETH (or USD) via the order's own signed price / an oracle, and compute the stake as a fraction of that ETH-denominated notional. Then the stake tracks real value regardless of token decimals/price.
 - Workaround only: hard-restrict the protocol to WETH-input markets and document the assumption. That's a band-aid — it doesn't fix the math, it just fences off the one case where the bug cancels out, and it's exactly the trap waiting for the next listed token.
 
-D-2 — 🟡 Medium: the refund schedule punishes the protocol's own core feature
+D-2 — 🟡 Medium: the refund schedule punishes the protocol's own core feature  ✅ FIXED
+
+**Status (fixed):** the root-cause cure below was implemented — `onFillSuccess` keys the
+refund to `actualFill ÷ committedFill`, so honouring any-size commitment returns the full
+stake and only under-delivery forfeits. Fragmentation control moved to the order's
+`minFillBps`. See the Remediation status table.
 
 Location: computeRefund (l.74–84) + getFillRatioBucket (l.17–28); the bucket is keyed to actualFillAmount / orderTotal.
 

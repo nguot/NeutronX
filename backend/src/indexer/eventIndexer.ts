@@ -119,6 +119,18 @@ export async function startIndexer() {
   let lastFillBlock     = await getCheckpoint('reactor_partial_fill', currentBlock)
   let lastFallbackBlock = await getCheckpoint('fallback_executed', currentBlock)
 
+  // Self-heal across chain/fork resets: a persisted checkpoint can be AHEAD of
+  // the current tip when the chain was reset under us (e.g. a fresh Anvil fork
+  // restarting at the same block). Without this, `blockNumber > lastBlock` is
+  // never true and the indexer silently skips every new event. Rewind to now.
+  if (lastFillBlock > currentBlock) {
+    console.warn(`Indexer: checkpoint ${lastFillBlock} > tip ${currentBlock} (chain reset?) — rewinding`)
+    lastFillBlock = currentBlock; await setCheckpoint('reactor_partial_fill', lastFillBlock)
+  }
+  if (lastFallbackBlock > currentBlock) {
+    lastFallbackBlock = currentBlock; await setCheckpoint('fallback_executed', lastFallbackBlock)
+  }
+
   console.log('Indexer started')
 
   // Poll for new blocks and pull only the log range since the last checkpoint.

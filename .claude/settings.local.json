@@ -162,7 +162,9 @@
       "Bash(command -v wsl.exe wsl)",
       "Bash(node verify_sig.js)",
       "Bash(docker exec *)",
-      "Bash(node node_modules/typescript/bin/tsc --noEmit)"
+      "Bash(node node_modules/typescript/bin/tsc --noEmit)",
+      "Bash(npm run *)",
+      "Bash(xargs grep -l -i \"permit2\")"
     ]
   }
 }

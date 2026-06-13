@@ -1,13 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useAppConfig } from '../context/AppConfig'
 
-interface CCTokenInfo { symbol: string; address: string; decimals: number; chainId: number }
-interface Row extends CCTokenInfo { name: string; role: 'input' | 'output' | 'infra' }
-
-const PERMIT2: Row = {
-  symbol: 'Permit2', address: '0x000000000022D473030F116dDEE9F6B43aC78BA3', decimals: 0,
-  chainId: 0, role: 'infra', name: 'Approval router used by both reactors',
-}
+interface CCTokenInfo { symbol: string; address: string; decimals: number; chainId: number; name?: string }
+interface Row extends CCTokenInfo { name: string; role: 'input' | 'output' }
 
 const ICON_COLORS = ['#7c3aed', '#2563eb', '#16a34a', '#ea580c', '#db2777', '#0891b2']
 function iconColor(symbol: string) {
@@ -40,15 +35,14 @@ export default function Explore() {
   const chainBId = outputTokens[0]?.chainId ?? 31338
 
   const chains = [
-    { id: chainAId, name: 'Anvil — Chain A', role: 'Source chain (swapper funds locked here)', rpcUrl: chainARpc },
-    { id: chainBId, name: 'Anvil — Chain B', role: 'Destination chain (filler output tokens)', rpcUrl: chainBRpc },
+    { id: chainAId, name: 'Anvil — Chain A', role: 'Source chain', rpcUrl: chainARpc },
+    { id: chainBId, name: 'Anvil — Chain B', role: 'Destination chain', rpcUrl: chainBRpc },
   ]
 
   const rows: Row[] = useMemo(() => [
-    ...inputTokens.map(t => ({ ...t, role: 'input' as const, name: 'Input token — locked by the swapper on Chain A' })),
-    { ...PERMIT2, chainId: chainAId },
-    ...outputTokens.map(t => ({ ...t, role: 'output' as const, name: 'Output token — claimed by fillers on Chain B' })),
-  ], [inputTokens, outputTokens, chainAId])
+    ...inputTokens.map(t => ({ ...t, role: 'input' as const, name: t.name ?? t.symbol })),
+    ...outputTokens.map(t => ({ ...t, role: 'output' as const, name: t.name ?? t.symbol })),
+  ], [inputTokens, outputTokens])
 
   const filtered = rows.filter(r => {
     const q = search.trim().toLowerCase()
@@ -60,10 +54,6 @@ export default function Explore() {
     <>
       <div className="page-header">
         <div className="page-title">Explore</div>
-        <div className="page-sub">
-          Tokens and chains configured for this devnet, loaded live from{' '}
-          <code>GET /cc/tokens</code> and the admin config — click an address to copy.
-        </div>
       </div>
 
       {/* Chains */}
@@ -89,7 +79,7 @@ export default function Explore() {
       </div>
 
       {!loaded && <div className="status info">Loading…</div>}
-      {loaded && rows.length <= 1 && (
+      {loaded && rows.length === 0 && (
         <div className="status warn">
           Couldn't load the token directory from the backend — is it running and is <code>cc_tokens</code> seeded?
         </div>

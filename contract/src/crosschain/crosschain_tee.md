@@ -5,7 +5,7 @@
 The `KeyDistributor` is a Node.js service that acts as the trusted intermediary in the cross-chain swap.  It holds the master secret `M` and is responsible for:
 
 1. **Generating slot secrets** — derives `S_i = keccak256(M, i)` for each slot, computes `H_i = keccak256(S_i)`.
-2. **Building the Merkle tree** — constructs the N-leaf tree and cosigns the swapper's `CrossChainOrder` with the server's private key (the `cosigner` key in `CrossChainReactor`).
+2. **Building the Merkle tree** — constructs the N-leaf tree and cosigns the swapper's `CrossChainOrder` with the server's private key (the `cosigner` key in `EscrowSrcFactory`).
 3. **Assigning slots to fillers** — when a filler requests a slot, hands them `H_i` and the lock parameters (recipient, T2, minAmount).
 4. **Watching Chain B** — listens for `EscrowDstFactory.EscrowCreated` events; once a deposit is confirmed to a safe depth (e.g. 12 blocks), verifies the amount and recipient are correct.
 5. **Revealing secrets** — calls `EscrowDst.claim(S_i)` on the escrow clone, which transfers USDC to the swapper and emits `S_i` publicly.
@@ -49,9 +49,9 @@ Running the server inside a **Trusted Execution Environment (TEE)** removes the 
 1. Move secret derivation and reveal logic into the enclave (or confidential contract).
 2. Publish an attestation document (or on-chain proof) so fillers and swappers can verify the correct code is running before locking funds.
 3. Store `M` only inside the enclave; the operator never sees it.
-4. The `cosigner` key in `CrossChainReactor` should be the enclave's signing key (attestation proves it belongs to the correct enclave).
+4. The `cosigner` key in `EscrowSrcFactory` should be the enclave's signing key (attestation proves it belongs to the correct enclave).
 
 ### Why we're skipping it now
-For the thesis demo, the server runs as a plain Node.js process.  The correctness of the protocol is unaffected — TEE only removes the trust assumption about the operator.  The smart contracts (`CrossChainReactor`, `EscrowDst`/`EscrowDstFactory`) don't need to change when TEE is added; only the server implementation changes.
+For the thesis demo, the server runs as a plain Node.js process.  The correctness of the protocol is unaffected — TEE only removes the trust assumption about the operator.  The smart contracts (`EscrowSrcFactory`/`EscrowSrc`, `EscrowDstFactory`/`EscrowDst`) don't need to change when TEE is added; only the server implementation changes.
 
 **Reminder: add TEE attestation before any production deployment.**

@@ -177,42 +177,40 @@ contract FillAuctionTest is Test {
 
     // ── onFillSuccess() ──
 
-    // actualFillAmount = FILL_AMOUNT = 400e6 = 40% of ORDER_TOTAL -> rBucket 3
-    // (30-70%) -> refundTable[0][3] = 5000bps = 50% refund.
-    function test_onFillSuccess_partialFill_refundsHalfStake() public {
+    // D-2: refund ratio is actual ÷ COMMITTED (FILL_AMOUNT), not ÷ order.
+    // Delivering the full 400e6 commitment -> rBucket 4 -> 100% refund.
+    function test_onFillSuccess_fullCommitment_refundsFullStake() public {
         _register();
         reactor.callOnFillSuccess(ORDER_HASH, filler, FILL_AMOUNT);
+
+        assertEq(auction.pendingReturns(filler), STAKE);
+        assertEq(auction.pendingReturns(treasury), 0);
+        assertFalse(auction.hasValidRegistration(ORDER_HASH, filler, FILL_AMOUNT));
+    }
+
+    // Delivering 40% of the COMMITTED 400e6 (160e6) -> rBucket 3 (30-70%) ->
+    // refundTable[0][3] = 5000bps = 50% refund; the rest forfeited.
+    function test_onFillSuccess_underDelivery_refundsHalfStake() public {
+        _register();
+        reactor.callOnFillSuccess(ORDER_HASH, filler, FILL_AMOUNT * 40 / 100);
 
         uint256 refund    = STAKE * 5000 / 10000;
         uint256 forfeited = STAKE - refund;
         assertEq(auction.pendingReturns(filler), refund);
         assertEq(auction.pendingReturns(treasury), forfeited);
-        assertFalse(auction.hasValidRegistration(ORDER_HASH, filler, FILL_AMOUNT));
     }
 
-    // A "sniper" who only manages a tiny actual fill (1% of ORDER_TOTAL,
-    // < 2% -> rBucket 0 -> refundTable[0][0] = 500bps = 5% refund) forfeits
-    // most of their collateral to the treasury.
-    function test_onFillSuccess_smallActualFill_forfeitsMostStake() public {
+    // Delivering only 2.5% of the COMMITTED 400e6 (10e6) -> rBucket 1 (2-10%) ->
+    // refundTable[0][1] = 1000bps = 10% refund; most is forfeited.
+    function test_onFillSuccess_tinyDelivery_forfeitsMostStake() public {
         _register();
-        uint256 tinyFill = ORDER_TOTAL * 1 / 100;
+        uint256 tinyFill = FILL_AMOUNT * 25 / 1000; // 2.5% of commitment
         reactor.callOnFillSuccess(ORDER_HASH, filler, tinyFill);
 
-        uint256 refund    = STAKE * 500 / 10000;
+        uint256 refund    = STAKE * 1000 / 10000;
         uint256 forfeited = STAKE - refund;
         assertEq(auction.pendingReturns(filler), refund);
         assertEq(auction.pendingReturns(treasury), forfeited);
-    }
-
-    // Filling >=70% of ORDER_TOTAL -> rBucket 4 -> refundTable[0][4] =
-    // 10000bps = 100% refund, nothing forfeited.
-    function test_onFillSuccess_largeActualFill_returnsFullStake() public {
-        _register();
-        uint256 bigFill = ORDER_TOTAL * 70 / 100;
-        reactor.callOnFillSuccess(ORDER_HASH, filler, bigFill);
-
-        assertEq(auction.pendingReturns(filler), STAKE);
-        assertEq(auction.pendingReturns(treasury), 0);
     }
 
     // ── hasValidRegistration() ──

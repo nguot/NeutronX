@@ -76,6 +76,20 @@ start_postgres() {
 }
 
 start_backend() {
+  # Reset persisted Postgres state BEFORE the backend boots:
+  #  - orders/fills: stale rows from a prior run cause reused-nonce collisions
+  #    and make the bots chase orders from an old deployment.
+  #  - indexer_state: the fork resets to the same block each run, but this
+  #    checkpoint persists — a stale (higher) checkpoint makes the indexer skip
+  #    every new event, so fills/status are never written. Clearing it lets the
+  #    indexer re-seed its checkpoint to the fresh fork on startup.
+  # Done per-table so a not-yet-created table (first run) doesn't block the rest.
+  echo "[race] resetting orders / fills / indexer_state…"
+  for t in orders fills indexer_state; do
+    docker exec -e PGPASSWORD=neutronx backend-postgres-1 \
+      psql -U neutronx -d neutronx -c "TRUNCATE $t CASCADE;" >/dev/null 2>&1 || true
+  done
+
   echo "[race] starting backend…"
   ( cd "$BACKEND" && npm start >"$LOGS/backend.log" 2>&1 & echo $! >"$LOGS/backend.pid" )
   PIDS+=("$(cat "$LOGS/backend.pid")")
@@ -87,12 +101,6 @@ start_backend() {
     fi
   done
   echo "[race] backend up."
-  # Postgres persists across runs — clear stale orders so reused nonces don't
-  # collide and the bots don't try to fill orders from a previous deployment.
-  echo "[race] resetting orders/fills…"
-  docker exec -e PGPASSWORD=neutronx backend-postgres-1 \
-    psql -U neutronx -d neutronx -c "TRUNCATE orders, fills CASCADE;" >/dev/null 2>&1 \
-    || echo "[race]   (db reset skipped)"
 }
 
 start_fillers() {

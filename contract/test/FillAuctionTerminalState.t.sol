@@ -85,9 +85,11 @@ contract FillAuctionTerminalStateTest is Test {
         _register();
         reactor.callOnFillSuccess(ORDER_HASH, filler, FILL_AMOUNT);
 
-        // 40% fill -> refundTable[0][3] = 5000bps -> half refunded, half forfeited.
-        uint256 refund    = STAKE * 5000 / 10000;
-        uint256 forfeited = STAKE - refund;
+        // D-2: refund is keyed to the filler's OWN commitment. It registered and
+        // delivered FILL_AMOUNT (400e6/400e6 = 100%) -> rBucket 4 -> full refund,
+        // nothing forfeited.
+        uint256 refund    = STAKE;
+        uint256 forfeited = 0;
         assertEq(refund + forfeited, STAKE, "filled: stake not conserved");
 
         _assertAllSettlementsBlocked(refund, forfeited);

@@ -1,5 +1,6 @@
 import { ethers } from 'ethers'
 import { db } from '../db/client'
+import { listTokens, CHAIN_A_ID, CHAIN_B_ID } from './tokenService'
 
 // ─── Init DB tables (called once at startup) ──────────────────────────────────
 export async function initCrossChainSchema(): Promise<void> {
@@ -71,47 +72,23 @@ export async function initCrossChainSchema(): Promise<void> {
     $$
   `)
 
-  await db.query(`
-    CREATE TABLE IF NOT EXISTS cc_tokens (
-      id        SERIAL PRIMARY KEY,
-      chain_id  INTEGER NOT NULL,
-      role      VARCHAR(10) NOT NULL,   -- 'input' (Chain A) or 'output' (Chain B)
-      symbol    VARCHAR(16) NOT NULL,
-      address   VARCHAR(42) NOT NULL,
-      decimals  SMALLINT NOT NULL,
-      UNIQUE (chain_id, address, role)
-    )
-  `)
-  for (const t of DEFAULT_CC_TOKENS) {
-    await db.query(`
-      INSERT INTO cc_tokens (chain_id, role, symbol, address, decimals)
-      VALUES ($1,$2,$3,$4,$5)
-      ON CONFLICT (chain_id, address, role) DO NOTHING
-    `, [t.chainId, t.role, t.symbol, t.address, t.decimals])
-  }
 }
 
 // ─── Token directory ───────────────────────────────────────────────────────────
-// Backs the token-pill selectors in the cross-chain swap UI. Seeded from the
-// same devnet addresses used by tests/crosschain/setup_cc.sh.
+// Backs the token-pill selectors in the cross-chain swap UI. Reads the unified
+// `tokens` table (seeded by tokenService): input tokens are the Chain A entries
+// (locked by the swapper), output tokens the Chain B entries (claimed by fillers).
 
-export interface CCTokenInfo { symbol: string; address: string; decimals: number; chainId: number }
-
-const DEFAULT_CC_TOKENS: (CCTokenInfo & { role: 'input' | 'output' })[] = [
-  { role: 'input',  chainId: 31337, symbol: 'WETH', address: '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2', decimals: 18 },
-  { role: 'output', chainId: 31338, symbol: 'USDC', address: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', decimals: 6  },
-]
+export interface CCTokenInfo { symbol: string; address: string; decimals: number; chainId: number; name?: string }
 
 export async function getTokenDirectory(): Promise<{ inputTokens: CCTokenInfo[]; outputTokens: CCTokenInfo[] }> {
-  const r = await db.query('SELECT chain_id, role, symbol, address, decimals FROM cc_tokens ORDER BY id')
-  const inputTokens: CCTokenInfo[] = []
-  const outputTokens: CCTokenInfo[] = []
-  for (const row of r.rows) {
-    const t: CCTokenInfo = { symbol: row.symbol, address: row.address, decimals: row.decimals, chainId: row.chain_id }
-    if (row.role === 'input') inputTokens.push(t)
-    else outputTokens.push(t)
-  }
-  return { inputTokens, outputTokens }
+  const [inputTokens, outputTokens] = await Promise.all([
+    listTokens(CHAIN_A_ID),
+    listTokens(CHAIN_B_ID),
+  ])
+  const strip = (t: { symbol: string; address: string; decimals: number; chainId: number; name?: string }): CCTokenInfo =>
+    ({ symbol: t.symbol, address: t.address, decimals: t.decimals, chainId: t.chainId, name: t.name })
+  return { inputTokens: inputTokens.map(strip), outputTokens: outputTokens.map(strip) }
 }
 
 // ─── Crypto helpers (mirrors key_distributor/src/crypto/) ─────────────────────

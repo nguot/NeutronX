@@ -20,7 +20,7 @@ pragma solidity ^0.8.20;
 //  1. Filler pre-funds: USDC.transfer(cloneAddr, amount)   (no approve)
 //  2. Factory deploys clone + calls initialize() — verifies balance
 //  3. Backend chainBWatcher detects EscrowCreated, re-derives S_i, calls claim()
-//  4. Claimed event emits S_i publicly → filler reads it, calls claimSlot() on Chain A
+//  4. Claimed event emits S_i publicly → filler reads it, calls EscrowSrc.withdraw(S_i) on Chain A
 //
 //  REENTRANCY NOTE
 //  ───────────────
@@ -52,7 +52,8 @@ contract EscrowDst {
 
     // ── Events ─────────────────────────────────────────────────────────────────
     // S_i is emitted here in plaintext — filler reads it from Chain B and uses
-    // it to call CrossChainReactor.claimSlot() on Chain A.
+    // it to call EscrowSrc.withdraw(S_i) on Chain A (the clone deployed by
+    // EscrowSrcFactory.fillSlot()).
     event Claimed(address indexed claimer, bytes32 secret);
     event Refunded(address indexed filler, uint256 amount);
 
@@ -99,7 +100,7 @@ contract EscrowDst {
     /**
      * Called by the backend after verifying the filler locked enough tokens.
      * Revealing S_i here makes it public — the filler reads the Claimed event
-     * on Chain B and submits S_i to CrossChainReactor.claimSlot() on Chain A.
+     * on Chain B and submits S_i to EscrowSrc.withdraw() on Chain A.
      *
      * @param secret  S_i — preimage of H_i (hashlock)
      */

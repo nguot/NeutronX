@@ -116,12 +116,12 @@ contract RegistrationForgeryTest is Test {
         return (fillAmount * rate / 10000) * timeMult / 10000;
     }
 
-    /// Mirrors FillAuction.onFillSuccess()'s computeRefund(). sBucket comes from
-    /// the registered fill's notional (the snapshotted row); rBucket from the
-    /// actual fill ratio of the order.
-    function _refund(uint256 stakeAmount, uint256 actualFillAmount, uint256 registeredFill, uint256 orderTotal) internal view returns (uint256) {
-        uint8 sBucket = DynamicStakeLib.getOrderSizeBucketETH(registeredFill);
-        uint8 rBucket = DynamicStakeLib.getFillRatioBucket(actualFillAmount, orderTotal);
+    /// Mirrors FillAuction.onFillSuccess()'s computeRefund(). D-2: both the
+    /// snapshotted row (sBucket) and the fill ratio (rBucket) are keyed to the
+    /// filler's OWN commitment, not the whole order.
+    function _refund(uint256 stakeAmount, uint256 actualFillAmount, uint256 committedFill) internal view returns (uint256) {
+        uint8 sBucket = DynamicStakeLib.getOrderSizeBucketETH(committedFill);
+        uint8 rBucket = DynamicStakeLib.getFillRatioBucket(actualFillAmount, committedFill);
         uint32 refundBps = auction.refundTable(sBucket, rBucket);
         return stakeAmount * refundBps / 10000;
     }
@@ -151,9 +151,9 @@ contract RegistrationForgeryTest is Test {
         // notional FILL_CHUNK -> sBucket 0 -> collateralRate[0] = 2000 (0.2x), 1x time
         assertEq(collateral, FILL_CHUNK * 2000 / 10000);
 
-        // 1% fill of the order -> rBucket 0 -> refundTable[0][0] = 500bps (5%)
-        uint256 refund = _refund(collateral, FILL_CHUNK, FILL_CHUNK, INPUT_AMOUNT);
-        assertEq(refund, collateral * 500 / 10000);
+        // D-2: delivered its full FILL_CHUNK commitment -> rBucket 4 -> 100% refund
+        uint256 refund = _refund(collateral, FILL_CHUNK, FILL_CHUNK);
+        assertEq(refund, collateral);
         assertEq(auction.pendingReturns(filler), refund);
 
         emit log_named_uint("collateral posted", collateral);

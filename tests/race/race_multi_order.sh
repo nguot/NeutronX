@@ -10,6 +10,10 @@
 set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 
+# Cap auto-seeded USDC below our funding so fillers stay at ~12 WETH single-fill
+# capacity (< the 16 WETH order) and the batch is shared cooperatively.
+export SEED_USDC_TARGET=1
+
 INPUT=16000000000000000000      # 16 WETH per order
 MINOUT=36000000000              # 36,000 USDC floor (90% of ~40,000)
 PRICE=2500000000
@@ -30,6 +34,10 @@ start_postgres
 start_backend
 start_fillers
 
+# snapshot filler USDC before the batch (robust to seeded/funded starting balance)
+COW_BEFORE=$(usdc_bal "$A_COW"   | awk '{print $1}')
+WHALE_BEFORE=$(usdc_bal "$A_WHALE" | awk '{print $1}')
+
 # ── submit N orders (distinct nonces) ──
 HASHES=()
 for n in $(seq 1 "$NUM_ORDERS"); do
@@ -47,8 +55,8 @@ sleep 100
 # ANY fully-filled order necessarily required BOTH fillers — that structural fact
 # plus "both fillers spent USDC" is what we assert.
 echo "[race] ════ assertions ════"
-COW_PAID=$(( FUND_USDC - $(usdc_bal "$A_COW"   | awk '{print $1}') ))
-WHALE_PAID=$(( FUND_USDC - $(usdc_bal "$A_WHALE" | awk '{print $1}') ))
+COW_PAID=$(( COW_BEFORE   - $(usdc_bal "$A_COW"   | awk '{print $1}') ))
+WHALE_PAID=$(( WHALE_BEFORE - $(usdc_bal "$A_WHALE" | awk '{print $1}') ))
 SWUSDC=$(usdc_bal "$A0" | awk '{print $1}')
 
 filled=0; touched=0

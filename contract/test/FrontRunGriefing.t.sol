@@ -116,10 +116,11 @@ contract FrontRunGriefingTest is Test {
     }
 
     /// Mirrors FillAuction.onFillSuccess()'s computeRefund(): the portion of
-    /// stakeAmount returned for an actual fill of actualFillAmount/orderTotal.
-    function _refund(uint256 stakeAmount, uint256 actualFillAmount, uint256 orderTotal) internal view returns (uint256) {
-        uint8 sBucket = DynamicStakeLib.getOrderSizeBucket(orderTotal);
-        uint8 rBucket = DynamicStakeLib.getFillRatioBucket(actualFillAmount, orderTotal);
+    /// stakeAmount returned for delivering actualFillAmount of the filler's OWN
+    /// commitment (D-2 — ratio is actual ÷ committed, not actual ÷ order).
+    function _refund(uint256 stakeAmount, uint256 actualFillAmount, uint256 committedFill) internal view returns (uint256) {
+        uint8 sBucket = DynamicStakeLib.getOrderSizeBucketETH(committedFill);
+        uint8 rBucket = DynamicStakeLib.getFillRatioBucket(actualFillAmount, committedFill);
         uint32 refundBps = auction.refundTable(sBucket, rBucket);
         return stakeAmount * refundBps / 10000;
     }
@@ -131,10 +132,11 @@ contract FrontRunGriefingTest is Test {
     /// not the onFillSuccess change), this scenario would still revert
     /// "filled too little" and A would eventually be slashed.
     ///
-    /// Under the collateral/refund split, A's 89% actual fill is >=70% ->
-    /// full refund, so A still recovers everything. The bot's 11% actual
-    /// fill lands in the 10-30% bucket -> only a partial refund, with the
-    /// rest forfeited to the treasury as a sniping fee.
+    /// Under the collateral/refund split, A delivered 89% of its 100% commitment
+    /// (>=70%) -> full refund, so A still recovers everything. D-2: the bot
+    /// committed 11% and delivered exactly that 11% -> 100% of ITS OWN commitment
+    /// -> also a full refund (honouring your commitment, however small, is not
+    /// penalised; only under-delivery is). So nothing is forfeited to the treasury.
     function test_frontRun_11pct_concreteExample() public {
         PartialFillReactor.SignedOrder memory order = _makeOrder();
         bytes32 orderHash = _orderHash(order.info);
@@ -161,20 +163,21 @@ contract FrontRunGriefingTest is Test {
         vm.prank(fillerA);
         reactor.executePartialChunk(order, remainingAmount);
 
-        // A's actual fill (89%) is >=70% -> full refund -> recovers
-        // everything they sent.
-        uint256 refundA = _refund(stakeA, remainingAmount, INPUT_AMOUNT);
+        // A delivered 89% of its 100% commitment (>=70%) -> full refund ->
+        // recovers everything they sent.
+        uint256 refundA = _refund(stakeA, remainingAmount, INPUT_AMOUNT); // committed = whole order
         assertEq(refundA, stakeA);
         assertEq(auction.pendingReturns(fillerA), 1 ether - stakeA + refundA);
         assertEq(auction.pendingReturns(fillerA), 1 ether);
 
-        // The bot's actual fill (11%) is in the 10-30% bucket -> only a
-        // partial refund; the rest is forfeited to the treasury.
-        uint256 refundB = _refund(stakeB, frontRunAmount, INPUT_AMOUNT);
-        assertLt(refundB, stakeB);
+        // D-2: the bot delivered 100% of ITS OWN 11% commitment -> full refund too.
+        uint256 refundB = _refund(stakeB, frontRunAmount, frontRunAmount); // committed = its own slice
+        assertEq(refundB, stakeB);
         assertEq(auction.pendingReturns(bot), 1 ether - stakeB + refundB);
+        assertEq(auction.pendingReturns(bot), 1 ether);
 
-        assertEq(auction.pendingReturns(treasury), (stakeA - refundA) + (stakeB - refundB));
+        // Both fillers honoured their commitments -> nothing forfeited.
+        assertEq(auction.pendingReturns(treasury), 0);
 
         // A is no longer slashable after the window passes.
         vm.roll(DEADLINE + auction.SLASH_WINDOW() + 1);

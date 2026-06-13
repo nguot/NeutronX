@@ -29,14 +29,14 @@ pragma solidity ^0.8.20;
  * The thresholds below assume the input token is priced roughly like ETH/WETH.
  * For stablecoin-in / token-out orders the server can override numSlots when
  * it creates the Merkle tree — the contract just validates 2 ≤ N ≤ 64 and
- * that N is a power of two (claimedBitmap is a uint64 — one bit per slot).
+ * that N is a power of two (filledBitmap is a uint64 — one bit per slot).
  */
 library SlotLib {
 
     /**
      * Recommend N based on raw input amount (in wei / smallest unit).
      * Called OFF-CHAIN by the KeyDistributor server; result is submitted in
-     * the OrderInfo struct and validated by CrossChainReactor.createOrder().
+     * the OrderInfo struct and validated by EscrowSrcFactory.fillSlot().
      *
      *   < 0.5 ETH  →  4  slots   (tiny order, but still splittable for small fillers)
      *   < 2 ETH    →  8  slots
@@ -54,7 +54,7 @@ library SlotLib {
 
     /**
      * Returns true if n is a power of two and within [2, 64].
-     * Used in createOrder() to reject invalid numSlots values.
+     * Used in EscrowSrcFactory.fillSlot() to reject invalid numSlots values.
      *
      * Bit trick: a power of two has exactly one set bit, so (n & (n-1)) == 0.
      */

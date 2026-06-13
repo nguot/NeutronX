@@ -1,8 +1,11 @@
 import { useState, useEffect, useCallback } from 'react'
 import type { WalletState } from '../hooks/useWallet'
 import { useAppConfig } from '../context/AppConfig'
-import { TOKENS, type TK, tokenByAddress, short, toWei, fromWei, contractToHumanPrice, humanPriceToContract, TokenPill } from '../lib/tokens'
+import { tokenByAddress, short, toWei, fromWei, contractToHumanPrice, humanPriceToContract, TokenPill } from '../lib/tokens'
 import { AuctionChart } from '../components/AuctionChart'
+import { BlockEta, formatDuration, NOMINAL_BLOCK_SEC } from '../lib/blocktime'
+import { requestSuggestion, type Suggestion } from '../lib/suggest'
+import { SuggestPanel } from '../components/SuggestPanel'
 
 interface FillerQuote {
   filler:          string
@@ -59,7 +62,7 @@ interface OrderDetail extends OrderSummary {
 type Mode = 'order' | 'custom'
 
 export default function Simulate({ wallet: _wallet }: { wallet: WalletState }) {
-  const { backendUrl } = useAppConfig()
+  const { backendUrl, tokens } = useAppConfig()
 
   const [mode, setMode] = useState<Mode>('order')
 
@@ -71,14 +74,16 @@ export default function Simulate({ wallet: _wallet }: { wallet: WalletState }) {
   const [orderLoading, setOrderLoading]   = useState(false)
 
   // ── custom params ──────────────────────────────────────────────────────────
-  const [custIn,  setCustIn]  = useState<TK>('WETH')
-  const [custOut, setCustOut] = useState<TK>('USDC')
+  const [custIn,  setCustIn]  = useState('WETH')
+  const [custOut, setCustOut] = useState('USDC')
   const [custAmount, setCustAmount]       = useState('')
   const [custPrice, setCustPrice]         = useState('')   // human: out per in
   const [custDecay, setCustDecay]         = useState('0')   // raw contract units
   const [custDeadline, setCustDeadline]   = useState('')    // optional block #
   const [custMinFillBps, setCustMinFillBps] = useState('1000')
   const [custCurrentBlock, setCustCurrentBlock] = useState('') // what-if override
+  const [sugg, setSugg] = useState<Suggestion | null>(null)
+  const [suggesting, setSuggesting] = useState(false)
 
   // ── shared ─────────────────────────────────────────────────────────────────
   const [currentBlock, setCurrentBlock] = useState<number | null>(null)
@@ -114,6 +119,33 @@ export default function Simulate({ wallet: _wallet }: { wallet: WalletState }) {
 
   useEffect(() => { loadOrders(); refreshBlock() }, [loadOrders, refreshBlock])
 
+  // Drop a stale suggestion when the custom inputs change.
+  useEffect(() => { setSugg(null) }, [custIn, custOut, custAmount])
+
+  // Same parameter suggestion as the Swap page — fills start price, decay and min fill.
+  async function suggestCustom() {
+    const inT = tokens.find(t => t.symbol === custIn)
+    const outT = tokens.find(t => t.symbol === custOut)
+    const amt = parseFloat(custAmount)
+    if (!inT || !outT || !custAmount || isNaN(amt) || amt <= 0) {
+      setStatus({ msg: 'Enter an input amount first', cls: 'bad' }); return
+    }
+    setSuggesting(true); setStatus(null); setSugg(null)
+    try {
+      const data = await requestSuggestion(backendUrl, {
+        inputToken: inT.address, outputToken: outT.address,
+        inputAmount: toWei(custAmount, inT.decimals).toString(),
+        inputDecimals: inT.decimals, outputDecimals: outT.decimals,
+        inputSymbol: inT.symbol, outputSymbol: outT.symbol,
+      })
+      setSugg(data)
+      setCustPrice(Number(data.startPriceHuman).toFixed(6))
+      setCustDecay(String(Number(data.decayHuman).toPrecision(4)))
+      setCustMinFillBps(String(data.minFillBps))
+    } catch (e: any) { setStatus({ msg: e.message, cls: 'bad' }) }
+    setSuggesting(false)
+  }
+
   async function selectOrder(hash: string) {
     setSelectedHash(hash)
     setOrderDetail(null)
@@ -136,8 +168,8 @@ export default function Simulate({ wallet: _wallet }: { wallet: WalletState }) {
   function effectiveTokens() {
     if (mode === 'order') {
       if (!orderDetail) return null
-      const inT  = tokenByAddress(orderDetail.inputToken)
-      const outT = tokenByAddress(orderDetail.outputToken)
+      const inT  = tokenByAddress(orderDetail.inputToken, tokens)
+      const outT = tokenByAddress(orderDetail.outputToken, tokens)
       return {
         inputToken: orderDetail.inputToken, outputToken: orderDetail.outputToken,
         inSym:  inT?.symbol  ?? short(orderDetail.inputToken),
@@ -146,7 +178,8 @@ export default function Simulate({ wallet: _wallet }: { wallet: WalletState }) {
         outDec: outT?.decimals ?? 6,
       }
     }
-    const inT = TOKENS[custIn], outT = TOKENS[custOut]
+    const inT = tokens.find(t => t.symbol === custIn), outT = tokens.find(t => t.symbol === custOut)
+    if (!inT || !outT) return null
     return { inputToken: inT.address, outputToken: outT.address, inSym: inT.symbol, outSym: outT.symbol, inDec: inT.decimals, outDec: outT.decimals }
   }
   const eff = effectiveTokens()
@@ -174,7 +207,8 @@ export default function Simulate({ wallet: _wallet }: { wallet: WalletState }) {
     }
     const amt = parseFloat(custAmount), price = parseFloat(custPrice)
     if (!custAmount || isNaN(amt) || amt <= 0 || !custPrice || isNaN(price) || price <= 0) return null
-    const inT = TOKENS[custIn], outT = TOKENS[custOut]
+    const inT = tokens.find(t => t.symbol === custIn), outT = tokens.find(t => t.symbol === custOut)
+    if (!inT || !outT) return null
     const sb = custCurrentBlock ? parseInt(custCurrentBlock) : (currentBlock ?? 0)
     const dl = custDeadline ? parseInt(custDeadline) : sb + 100
     return {
@@ -240,7 +274,8 @@ export default function Simulate({ wallet: _wallet }: { wallet: WalletState }) {
       minFillBps    = orderDetail.minFillBps
       simBlock      = currentBlock ?? undefined
     } else {
-      const inT = TOKENS[custIn], outT = TOKENS[custOut]
+      const inT = tokens.find(t => t.symbol === custIn), outT = tokens.find(t => t.symbol === custOut)
+      if (!inT || !outT) return setStatus({ msg: 'Tokens still loading — try again in a moment', cls: 'bad' })
       const amt = parseFloat(custAmount), price = parseFloat(custPrice)
       if (!custAmount || isNaN(amt) || amt <= 0) return setStatus({ msg: 'Enter an input amount', cls: 'bad' })
       if (!custPrice || isNaN(price) || price <= 0) return setStatus({ msg: 'Enter a start price', cls: 'bad' })
@@ -254,13 +289,13 @@ export default function Simulate({ wallet: _wallet }: { wallet: WalletState }) {
       simBlock      = custCurrentBlock ? parseInt(custCurrentBlock) : (currentBlock ?? undefined)
     }
 
-    const inT  = tokenByAddress(inputToken)
-    const outT = tokenByAddress(outputToken)
+    const inT  = tokenByAddress(inputToken, tokens)
+    const outT = tokenByAddress(outputToken, tokens)
     const inDec = inT?.decimals ?? 18, outDec = outT?.decimals ?? 6
     const inSym = inT?.symbol ?? short(inputToken), outSym = outT?.symbol ?? short(outputToken)
 
     setRunning(true)
-    setStatus({ msg: 'Querying registered fillers + Alpha Router…', cls: 'info' })
+    setStatus({ msg: 'Running simulation…', cls: 'info' })
 
     try {
       const body: Record<string, unknown> = { inputToken, outputToken, inputAmount, startPrice, decayPerBlock }
@@ -327,10 +362,6 @@ export default function Simulate({ wallet: _wallet }: { wallet: WalletState }) {
     <>
       <div className="page-header">
         <div className="page-title">Simulate Order</div>
-        <div className="page-sub">
-          Preview how registered fillers would respond to a Dutch-auction order — without signing or
-          paying gas — and compare the result to a single direct swap routed through Uniswap V3's Alpha Router.
-        </div>
       </div>
 
       <div className="card">
@@ -350,14 +381,14 @@ export default function Simulate({ wallet: _wallet }: { wallet: WalletState }) {
               <div className="empty-state"><div className="empty-icon">📋</div>No pending orders — try Custom parameters.</div>
             )}
             {orders.map(o => {
-              const inT = tokenByAddress(o.inputToken), outT = tokenByAddress(o.outputToken)
+              const inT = tokenByAddress(o.inputToken, tokens), outT = tokenByAddress(o.outputToken, tokens)
               return (
                 <div key={o.hash} className={`slot-card ${selectedHash === o.hash ? 'claimed' : ''}`}
                      style={{ cursor: 'pointer' }} onClick={() => selectOrder(o.hash)}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
                     <span className={`badge ${o.status}`}>{o.status}</span>
                     <span className="mono" style={{ fontSize: '0.75rem' }}>{short(o.hash)}</span>
-                    <span style={{ marginLeft: 'auto', fontSize: '0.75rem', color: '#94a3b8' }}>deadline #{o.deadline}</span>
+                    <span style={{ marginLeft: 'auto', fontSize: '0.75rem', color: '#94a3b8' }} onClick={e => e.stopPropagation()}>deadline <BlockEta target={o.deadline} showClock={false} /></span>
                   </div>
                   <div style={{ fontSize: '0.85rem' }}>
                     {fromWei(BigInt(o.inputAmount), inT?.decimals ?? 18)} <b>{inT?.symbol ?? short(o.inputToken)}</b>
@@ -376,16 +407,26 @@ export default function Simulate({ wallet: _wallet }: { wallet: WalletState }) {
               <div className="uni-input-row">
                 <input className="uni-amount" type="number" placeholder="0" value={custAmount}
                   onChange={e => setCustAmount(e.target.value)} />
-                <TokenPill value={custIn} exclude={custOut} onChange={setCustIn} />
+                <TokenPill tokens={tokens} value={custIn} exclude={custOut} onChange={setCustIn} />
               </div>
             </div>
             <div className="uni-input-box">
               <div className="uni-input-label">Output token</div>
               <div className="uni-input-row">
                 <span style={{ flex: 1, color: '#94a3b8', fontSize: '0.85rem' }}>set via start price below</span>
-                <TokenPill value={custOut} exclude={custIn} onChange={setCustOut} />
+                <TokenPill tokens={tokens} value={custOut} exclude={custIn} onChange={setCustOut} />
               </div>
             </div>
+
+            {/* Suggest parameters — same flow as the Swap page */}
+            <div className="uni-detail-row">
+              <span className="uni-detail-label">Parameters</span>
+              <button className="ghost sm" style={{ marginTop: 0 }} disabled={suggesting} onClick={suggestCustom}>
+                {suggesting ? 'Analysing fillers…' : '✨ Suggest parameters'}
+              </button>
+            </div>
+            {sugg && <SuggestPanel sugg={sugg} inSym={custIn} outSym={custOut} />}
+
             <div className="uni-detail-row">
               <span className="uni-detail-label">Start price ({custOut} per {custIn})</span>
               <input className="uni-detail-input" type="number" placeholder="e.g. 2500" value={custPrice}
@@ -432,7 +473,7 @@ export default function Simulate({ wallet: _wallet }: { wallet: WalletState }) {
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', color: '#64748b', marginBottom: 4 }}>
               <span>Blocks from now: <strong>{blockOffset}</strong> <span className="uni-label-muted">(block {chart.startBlock + blockOffset})</span></span>
               <span style={{ color: blocksLeft <= 0 ? '#dc2626' : blocksLeft < 5 ? '#d97706' : '#94a3b8' }}>
-                {blocksLeft <= 0 ? 'expired' : blocksLeft < 5 ? `${blocksLeft} left — too close to deadline` : `${blocksLeft} blocks to deadline`}
+                {blocksLeft <= 0 ? 'expired' : blocksLeft < 5 ? `${blocksLeft} blocks left — too close to deadline` : `${blocksLeft} blocks (≈ ${formatDuration(blocksLeft * NOMINAL_BLOCK_SEC)}) to deadline`}
               </span>
             </div>
             <input type="range" min={0} max={chartSpan} value={Math.min(blockOffset, chartSpan)}
@@ -475,8 +516,8 @@ export default function Simulate({ wallet: _wallet }: { wallet: WalletState }) {
           <h2>Results</h2>
 
           <div style={{ display: 'flex', gap: 24, marginBottom: 8, flexWrap: 'wrap' }}>
-            {directQuote && <Stat label="Direct swap (Alpha Router)" value={`${directQuote.estimatedOutputHuman} ${eff.outSym}`} />}
-            {comparison && <Stat label="Via Dutch auction + fallback" value={`≈ ${comparison.viaAuction.toFixed(4)} ${eff.outSym}`} accent />}
+            {directQuote && <Stat label="Direct swap" value={`${directQuote.estimatedOutputHuman} ${eff.outSym}`} />}
+            {comparison && <Stat label="Via Dutch auction" value={`≈ ${comparison.viaAuction.toFixed(4)} ${eff.outSym}`} accent />}
             {comparison && (
               <Stat label="Difference vs. direct"
                 value={`${comparison.delta >= 0 ? '+' : ''}${comparison.delta.toFixed(2)}%`}
@@ -487,18 +528,10 @@ export default function Simulate({ wallet: _wallet }: { wallet: WalletState }) {
             {result && <Stat label="Order filled" value={`${pctOfOrder(result.totalFillAmount, result.inputAmount).toFixed(1)}%`} accent />}
           </div>
 
-          {comparison && result?.remainingWouldFallback && (
-            <div style={{ fontSize: '0.72rem', color: '#94a3b8', marginBottom: 12 }}>
-              "Via Dutch auction + fallback" includes the unfilled remainder swapped at the Alpha Router rate.
-            </div>
-          )}
-
-          {directError && <div className="status bad">Alpha Router quote unavailable: {directError}</div>}
+          {directError && <div className="status bad">Direct-swap quote unavailable: {directError}</div>}
           {result && !unitsOk && (
             <div className="status info">
-              Side-by-side $ comparison and the totals above are only meaningful for 18-decimal → 6-decimal
-              pairs (e.g. WETH/DAI → USDC/USDT), since registered fillers currently quote in fixed units.
-              Per-filler responses below are still valid.
+              Dollar totals are only exact for stablecoin-output pairs — the per-filler responses below are still valid.
             </div>
           )}
 

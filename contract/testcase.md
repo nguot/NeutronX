@@ -7,8 +7,8 @@ suite maps onto the security findings in `audit.md`.
 
 | | Count | Result |
 |---|---|---|
-| Total tests | **126** | 125 pass · 1 pre-existing failure |
-| Non-fork tests | **120** | all pass |
+| Total tests | **128** | 127 pass · 1 pre-existing failure |
+| Non-fork tests | **122** | all pass |
 | Fork tests (mainnet, need `ALCHEMY_RPC_URL`) | **6** | 5 pass · 1 pre-existing failure |
 
 Beyond the Foundry tests above, **2 live filler-race E2E scenarios** (`tests/race/`,
@@ -70,7 +70,7 @@ Pure arithmetic of the staking / pricing / accounting primitives.
 | `testFuzz_computeRefund_monotonicAtBucketBoundaries` (+ live-table variant) | refund non-decreasing across every fill-ratio boundary |
 | `testFuzz_computeRefund_fullFillReturnsFullStake` | a ≥70% fill always returns 100% |
 | `test_computeCollateral_noCeilingShoppingDiscount` | cost scales exactly with the ceiling |
-| `test_computeRefund_smallActualFill_forfeitsMostStake` | the "sniping fee" — small fills forfeit most collateral |
+| `test_computeRefund_smallActualFill_forfeitsMostStake` | a small fill-ratio returns little (refund-table shape; lib is denominator-agnostic — caller keys it to commitment) |
 | `test_refundTable_isMonotonicPerRow` / default-table variant / non-zero-rate | the deployed tables are well-shaped |
 
 **`RemainingLib.t.sol`** (6) — the packed remaining-amount encoding (new-order / partial /
@@ -85,7 +85,7 @@ fully-filled sentinels, pack/unpack round-trip).
 **`FillAuction.t.sol`** (16) — staking lifecycle: `register` (success, excess refund, and
 reverts for deadline/duplicate/insufficient-stake/only-reactor), `slash`
 (success / too-early / already-filled), `withdraw`, `onFillSuccess` refund tiers
-(partial 50% / sniper 5% / full 100%), and `hasValidRegistration` ceiling semantics.
+(D-2: full-commitment 100% / 40%-of-commitment 50% / 2.5%-of-commitment 10%), and `hasValidRegistration` ceiling semantics.
 
 **`PartialFillReactor.t.sol`** (6) — fill flow: first fill success, multi-fill remaining
 decrement, and reverts for not-registered / expired / fill-exceeds-remaining; `onFillSuccess`
@@ -157,7 +157,7 @@ Proves each audit fix holds, wired against the real contracts (6 tests).
 Models honest **and** malicious fillers as addresses making call sequences (no servers; a
 test plays "the MEV bot won the ordering race"). All deterministic, no fork.
 
-**`MevFillerExploits.t.sol`** — Adversary A (9 tests)
+**`MevFillerExploits.t.sol`** — Adversary A (10 tests)
 | Test | What the MEV filler tries → outcome |
 |---|---|
 | `test_tamperStartPrice_rejected` | rewrite the signed price → **reverts** (`invalid sig`) |
@@ -165,7 +165,8 @@ test plays "the MEV bot won the ordering race"). All deterministic, no fork.
 | `test_lateFill_skimsDecaySpread_butStaysAboveFloor` | time the decay to underpay → **succeeds but bounded** ≥ floor |
 | `test_lateFill_belowFloor_reverts` | wait past the floor price → **reverts**, swapper protected |
 | `test_frontRunRace_loserReclaimsFullStake` | win the chunk → legit; **loser reclaims 100% stake** |
-| `test_snipeSmallChunk_forfeitsMostStake` | grab a 1% chunk → **forfeits 95% of collateral** (sniping fee) |
+| `test_snipeSmallChunk_fullyRefunded` | grab a 1% chunk, deliver it fully → **full refund** (D-2: honouring any-size commitment isn't penalised) |
+| `test_minFillBps_blocksDustFill` | dust fill below the order's `minFillBps` → **reverts** (the proper anti-dust lever) |
 | `test_registerThenAbandon_isSlashed_noProfit` | reserve then vanish → **slashed, recovers nothing** |
 | `test_fillAfterFallback_reverts` | double-spend across fallback → **reverts** (`fallback initiated`) |
 | `test_reentrantOutputToken_reverts` | re-enter via a malicious output token → **reverts** (nonReentrant) |
@@ -275,7 +276,7 @@ are fallback / `verifyOrderSignature` paths exercised only by the excluded fork 
 | C-2 fallback / fill mutual exclusion | `AuditFixes::test_C2_*`, `MevFiller::test_fillAfterFallback_reverts`, `CoreGuards::test_markFallbackInitiated_*` |
 | H-1 race-loser stake recovery | `AuditFixes::test_H1_*`, `MevFiller::test_frontRunRace_*`, `MultiOrderScenario`, **`FillAuctionTerminalState::test_terminal_released_*`** |
 | H-2 cancel-grief protection | `AuditFixes::test_H2_*`, `CoreGuards::test_*cancelled*` |
-| M-1 per-fill pricing (no underflow) | `PartialFillReactor::test_multipleFills_*`, `MevFiller::test_lateFill_*` |
+| M-1 per-fill pricing (no underflow) | `PartialFillReactor::test_multipleFills_*`, `MevFiller::test_lateFill_*`, `Settleability::testFuzz_alwaysSettleable` (fuzz: arbitrary decay/partition always settles) |
 | M-2 refund snapshot | `FillAuction::test_onFillSuccess_*`, `DynamicStakeLibStake` |
 | M-3 register validates signature | `AuditFixes::test_C1_tamperedStartPrice_rejected` (caught at register), `RegistrationForgery` |
 | L-2 cast / setter bounds | **`CoreGuards::test_setCollateralRate_*`, `test_setRefundTable_*`, `test_register_revert_{fillTooLarge,totalTooLarge,stakeTooLarge}`** |
@@ -284,7 +285,7 @@ are fallback / `verifyOrderSignature` paths exercised only by the excluded fork 
 | N-3 TWAP collateral manipulation | **`TwapManipulation::test_manipulatedTwap_collapsesRequiredCollateral`** (fork PoC) |
 | Cross-chain timelock (`crosschain.md §4`) | **`CrossChainTimelock::test_T2geqT1_swapperTakesBothLegs`** |
 | Double-settlement / terminal state | **`FillAuctionTerminalState::*`** |
-| Sniping economics (D-2 mechanism) | `MevFiller::test_snipeSmallChunk_forfeitsMostStake`, `DynamicStakeLibStake` |
+| D-2 refund keyed to committed (not order) | `MevFiller::test_snipeSmallChunk_fullyRefunded` / `test_minFillBps_blocksDustFill`, `FillAuction::test_onFillSuccess_*`, `FrontRunGriefing`, `FillAuctionTerminalState` |
 | Solvency / conservation | `FillAuctionInvariant::invariant_solvency`, `MultiOrderScenario` |
 
 ## Out of scope (analysed in the thesis, not coded — fork-dependent)

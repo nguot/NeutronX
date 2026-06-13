@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import type { WalletState } from '../hooks/useWallet'
 import { useAppConfig } from '../context/AppConfig'
+import { BlockEta } from '../lib/blocktime'
+import CrossChainOrders from '../components/CrossChainOrders'
 
 interface Fill {
   id:           number
@@ -100,7 +102,6 @@ export default function Orders({ wallet }: { wallet: WalletState }) {
     <>
       <div className="page-header">
         <div className="page-title">Order History</div>
-        <div className="page-sub">All Dutch-auction orders tracked by the backend</div>
       </div>
 
       {/* Filters */}
@@ -174,7 +175,7 @@ export default function Orders({ wallet }: { wallet: WalletState }) {
                     </td>
                     <td><span className={STATUS_COLORS[o.status] ?? 'badge'}>{o.status}</span></td>
                     <td style={{ color: o.fills > 0 ? '#16a34a' : '#94a3b8' }}>{o.fills}</td>
-                    <td style={{ color: '#64748b', fontSize: '0.78rem' }}>{o.deadline}</td>
+                    <td style={{ color: '#64748b', fontSize: '0.78rem' }}><BlockEta target={o.deadline} /></td>
                     <td style={{ color: '#64748b', fontSize: '0.75rem' }}>{new Date(o.createdAt).toLocaleString()}</td>
                     <td style={{ textAlign: 'right' }}>
                       <button className="ghost sm" style={{ marginTop: 0, padding: '3px 10px' }}>
@@ -206,6 +207,9 @@ export default function Orders({ wallet }: { wallet: WalletState }) {
           </div>
         )}
       </div>
+
+      {/* Cross-chain orders for the connected wallet (hidden when none) */}
+      <CrossChainOrders wallet={wallet} />
     </>
   )
 }

@@ -171,7 +171,10 @@ export async function devFill(orderBackendHash: string, fillBps: number): Promis
 
   const requested  = (remaining * BigInt(fillBps)) / 10_000n
   const minFill    = (BigInt(order.inputAmount) * BigInt(order.minFillBps)) / 10_000n
-  const fillAmount = requested < minFill ? minFill : requested
+  // Bump up to the order's min chunk, but never exceed what's left — when the
+  // remainder is below minFill, the final chunk completes the order at < minFill.
+  let fillAmount   = requested < minFill ? minFill : requested
+  if (fillAmount > remaining) fillAmount = remaining
 
   const firstFillBlock = order.fills.length > 0
     ? (order.fills[order.fills.length - 1].blockNumber ?? currentBlock)

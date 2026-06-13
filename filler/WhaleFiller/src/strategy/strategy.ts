@@ -48,6 +48,15 @@ export async function decide(order: OrderInfo, currentBlock: number): Promise<Fi
     const fillAmount    = capacity < inputAmount ? capacity : inputAmount
     if (fillAmount === 0n) return no('zero inventory of outputToken (dev)')
 
+    // Honor the order's minimum chunk even in dev mode: a filler whose capacity
+    // can't cover one minFill would revert on-chain, so it bows out here. Without
+    // this gate coverage is flat across minFillBps and the parameter suggester
+    // degenerates (snaps between 100% and 1%).
+    const minFill = (inputAmount * BigInt(order.minFillBps)) / 10_000n
+    if (fillAmount < minFill) {
+      return no(`capacity ${fillAmount} < minFill ${minFill} (dev)`)
+    }
+
     const pct = (Number(fillAmount) / Number(inputAmount) * 100).toFixed(1)
     console.log(`${tag} ✔ FILL [DEV]  fill=${pct}% (capacity-capped)  price=${auctionPriceHuman.toFixed(4)}`)
     return { shouldFill: true, fillAmount, currentPrice, reason: 'dev mode (capacity-capped)' }

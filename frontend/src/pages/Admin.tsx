@@ -23,7 +23,6 @@ export default function Admin({ token, onUnauthorized }: AdminProps) {
     <>
       <div className="page-header">
         <div className="page-title">Admin</div>
-        <div className="page-sub">Manage contracts, fillers, and chain state</div>
       </div>
 
       <div className="card">
@@ -105,11 +104,6 @@ function ConfigTab({ token, onUnauthorized }: AdminProps) {
 
   return (
     <div>
-      <p className="sub">
-        These values are written to the backend <code>.env</code> and take effect immediately — no restart needed.
-        The frontend reads them via <code>GET /admin/config</code> on load.
-      </p>
-
       <label>Backend URL</label>
       <input value={form.backendUrl} onChange={set('backendUrl')} placeholder="http://localhost:3000" />
 
@@ -205,11 +199,6 @@ function FillersTab({ token, onUnauthorized }: AdminProps) {
 
   return (
     <div>
-      <p className="sub">
-        Fillers registered here receive quote requests from <code>POST /simulate</code> and are pinged for liveness.
-        Fillers seeded from <code>WHALE_FILLER_QUOTE_URL</code> / <code>COW_FILLER_QUOTE_URL</code> env vars appear automatically.
-      </p>
-
       <div className="flex-between" style={{ marginBottom: 12 }}>
         <h2 style={{ margin: 0 }}>Registered Fillers</h2>
         <button className="ghost sm" onClick={loadFillers} disabled={loading} style={{ marginTop: 0 }}>
@@ -254,11 +243,6 @@ function FillersTab({ token, onUnauthorized }: AdminProps) {
       </div>
       <button onClick={addFiller}>Add Filler</button>
       {addStatus && <div className={`status ${addStatus.cls}`}>{addStatus.msg}</div>}
-
-      <div className="status info" style={{ marginTop: 16 }}>
-        <strong>Filler behavior</strong> (MIN_PROFIT_BPS, FILL_RATIO, supported tokens) is configured in each filler's own <code>.env</code> file.
-        The Simulate tab lets you preview each filler's quote response, including its strategy metadata, without submitting an order.
-      </div>
     </div>
   )
 }
@@ -306,8 +290,7 @@ function ChainTab({ token, onUnauthorized }: AdminProps) {
   return (
     <div>
       <p className="sub">
-        Control the Anvil devnet chains. Mining advances the block number, which drives Dutch-auction price decay
-        and deadline expiry. Chain B block control requires <code>CHAIN_B_RPC</code> to be configured.
+        Mine blocks to advance the chains. Chain B requires <code>CHAIN_B_RPC</code> to be configured.
       </p>
 
       {/* Current blocks */}
@@ -330,10 +313,6 @@ function ChainTab({ token, onUnauthorized }: AdminProps) {
 
       <hr />
       <h2>Mine Blocks (Chain A)</h2>
-      <p className="sub">
-        Calls <code>anvil_mine</code> on the Chain A RPC. Useful for advancing the block number to trigger price decay
-        or expire deadlines during testing.
-      </p>
       <div className="row">
         <div>
           <label>Number of blocks</label>

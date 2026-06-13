@@ -1,25 +1,21 @@
 import { ethers } from 'ethers'
 
-export const TOKENS = {
-  WETH: { symbol: 'WETH', address: '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2', decimals: 18 },
-  USDC: { symbol: 'USDC', address: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', decimals: 6  },
-  USDT: { symbol: 'USDT', address: '0xdAC17F958D2ee523a2206206994597C13D831ec7', decimals: 6  },
-  DAI:  { symbol: 'DAI',  address: '0x6B175474E89094C44Da98b954EedeAC495271d0F', decimals: 18 },
-  WBTC: { symbol: 'WBTC', address: '0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599', decimals: 8  },
-  LINK: { symbol: 'LINK', address: '0x514910771AF9Ca656af840dff83E8264EcF986CA', decimals: 18 },
-  UNI:  { symbol: 'UNI',  address: '0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984', decimals: 18 },
-} as const
+// Token shape served by the backend GET /tokens directory (DB-backed). The token
+// list is no longer hardcoded here — it loads at runtime via AppConfig so tokens
+// can be added with a DB insert instead of a frontend redeploy.
+export interface TokenInfo {
+  symbol:   string
+  address:  string
+  decimals: number
+  name?:    string
+  chainId?: number
+}
 
-export type TK = keyof typeof TOKENS
-
-// Resolve a known token by on-chain address (case-insensitive).
-export function tokenByAddress(addr: string): { symbol: string; address: string; decimals: number } | null {
+// Resolve a token by on-chain address (case-insensitive) within a loaded list.
+export function tokenByAddress(addr: string, tokens: TokenInfo[]): TokenInfo | null {
   if (!addr) return null
   const lower = addr.toLowerCase()
-  for (const k of Object.keys(TOKENS) as TK[]) {
-    if (TOKENS[k].address.toLowerCase() === lower) return TOKENS[k]
-  }
-  return null
+  return tokens.find(t => t.address.toLowerCase() === lower) ?? null
 }
 
 export function short(addr: string): string {
@@ -80,12 +76,14 @@ export function maxHumanDecay(inDec: number, outDec: number): number {
 }
 
 // ── Token pill (symbol selector) ────────────────────────────────────────────
-export function TokenPill({ value, onChange, exclude }: { value: TK; onChange: (k: TK) => void; exclude?: TK }) {
+export function TokenPill({ tokens, value, onChange, exclude }: {
+  tokens: TokenInfo[]; value: string; onChange: (s: string) => void; exclude?: string
+}) {
   return (
     <div className="uni-token-pill">
-      <select value={value} onChange={e => onChange(e.target.value as TK)}>
-        {(Object.keys(TOKENS) as TK[]).filter(k => k !== exclude).map(k => (
-          <option key={k} value={k}>{k}</option>
+      <select value={value} onChange={e => onChange(e.target.value)}>
+        {tokens.filter(t => t.symbol !== exclude).map(t => (
+          <option key={t.symbol} value={t.symbol}>{t.symbol}</option>
         ))}
       </select>
       <span className="uni-pill-arrow">▾</span>

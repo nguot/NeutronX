@@ -140,10 +140,11 @@ library DynamicStakeLib {
     }
 
     /// Settlement-time refund: stakeAmount x
-    /// refundRow[fillRatioBucket(actualFillAmount, orderTotal)].
-    /// A small actual fill returns only a small fraction of the collateral
-    /// (the rest is forfeited to the treasury as a "sniping fee"); filling
-    /// >=70% of the order returns it in full.
+    /// refundRow[fillRatioBucket(actualFillAmount, committedFill)].
+    /// D-2: the ratio is the fraction of the filler's OWN commitment delivered,
+    /// not the fraction of the whole order. Delivering your full commitment (any
+    /// size) returns the stake in full; only under-delivering vs. what you
+    /// promised forfeits to the treasury.
     ///
     /// M-2: the row is snapshotted into the Registration at register time, so an
     /// owner who later rewrites the refund table cannot retroactively shrink the
@@ -151,10 +152,10 @@ library DynamicStakeLib {
     function computeRefund(
         uint256 stakeAmount,
         uint256 actualFillAmount,
-        uint256 orderTotal,
+        uint256 committedFill,
         uint32[5] memory refundRow
     ) internal pure returns (uint256) {
-        uint8 rBucket = getFillRatioBucket(actualFillAmount, orderTotal);
+        uint8 rBucket = getFillRatioBucket(actualFillAmount, committedFill);
         uint32 refundBps = refundRow[rBucket];
         return FullMath.mulDiv(stakeAmount, refundBps, 10000);
     }

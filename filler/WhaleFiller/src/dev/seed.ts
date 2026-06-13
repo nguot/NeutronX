@@ -19,7 +19,10 @@ const WHALES = [
 // Human-readable seed targets per symbol (converted to raw via token decimals).
 const TARGETS: Record<string, string> = {
   WETH: '5000',
-  USDC: '20000000',
+  // SEED_USDC_TARGET lets a test cap the filler's output inventory (and thus its
+  // per-fill capacity) below an order size — e.g. to force cooperative partial
+  // fills. Defaults to the "infinite-ish" 20M for normal dev/demo use.
+  USDC: process.env.SEED_USDC_TARGET || '20000000',
   USDT: '20000000',
   DAI:  '5000000',
   WBTC: '500',

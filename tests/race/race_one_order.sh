@@ -8,6 +8,11 @@
 set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 
+# Cap the fillers' auto-seeded USDC below our funding so the seeder doesn't top
+# them up to 20M (which would let one filler solo the order). With this, each
+# filler is limited to the 60k we fund → ~12 WETH single-fill cap < 20 WETH order.
+export SEED_USDC_TARGET=1
+
 INPUT=20000000000000000000      # 20 WETH
 MINOUT=45000000000              # 45,000 USDC floor (90% of ~50,000)
 PRICE=2500000000                # 2500 USDC / WETH
@@ -28,6 +33,11 @@ start_postgres
 start_backend
 start_fillers
 
+# ── snapshot filler USDC BEFORE the order (robust to whatever they were seeded/funded with) ──
+COW_BEFORE=$(usdc_bal "$A_COW"   | awk '{print $1}')
+WHALE_BEFORE=$(usdc_bal "$A_WHALE" | awk '{print $1}')
+echo "[race] filler USDC before — CoW=$COW_BEFORE  Whale=$WHALE_BEFORE"
+
 # ── submit the order and let the bots race ──
 echo "[race] submitting 20 WETH order…"
 HASH=$(submit_order "$INPUT" "$MINOUT" "$PRICE" "$DECAY" "$MFB" 1 70)
@@ -40,17 +50,20 @@ wait_filled "$HASH" "$INPUT" 150 || { echo "[race] FAIL: order not fully filled 
 echo "[race] ════ assertions ════"
 REM=$(onchain_remaining "$HASH" "$INPUT" | awk '{print $1}')
 SWUSDC=$(usdc_bal "$A0" | awk '{print $1}')
-COW_PAID=$(( FUND_USDC - $(usdc_bal "$A_COW"   | awk '{print $1}') ))
-WHALE_PAID=$(( FUND_USDC - $(usdc_bal "$A_WHALE" | awk '{print $1}') ))
+COW_PAID=$(( COW_BEFORE   - $(usdc_bal "$A_COW"   | awk '{print $1}') ))
+WHALE_PAID=$(( WHALE_BEFORE - $(usdc_bal "$A_WHALE" | awk '{print $1}') ))
 
-sleep 8  # let the backend indexer catch up, for the informational line
-NFILLS=$(fills_count "$HASH"); STATUS=$(order_status "$HASH")
+# wait for the backend INDEXER to reflect the on-chain fills in the DB
+echo "[race] waiting for indexer to update the DB…"
+STATUS=pending
+for i in $(seq 1 20); do STATUS=$(order_status "$HASH"); [ "$STATUS" = filled ] && break; sleep 1.5; done
+NFILLS=$(fills_count "$HASH")
 
 echo "  on-chain remaining = $REM"
 echo "  swapper USDC       = $SWUSDC   (floor = $MINOUT)"
 echo "  CoWFiller   paid   = $COW_PAID USDC"
 echo "  WhaleFiller paid   = $WHALE_PAID USDC"
-echo "  backend: status=$STATUS fills=$NFILLS (informational; indexer is async)"
+echo "  backend DB: status=$STATUS  fills=$NFILLS"
 
 fail=0
 [ "$REM" = 0 ]                              || { echo "  ✗ order not fully filled on-chain"; fail=1; }
@@ -60,5 +73,8 @@ awk "BEGIN{exit !($SWUSDC >= $MINOUT)}"     || { echo "  ✗ swapper received be
 # neither filler covered the whole order alone (each paid < total output)
 awk "BEGIN{exit !($COW_PAID < $SWUSDC && $WHALE_PAID < $SWUSDC)}" \
                                             || { echo "  ✗ a single filler covered 100%"; fail=1; }
-[ "$fail" = 0 ] && echo "[race] ✅ PASS — both fillers filled partial chunks, neither did 100%, swapper ≥ floor" \
+# the DB (indexer) must reflect reality, not just the chain
+[ "$STATUS" = filled ]                      || { echo "  ✗ backend DB still not 'filled' — indexer didn't pick up the fills"; fail=1; }
+[ "$NFILLS" -ge 2 ]                         || { echo "  ✗ backend DB recorded < 2 fills — indexer gap"; fail=1; }
+[ "$fail" = 0 ] && echo "[race] ✅ PASS — filled cooperatively, neither did 100%, swapper ≥ floor, and the DB reflects it" \
                 || { echo "[race] ❌ FAIL"; exit 1; }

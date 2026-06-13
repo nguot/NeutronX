@@ -240,8 +240,22 @@ async function simulate(hash){
 
     const fillAmt=remaining*BigInt(sliderPct)/100n
     const minFill=inputAmt*BigInt(detail.minFillBps||100)/10000n
-    const actualFill=fillAmt<minFill?minFill:fillAmt
+    let actualFill=fillAmt<minFill?minFill:fillAmt
+    if(actualFill>remaining)actualFill=remaining  // final chunk completes the order, even if below minFill
     const outputNeeded=actualFill*price/(10n**18n)
+
+    // Honor the swapper's minOutput floor — the reactor reverts any fill whose
+    // output is below it. Without this the preview shows a fill the on-chain tx rejects.
+    const minOutput=BigInt(detail.minOutput||'0')
+    const requiredOut=inputAmt>0n?actualFill*minOutput/inputAmt:0n
+    if(outputNeeded<requiredOut){
+      const oSym=sym(detail.outputToken)
+      el.className='result no'
+      el.textContent='would REVERT — fill provides '+human(outputNeeded.toString(),detail.outputToken)+' '+oSym
+        +' < swapper minimum '+human(requiredOut.toString(),detail.outputToken)+' '+oSym+' (auction price below floor)'
+      return
+    }
+
     const filledPctAfter=inputAmt>0n?Number((filled+actualFill)*100n/inputAmt):0
 
     const inSym=sym(detail.inputToken),outSym=sym(detail.outputToken)

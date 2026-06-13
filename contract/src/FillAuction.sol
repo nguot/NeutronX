@@ -255,7 +255,11 @@ contract FillAuction is IFillAuction, ReentrancyGuard {
 
         uint256 stake     = reg.stakeAmount;
         // M-2: refund off the snapshotted row, not the (mutable) live table.
-        uint256 refund    = DynamicStakeLib.computeRefund(stake, actualFillAmount, reg.orderTotal, reg.refundRow);
+        // D-2: key the refund to the filler's OWN commitment (reg.fillAmount), not
+        // the whole order — so honouring your commitment (any size) returns the full
+        // stake, and only under-delivering vs. what you promised is penalised.
+        // Fragmentation is controlled separately by the order's minFillBps.
+        uint256 refund    = DynamicStakeLib.computeRefund(stake, actualFillAmount, reg.fillAmount, reg.refundRow);
         uint256 forfeited = stake - refund;
 
         pendingReturns[filler] += refund;
