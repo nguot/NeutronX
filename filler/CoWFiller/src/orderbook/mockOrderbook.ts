@@ -1,5 +1,6 @@
-// Mock CEX orderbook — simulates real limit orders from market participants.
-// In production this would be a live WebSocket feed from Binance/Coinbase.
+// CEX orderbook source for the matcher. getOrderbook() tries a live Binance
+// depth snapshot (see liveOrderbook.ts) first; the static books below are the
+// fallback when a pair isn't covered live or the request fails.
 //
 // Price format: raw outputToken per 1 raw inputToken, same as order.startPrice.
 //   e.g. WETH→USDC at $2510: 2510 * 10^6 = 2_510_000_000n
@@ -8,6 +9,7 @@
 // Bids are sorted descending (best price first) — matcher walks top-down.
 
 import { SUPPORTED_TOKENS } from '../config'
+import { fetchLiveOrderbook } from './liveOrderbook'
 
 export interface BidLevel {
   price: bigint  // raw outputToken per 1e18 raw inputToken
@@ -71,11 +73,21 @@ const ALL_BOOKS: MockOrderbook[] = [
   USDC_WETH_BOOK,
 ]
 
-export function getOrderbook(inputToken: string, outputToken: string): MockOrderbook | null {
+function getStaticOrderbook(inputToken: string, outputToken: string): MockOrderbook | null {
   return ALL_BOOKS.find(
     b => b.inputToken.toLowerCase()  === inputToken.toLowerCase() &&
          b.outputToken.toLowerCase() === outputToken.toLowerCase()
   ) ?? null
+}
+
+export async function getOrderbook(inputToken: string, outputToken: string): Promise<MockOrderbook | null> {
+  try {
+    const live = await fetchLiveOrderbook(inputToken, outputToken)
+    if (live) return live
+  } catch (e) {
+    console.warn(`[Orderbook] live fetch failed (${(e as Error).message}) — using static book`)
+  }
+  return getStaticOrderbook(inputToken, outputToken)
 }
 
 export function logOrderbook(book: MockOrderbook): void {

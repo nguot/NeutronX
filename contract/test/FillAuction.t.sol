@@ -33,12 +33,15 @@ contract MockReactor {
     // IReactorView surface used by FillAuction.slash / releaseRegistration.
     // Defaults model an order that is still open and not cancelled.
     bool public cancelledFlag;
+    bool public nonceInvalidatedFlag;
     uint256 public remainingOverride = type(uint256).max; // sentinel: "use orderAmount"
 
     function setCancelled(bool v) external { cancelledFlag = v; }
+    function setNonceInvalidated(bool v) external { nonceInvalidatedFlag = v; }
     function setRemaining(uint256 v) external { remainingOverride = v; }
 
     function isCancelled(bytes32) external view returns (bool) { return cancelledFlag; }
+    function isNonceInvalidatedForOrder(bytes32) external view returns (bool) { return nonceInvalidatedFlag; }
 
     function remainingInput(bytes32, uint256 orderAmount) external view returns (uint256) {
         return remainingOverride == type(uint256).max ? orderAmount : remainingOverride;

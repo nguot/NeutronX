@@ -140,6 +140,13 @@ contract EscrowSrcFactory is ReentrancyGuard {
         ")"
     );
 
+    // 3.7: griefing floor. A positive-but-dust safety deposit makes locking a
+    // large slot into an unclaimable escrow nearly free (cost = gas + 1 wei).
+    // Require a real minimum so abandoned fills are economically costly. Flat
+    // rather than slot-proportional for simplicity — could be made a configurable
+    // / value-scaled constructor parameter in a production deployment.
+    uint256 public constant MIN_SAFETY_DEPOSIT = 0.001 ether;
+
     // ─── Immutables ───────────────────────────────────────────────────────────
     address  public immutable implementation; // EscrowSrc logic contract
     IPermit2 public immutable permit2;
@@ -226,6 +233,9 @@ contract EscrowSrcFactory is ReentrancyGuard {
         bytes32            hashlock,
         bytes32[] calldata merkleProof
     ) external payable nonReentrant returns (address escrow) {
+        // 3.7: enforce the griefing floor before any state changes or fund pulls.
+        require(msg.value >= MIN_SAFETY_DEPOSIT, "deposit below floor");
+
         bytes32 orderHash = _hashOrder(info);
         OrderState storage order = _orders[orderHash];
 
@@ -241,6 +251,10 @@ contract EscrowSrcFactory is ReentrancyGuard {
             // Integer division truncates; the final slot absorbs the
             // remainder so that sum(slot amounts) == inputAmount exactly.
             uint256 slotAmount     = info.inputAmount / info.numSlots;
+            // 3.8: reject orders where inputAmount < numSlots — every non-final
+            // slot would round to zero and revert in EscrowSrc.initialize(),
+            // leaving only the final slot fillable.
+            require(slotAmount > 0, "slot amount zero");
             uint256 lastSlotAmount = info.inputAmount - slotAmount * (info.numSlots - 1);
 
             order.swapper        = info.swapper;

@@ -54,6 +54,7 @@ contract FillAuctionHandler is Test {
     // never cancelled and are modelled as still-open (remaining > 0), so the
     // registrant genuinely abandoned committed volume and is slashable.
     function isCancelled(bytes32) external pure returns (bool) { return false; }
+    function isNonceInvalidatedForOrder(bytes32) external pure returns (bool) { return false; }
     function remainingInput(bytes32, uint256 orderAmount) external pure returns (uint256) { return orderAmount; }
 
     /// Register `actor` for a random fill of a random order, sized so the

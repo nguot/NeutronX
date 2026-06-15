@@ -65,7 +65,7 @@ export async function decide(order: OrderInfo, currentBlock: number): Promise<Fi
   }
 
   // ── Orderbook lookup ──────────────────────────────────────────────────────
-  const book = getOrderbook(order.inputToken, order.outputToken)
+  const book = await getOrderbook(order.inputToken, order.outputToken)
   if (!book) return no(`no orderbook for ${sym(order.inputToken)}→${sym(order.outputToken)}`)
 
   // ── Inventory capacity ────────────────────────────────────────────────────

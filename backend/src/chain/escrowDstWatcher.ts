@@ -86,10 +86,10 @@ export function startEscrowDstWatcher(opts: EscrowDstWatcherOpts): void {
         try {
           const logs = await factory.queryFilter(factory.filters.EscrowCreated(), fromBlock, toBlock)
           for (const log of logs) {
-            const [escrow, , hashlock, recipient, , amount] = log.args!
+            const [escrow, dstFiller, hashlock, recipient, , amount, dstExpiry] = log.args!
             console.log(`[${label}] EscrowCreated  ${escrow.slice(0,10)}…  H_i=${hashlock.slice(0,10)}…`)
             try {
-              await handleEscrow(label, chainId, provider, escrow, hashlock, recipient, amount, log.blockNumber, confs)
+              await handleEscrow(label, chainId, provider, escrow, dstFiller, hashlock, recipient, amount, dstExpiry, log.blockNumber, confs)
             } catch (e: any) {
               console.error(`[${label}] error handling escrow ${escrow.slice(0,10)}…:`, e?.message ?? e)
             }
@@ -117,9 +117,11 @@ async function handleEscrow(
   dstChainId: number,
   provider: ethers.providers.JsonRpcProvider,
   escrowAddr: string,
+  dstFiller: string,
   hashlock: string,
   recipient: string,
   amount: ethers.BigNumber,
+  dstExpiry: ethers.BigNumber,
   deployBlock: number,
   confs: number
 ): Promise<void> {
@@ -143,12 +145,29 @@ async function handleEscrow(
     return
   }
 
-  // Verify amount >= minOutput / numSlots
+  // Verify amount >= this slot's exact minimum output.
   const orderRow  = await db.query('SELECT num_slots FROM cc_orders WHERE order_hash=$1', [match.order_hash])
   const numSlots  = orderRow.rows[0]?.num_slots ?? 1
-  const minPerSlot = BigInt(match.min_output) / BigInt(numSlots)
+  // 3.6: the source factory makes the FINAL slot absorb the integer-division
+  // remainder (lastSlotAmount), so its required output is larger than a flat
+  // minOutput/numSlots. Mirror that exact sizing instead of a flat share, or a
+  // last-slot filler could fund only the flat minimum yet pull a larger source amount.
+  const basePerSlot = BigInt(match.min_output) / BigInt(numSlots)
+  const minPerSlot  = match.slot_index === numSlots - 1
+    ? BigInt(match.min_output) - basePerSlot * BigInt(numSlots - 1)
+    : basePerSlot
   if (amount.toBigInt() < minPerSlot) {
     console.warn(`[${label}] slot ${match.slot_index}: amount ${amount} < required ${minPerSlot} — skipping`)
+    return
+  }
+
+  // 3.1: enforce destination-before-source timelock ordering. The backend
+  // sanctioned t2_expiry = deadline - t2Buffer, strictly before the source
+  // leg's expiry (T1). Refuse to reveal the secret for any escrow whose
+  // on-chain expiry exceeds it — otherwise a filler could set T2 >= T1, let
+  // the source leg expire and cancel it, and still collect the destination leg.
+  if (BigInt(dstExpiry.toString()) > BigInt(match.t2_expiry)) {
+    console.warn(`[${label}] slot ${match.slot_index}: dst expiry ${dstExpiry} > sanctioned t2 ${match.t2_expiry} — refusing to reveal secret`)
     return
   }
 
@@ -192,6 +211,23 @@ async function handleEscrow(
 
   // cosignerWallet is derived from rootSecret (same key every time, deterministic)
   const cosignerWallet = new ethers.Wallet(rootSecret, provider)
+
+  // 3.2: bind both legs to the SAME filler before revealing the secret.
+  // assigned_filler is the ACTUAL on-chain source filler (msg.sender of
+  // fillSlot, recorded by escrowSrcWatcher). Re-read it fresh here — after the
+  // confirmation wait — so a slightly-late SlotFilled has had time to land. If
+  // the destination escrow was funded by anyone other than the source filler,
+  // never reveal the secret: otherwise an attacker who front-ran the source
+  // fill would withdraw it out from under an honest destination funder.
+  const srcFillerRow = await db.query(
+    'SELECT assigned_filler FROM cc_slots WHERE order_hash=$1 AND slot_index=$2',
+    [match.order_hash, match.slot_index]
+  )
+  const srcFiller = srcFillerRow.rows[0]?.assigned_filler as string | null
+  if (!srcFiller || dstFiller.toLowerCase() !== srcFiller.toLowerCase()) {
+    console.warn(`[${label}] slot ${match.slot_index}: dst filler ${dstFiller} != source filler ${srcFiller ?? '(none recorded yet)'} — refusing to reveal secret`)
+    return
+  }
 
   console.log(`[${label}] claiming  slot=${match.slot_index}  escrow=${escrowAddr.slice(0,10)}…`)
 

@@ -105,7 +105,13 @@ export async function ccFill(orderHash: string, slotIndex: number): Promise<stri
   const proof:       string[] = slot.proof
   const swapper:     string   = order.swapper
   const outputToken: string   = order.outputToken
-  const slotAmount:  bigint   = BigInt(order.minOutput) / BigInt(order.numSlots)
+  // 3.6: the source factory makes the FINAL slot absorb the integer-division
+  // remainder, so fund the exact per-slot minimum (mirrors lastSlotAmount) —
+  // a flat minOutput/numSlots would underfund the destination on the last slot.
+  const baseSlot:    bigint   = BigInt(order.minOutput) / BigInt(order.numSlots)
+  const slotAmount:  bigint   = slotIndex === order.numSlots - 1
+    ? BigInt(order.minOutput) - baseSlot * BigInt(order.numSlots - 1)
+    : baseSlot
 
   // ── Resolve src/dst chain legs from this order's direction ──────────────────
   const { srcProvider, srcWallet, srcFactoryAddr, dstProvider, dstWallet, dstFactoryAddr } = legs

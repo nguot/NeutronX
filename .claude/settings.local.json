@@ -198,7 +198,16 @@
       "Bash(graphify path *)",
       "WebFetch(domain:docs.kyberswap.com)",
       "PowerShell(Get-Command forge -ErrorAction SilentlyContinue)",
-      "PowerShell($env:USERPROFILE)"
+      "PowerShell($env:USERPROFILE)",
+      "Bash(node node_modules/ts-node/dist/bin.js _tmp_test_liveorderbook.ts)",
+      "PowerShell($f = Get-Command forge -ErrorAction SilentlyContinue; if \\($f\\) { $f.Source } else { \"not on PATH\" }; wsl bash -lc \"which forge\" 2>$null)",
+      "PowerShell(wsl -e bash -lic \"cd /mnt/c/Users/vutie/Documents/DATN/dex-aggregator/contract && forge build 2>&1 | tail -40\")",
+      "PowerShell(wsl -e bash -lic \"cd /mnt/c/Users/vutie/Documents/DATN/dex-aggregator/contract && forge build 2>&1 | grep -iE 'error|Compiler run successful|Compiling' | head -20\")",
+      "PowerShell(wsl -e bash -lic \"cd /mnt/c/Users/vutie/Documents/DATN/dex-aggregator/contract && forge test 2>&1 | grep -iE 'Suite result|FAIL|failed|Compiler run' | head -60\")",
+      "PowerShell(wsl -e bash -lic \"cd /mnt/c/Users/vutie/Documents/DATN/dex-aggregator/backend && npx tsc --noEmit 2>&1 | head -30; echo '--- backend exit:' \\\\$?\")",
+      "PowerShell(wsl -e bash -lic \"cd /mnt/c/Users/vutie/Documents/DATN/dex-aggregator/filler/CoWFiller && npx tsc --noEmit 2>&1 | head -30; echo '--- filler exit:' \\\\$?\")",
+      "PowerShell(wsl -e bash -lic \"cd /mnt/c/Users/vutie/Documents/DATN/dex-aggregator/backend && npx tsc --noEmit 2>&1 | grep -E '^src/' | head -30; echo '--- src errors above \\(none = clean\\)'\")",
+      "PowerShell(wsl -e bash -lic \"cd /mnt/c/Users/vutie/Documents/DATN/dex-aggregator/contract && forge test --match-contract 'AuditFixesTest|EscrowSrcFactoryTest' -vv 2>&1 | grep -iE 'test_|Suite result|FAIL|revert' | head -60\")"
     ],
     "additionalDirectories": [
       "\\tmp"

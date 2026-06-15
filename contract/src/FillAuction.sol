@@ -11,6 +11,7 @@ import { IFillAuction } from "./interfaces/IFillAuction.sol";
 interface IReactorView {
     function remainingInput(bytes32 orderHash, uint256 orderAmount) external view returns (uint256);
     function isCancelled(bytes32 orderHash) external view returns (bool);
+    function isNonceInvalidatedForOrder(bytes32 orderHash) external view returns (bool);
 }
 
 contract FillAuction is IFillAuction, ReentrancyGuard {
@@ -205,6 +206,9 @@ contract FillAuction is IFillAuction, ReentrancyGuard {
         require(!reg.filled && !reg.slashed && !reg.released, "invalid state");
         require(block.number > reg.deadline + SLASH_WINDOW, "too early");
         require(!IReactorView(reactor).isCancelled(orderHash), "cancelled");                         // H-2
+        // 3.3: a swapper who invalidated the order's nonce made it terminally
+        // unfillable through no fault of the filler — not a slashable abandonment.
+        require(!IReactorView(reactor).isNonceInvalidatedForOrder(orderHash), "nonce invalidated");
         require(IReactorView(reactor).remainingInput(orderHash, reg.orderTotal) > 0, "order satisfied"); // H-1
 
         reg.slashed = true;
@@ -227,9 +231,12 @@ contract FillAuction is IFillAuction, ReentrancyGuard {
         require(reg.filler != address(0),                    "not registered");
         require(!reg.filled && !reg.slashed && !reg.released, "invalid state");
 
-        bool satisfied = IReactorView(reactor).remainingInput(orderHash, reg.orderTotal) == 0;
-        bool cancelled = IReactorView(reactor).isCancelled(orderHash);
-        require(satisfied || cancelled, "still fillable");
+        bool satisfied   = IReactorView(reactor).remainingInput(orderHash, reg.orderTotal) == 0;
+        bool cancelled   = IReactorView(reactor).isCancelled(orderHash);
+        // 3.3: nonce invalidation is terminal too — the order can never be
+        // filled again, so the stranded stake must be reclaimable.
+        bool invalidated = IReactorView(reactor).isNonceInvalidatedForOrder(orderHash);
+        require(satisfied || cancelled || invalidated, "still fillable");
 
         reg.released = true;
         pendingReturns[reg.filler] += reg.stakeAmount;

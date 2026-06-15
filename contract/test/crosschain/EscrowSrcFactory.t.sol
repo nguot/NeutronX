@@ -206,9 +206,45 @@ contract EscrowSrcFactoryTest is Test {
         bytes32[] memory proof0 = new bytes32[](1);
         proof0[0] = leaf1;
 
+        // 3.7: a zero (or dust) deposit is now rejected by the factory's
+        // griefing floor before the escrow is ever initialized.
         vm.prank(filler);
-        vm.expectRevert("zero safety deposit");
+        vm.expectRevert("deposit below floor");
         factory.fillSlot{value: 0}(info, swapperSig, cosignerSig, 0, hashlock0, proof0);
+    }
+
+    // ── 3.7: a positive-but-dust deposit below the floor is also rejected ──────
+    function test_fillSlot_dustSafetyDeposit_reverts() public {
+        EscrowSrcFactory.OrderInfo memory info = _info();
+        bytes32 orderHash = factory.hashOrder(info);
+        bytes memory swapperSig  = _sign(swapperKey, orderHash);
+        bytes memory cosignerSig = _sign(cosignerKey, orderHash);
+
+        bytes32[] memory proof0 = new bytes32[](1);
+        proof0[0] = leaf1;
+
+        uint256 dust = factory.MIN_SAFETY_DEPOSIT() - 1;
+        vm.prank(filler);
+        vm.expectRevert("deposit below floor");
+        factory.fillSlot{value: dust}(info, swapperSig, cosignerSig, 0, hashlock0, proof0);
+    }
+
+    // ── 3.8: orders where inputAmount < numSlots (slotAmount rounds to 0) are
+    //         rejected at creation, before any funds are pulled ────────────────
+    function test_fillSlot_zeroSlotAmount_reverts() public {
+        EscrowSrcFactory.OrderInfo memory info = _info();
+        info.inputAmount = 1; // 1 wei across 2 slots → slotAmount = 0
+        bytes32 orderHash = factory.hashOrder(info);
+        bytes memory swapperSig  = _sign(swapperKey, orderHash);
+        bytes memory cosignerSig = _sign(cosignerKey, orderHash);
+
+        // hashlock/proof are never reached — the slotAmount guard fires first.
+        bytes32[] memory proof0 = new bytes32[](1);
+        proof0[0] = leaf1;
+
+        vm.prank(filler);
+        vm.expectRevert("slot amount zero");
+        factory.fillSlot{value: DEPOSIT}(info, swapperSig, cosignerSig, 0, hashlock0, proof0);
     }
 
     // ── M-3: a slot whose escrow was grief-filled (by someone who can never

@@ -38,6 +38,8 @@ contract PartialFillReactor is ReentrancyGuard {
     IPermit2     public immutable permit2;
     IFillAuction public immutable fillAuction;
     address      public immutable cosigner;
+    // M-4: deployer/owner — the only address allowed to wire fallbackExecutor.
+    address      public immutable owner;
 
     bytes32 public immutable DOMAIN_SEPARATOR;
     // C-1: startPrice / decayPerBlock / feeTier are now part of the signed
@@ -59,6 +61,10 @@ contract PartialFillReactor is ReentrancyGuard {
     mapping(bytes32 => bool)    private _cancelled;
     // L-3: lets a swapper invalidate an order by (swapper, nonce) before/between fills.
     mapping(address => mapping(uint256 => bool)) private _nonceInvalidated;
+    // 3.3: remember each registered order's (swapper, nonce) so FillAuction can
+    // recognise nonce invalidation as a terminal order state by orderHash alone.
+    mapping(bytes32 => address) private _orderSwapper;
+    mapping(bytes32 => uint256) private _orderNonce;
 
     address public fallbackExecutor;
 
@@ -78,6 +84,7 @@ contract PartialFillReactor is ReentrancyGuard {
         permit2     = IPermit2(_permit2);
         fillAuction = IFillAuction(_fillAuction);
         cosigner    = _cosigner;
+        owner       = msg.sender;
 
         DOMAIN_SEPARATOR = keccak256(abi.encode(
             keccak256("EIP712Domain(string name,uint256 chainId,address verifyingContract)"),
@@ -95,6 +102,10 @@ contract PartialFillReactor is ReentrancyGuard {
         bytes32 orderHash = _hashOrder(order.info);
         require(!_cancelled[orderHash], "cancelled");
         _validateOrder(order);
+        // 3.3: snapshot (swapper, nonce) so a later invalidateNonce() is
+        // observable from FillAuction's slash/releaseRegistration by orderHash.
+        _orderSwapper[orderHash] = order.info.swapper;
+        _orderNonce[orderHash]   = order.info.nonce;
         fillAuction.register{value: msg.value}(
             msg.sender, orderHash, fillAmount, order.info.inputAmount, order.info.deadline,
             order.info.inputToken, order.info.feeTier
@@ -217,11 +228,24 @@ contract PartialFillReactor is ReentrancyGuard {
         require(paid >= minOutputAmount, "min output total");
     }
 
-    /// One-time setter — can only be called once (when fallbackExecutor is still zero).
+    /// One-time setter — can only be called once (when fallbackExecutor is still
+    /// zero). M-4: restricted to the deployer/owner so a third party cannot
+    /// front-run the deployment wiring and seize the fallback hook.
     function setFallbackExecutor(address _fallbackExecutor) external {
+        require(msg.sender == owner, "not owner");
         require(fallbackExecutor == address(0), "already set");
         require(_fallbackExecutor != address(0), "zero address");
         fallbackExecutor = _fallbackExecutor;
+    }
+
+    /// 3.3: true once a registered order's (swapper, nonce) has been invalidated
+    /// by the swapper. FillAuction uses this to treat nonce invalidation as a
+    /// terminal order state — stranded registrations become releasable and can
+    /// no longer be slashed.
+    function isNonceInvalidatedForOrder(bytes32 orderHash) external view returns (bool) {
+        address swapper = _orderSwapper[orderHash];
+        if (swapper == address(0)) return false;
+        return _nonceInvalidated[swapper][_orderNonce[orderHash]];
     }
 
     /// L-3: swapper invalidates any order carrying this nonce. Checked on every

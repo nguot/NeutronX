@@ -198,4 +198,45 @@ contract AuditFixesTest is Test {
         vm.expectRevert("nonce invalidated");
         reactor.executePartialChunk(o, INPUT_AMOUNT);
     }
+
+    // ── 3.3: nonce invalidation is a terminal order state ──
+    // A swapper who invalidates the nonce mid-order makes it unfillable. The
+    // honest registrant must NOT be slashable for that, and must be able to
+    // reclaim the stranded stake.
+
+    function test_33_invalidatedNonce_notSlashable_butReleasable() public {
+        PartialFillReactor.SignedOrder memory o = _signed(0, START_PRICE);
+        bytes32 h = _hash(o.info);
+        _register(fillerA, o, INPUT_AMOUNT);
+
+        assertFalse(reactor.isNonceInvalidatedForOrder(h));
+        vm.prank(swapper);
+        reactor.invalidateNonce(1);
+        assertTrue(reactor.isNonceInvalidatedForOrder(h));
+
+        // Past the slash window the registrant would otherwise look "abandoned":
+        // remaining > 0 and the order was never cancelled. The new guard blocks it.
+        vm.roll(DEADLINE + auction.SLASH_WINDOW() + 1);
+        vm.expectRevert("nonce invalidated");
+        auction.slash(h, fillerA);
+
+        // And the stranded stake is reclaimable in full.
+        auction.releaseRegistration(h, fillerA);
+        assertEq(auction.pendingReturns(fillerA), STAKE);
+    }
+
+    // ── 3.4: setFallbackExecutor is restricted to the deployer/owner ──
+
+    function test_34_setFallbackExecutor_onlyOwner() public {
+        // Fresh reactor — owner is this test contract (the deployer).
+        PartialFillReactor fresh = new PartialFillReactor(address(permit2), address(auction), cosigner);
+
+        vm.prank(fillerA); // not the owner
+        vm.expectRevert("not owner");
+        fresh.setFallbackExecutor(fallbackExec);
+
+        // Owner can still wire it exactly once.
+        fresh.setFallbackExecutor(fallbackExec);
+        assertEq(fresh.fallbackExecutor(), fallbackExec);
+    }
 }

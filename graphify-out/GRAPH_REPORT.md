@@ -1,16 +1,16 @@
 # Graph Report - dex-aggregator  (2026-06-15)
 
 ## Corpus Check
-- 120 files · ~118,675 words
+- 121 files · ~119,673 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 930 nodes · 1247 edges · 73 communities (59 shown, 14 thin omitted)
+- 938 nodes · 1262 edges · 73 communities (59 shown, 14 thin omitted)
 - Extraction: 100% EXTRACTED · 0% INFERRED · 0% AMBIGUOUS · INFERRED: 4 edges (avg confidence: 0.8)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `bd6093d1`
+- Built from commit: `24121634`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -119,7 +119,7 @@
 
 ### Community 0 - "Community 0"
 Cohesion: 0.05
-Nodes (74): ERC20_ABI, ESCROW_SRC_ABI, ESCROW_SRC_FACTORY_ABI, SAFETY_DEPOSIT, claimQueues, ESCROW_DST_ABI, EscrowDstWatcherOpts, FACTORY_ABI (+66 more)
+Nodes (73): ERC20_ABI, ESCROW_SRC_ABI, ESCROW_SRC_FACTORY_ABI, SAFETY_DEPOSIT, claimQueues, ESCROW_DST_ABI, EscrowDstWatcherOpts, FACTORY_ABI (+65 more)
 
 ### Community 1 - "Community 1"
 Cohesion: 0.11
@@ -135,7 +135,7 @@ Nodes (26): author, dependencies, cors, dotenv, ethers, express, pg, @uniswap/sd
 
 ### Community 4 - "Community 4"
 Cohesion: 0.11
-Nodes (23): getAggregator(), router, cancelOrder(), createOrder(), ERC20_ABI, getDomainSeparator(), getOrder(), getOrders() (+15 more)
+Nodes (24): getAggregator(), router, cancelOrder(), createOrder(), ERC20_ABI, getDomainSeparator(), getFillerSwapFills(), getOrder() (+16 more)
 
 ### Community 5 - "Community 5"
 Cohesion: 0.09
@@ -166,8 +166,8 @@ Cohesion: 0.10
 Nodes (19): module, dependencies, dotenv, ethers, description, devDependencies, ts-node, @types/node (+11 more)
 
 ### Community 12 - "Community 12"
-Cohesion: 0.18
-Nodes (15): bootstrap(), executor, listener, decide(), sym(), match(), MatchResult, ALL_BOOKS (+7 more)
+Cohesion: 0.13
+Nodes (21): bootstrap(), executor, listener, decide(), sym(), match(), MatchResult, BinanceDepth (+13 more)
 
 ### Community 13 - "Community 13"
 Cohesion: 0.11
@@ -350,7 +350,7 @@ Cohesion: 0.10
 Nodes (28): AGGREGATORS, availableAggregators(), resolveAggregatorChainId(), CHAIN_NAMES, KyberBuildResponse, KyberRouteResponse, kyberswapAdapter, oneInchAdapter (+20 more)
 
 ## Knowledge Gaps
-- **454 isolated node(s):** `name`, `version`, `description`, `main`, `start` (+449 more)
+- **455 isolated node(s):** `name`, `version`, `description`, `main`, `start` (+450 more)
   These have ≤1 connection - possible missing edges or undocumented components.
 - **14 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
@@ -362,9 +362,9 @@ _Questions this graph is uniquely positioned to answer:_
 - **Why does `db` connect `Community 0` to `Community 4`, `Community 77`?**
   _High betweenness centrality (0.003) - this node is a cross-community bridge._
 - **What connects `name`, `version`, `description` to the rest of the system?**
-  _454 weakly-connected nodes found - possible documentation gaps or missing edges._
+  _455 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `Community 0` be split into smaller, more focused modules?**
-  _Cohesion score 0.050686641697877656 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.05158324821246169 - nodes in this community are weakly interconnected._
 - **Should `Community 1` be split into smaller, more focused modules?**
   _Cohesion score 0.10826210826210826 - nodes in this community are weakly interconnected._
 - **Should `Community 2` be split into smaller, more focused modules?**
