@@ -290,6 +290,19 @@ export async function createCrossChainOrder(p: CreateOrderParams): Promise<Order
   if (!ids.includes(p.chainAId))   throw new Error(`Unknown source chain ${p.chainAId}`)
   if (!ids.includes(p.dstChainId)) throw new Error(`Unknown destination chain ${p.dstChainId}`)
   if (p.chainAId === p.dstChainId) throw new Error('Source and destination chains must differ')
+
+  // Trufy 3.1: the contracts do not enforce T2 < T1 on-chain, so the sanctioned
+  // destination expiry (t2_expiry = deadline - t2Buffer) is the only thing
+  // keeping the destination leg from outliving the source leg. A negative or
+  // oversized buffer would push t2_expiry >= deadline (T1) and revive the
+  // atomicity break, so reject anything that isn't a positive, bounded buffer
+  // that leaves t2_expiry strictly inside (0, deadline).
+  if (!Number.isInteger(p.t2Buffer) || p.t2Buffer <= 0) {
+    throw new Error('t2Buffer must be a positive integer (blocks before T1)')
+  }
+  if (p.t2Buffer >= p.deadline) {
+    throw new Error('t2Buffer too large: t2_expiry must be strictly between 0 and deadline')
+  }
   const reactorAddr = getChain(p.chainAId).escrowSrcFactory
 
   const rootSecret = await getRootSecret(p.swapper)

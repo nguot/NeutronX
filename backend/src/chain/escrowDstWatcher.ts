@@ -86,10 +86,10 @@ export function startEscrowDstWatcher(opts: EscrowDstWatcherOpts): void {
         try {
           const logs = await factory.queryFilter(factory.filters.EscrowCreated(), fromBlock, toBlock)
           for (const log of logs) {
-            const [escrow, dstFiller, hashlock, recipient, , amount, dstExpiry] = log.args!
+            const [escrow, dstFiller, hashlock, recipient, token, amount, dstExpiry] = log.args!
             console.log(`[${label}] EscrowCreated  ${escrow.slice(0,10)}…  H_i=${hashlock.slice(0,10)}…`)
             try {
-              await handleEscrow(label, chainId, provider, escrow, dstFiller, hashlock, recipient, amount, dstExpiry, log.blockNumber, confs)
+              await handleEscrow(label, chainId, provider, escrow, dstFiller, hashlock, recipient, token, amount, dstExpiry, log.blockNumber, confs)
             } catch (e: any) {
               console.error(`[${label}] error handling escrow ${escrow.slice(0,10)}…:`, e?.message ?? e)
             }
@@ -120,6 +120,7 @@ async function handleEscrow(
   dstFiller: string,
   hashlock: string,
   recipient: string,
+  token: string,
   amount: ethers.BigNumber,
   dstExpiry: ethers.BigNumber,
   deployBlock: number,
@@ -145,6 +146,16 @@ async function handleEscrow(
     return
   }
 
+  // 3.4: verify the filler locked the SIGNED output token. EscrowDstFactory lets
+  // the filler pass any token address; the EscrowCreated event carries it. Without
+  // this check a filler could lock a worthless/unintended token, satisfy the
+  // amount + expiry + filler checks, and still trigger secret reveal for the real
+  // source-side asset.
+  if (token.toLowerCase() !== match.output_token.toLowerCase()) {
+    console.warn(`[${label}] slot ${match.slot_index}: locked token ${token} != signed output ${match.output_token} — skipping`)
+    return
+  }
+
   // Verify amount >= this slot's exact minimum output.
   const orderRow  = await db.query('SELECT num_slots FROM cc_orders WHERE order_hash=$1', [match.order_hash])
   const numSlots  = orderRow.rows[0]?.num_slots ?? 1
@@ -161,6 +172,15 @@ async function handleEscrow(
     return
   }
 
+  // 3.1: defend against a malformed sanctioned expiry. createCrossChainOrder now
+  // rejects non-positive / oversized t2Buffer, but guard legacy rows too: the
+  // sanctioned t2_expiry must itself be strictly below the source deadline (T1),
+  // otherwise the ordering check below is meaningless.
+  if (BigInt(match.t2_expiry) >= BigInt(match.deadline)) {
+    console.warn(`[${label}] slot ${match.slot_index}: sanctioned t2 ${match.t2_expiry} >= source deadline ${match.deadline} — malformed order, refusing to reveal secret`)
+    return
+  }
+
   // 3.1: enforce destination-before-source timelock ordering. The backend
   // sanctioned t2_expiry = deadline - t2Buffer, strictly before the source
   // leg's expiry (T1). Refuse to reveal the secret for any escrow whose
@@ -171,10 +191,13 @@ async function handleEscrow(
     return
   }
 
-  // Mark slot as locked (escrow deployed) so API reflects current state
-  await updateSlotStatus(match.order_hash, match.slot_index, 'locked', escrowAddr)
-
-  console.log(`[${label}] slot ${match.slot_index} locked — waiting ${confs} confirmation(s)`)
+  // 3.7: do NOT leave 'available' yet. The slot must stay matchable until EVERY
+  // reveal precondition holds (including the source-filler binding below).
+  // Marking it 'locked' here used to strand the slot whenever a later check
+  // returned early — findSlotByHashlock only matches 'available' rows, so the
+  // legitimate escrow could never be re-matched. The transition is deferred to
+  // just before claim(), once all checks have passed.
+  console.log(`[${label}] slot ${match.slot_index} escrow seen — waiting ${confs} confirmation(s)`)
   await waitConfirmations(provider, deployBlock, confs)
 
   // Re-check the escrow hasn't already been claimed or refunded (e.g. race condition)
@@ -215,22 +238,31 @@ async function handleEscrow(
   // orders and matches the factory's immutable cosigner.
   const cosignerWallet = getCosignerWallet(provider)
 
-  // 3.2: bind both legs to the SAME filler before revealing the secret.
-  // assigned_filler is the ACTUAL on-chain source filler (msg.sender of
-  // fillSlot, recorded by escrowSrcWatcher). Re-read it fresh here — after the
-  // confirmation wait — so a slightly-late SlotFilled has had time to land. If
-  // the destination escrow was funded by anyone other than the source filler,
-  // never reveal the secret: otherwise an attacker who front-ran the source
-  // fill would withdraw it out from under an honest destination funder.
-  const srcFillerRow = await db.query(
-    'SELECT assigned_filler FROM cc_slots WHERE order_hash=$1 AND slot_index=$2',
-    [match.order_hash, match.slot_index]
-  )
-  const srcFiller = srcFillerRow.rows[0]?.assigned_filler as string | null
+  // 3.2 + 3.7: bind both legs to the SAME filler before revealing the secret,
+  // and tolerate source-indexing lag. assigned_filler is the ACTUAL on-chain
+  // source filler (msg.sender of fillSlot, recorded by escrowSrcWatcher). The
+  // source fill always precedes the destination funding, but escrowSrcWatcher
+  // may not have indexed SlotFilled yet — so poll briefly instead of giving up
+  // on the first miss (a single miss used to strand the slot permanently). On a
+  // genuine mismatch we return with the slot still 'available', so the
+  // legitimate filler's later escrow can still be matched.
+  let srcFiller: string | null = null
+  for (let i = 0; i < 10; i++) {
+    const row = await db.query(
+      'SELECT assigned_filler FROM cc_slots WHERE order_hash=$1 AND slot_index=$2',
+      [match.order_hash, match.slot_index]
+    )
+    srcFiller = row.rows[0]?.assigned_filler as string | null
+    if (srcFiller) break
+    await new Promise(r => setTimeout(r, 1500))
+  }
   if (!srcFiller || dstFiller.toLowerCase() !== srcFiller.toLowerCase()) {
-    console.warn(`[${label}] slot ${match.slot_index}: dst filler ${dstFiller} != source filler ${srcFiller ?? '(none recorded yet)'} — refusing to reveal secret`)
+    console.warn(`[${label}] slot ${match.slot_index}: dst filler ${dstFiller} != source filler ${srcFiller ?? '(none recorded yet)'} — leaving slot available, refusing to reveal secret`)
     return
   }
+
+  // 3.7: every reveal precondition now holds — only here do we leave 'available'.
+  await updateSlotStatus(match.order_hash, match.slot_index, 'locked', escrowAddr)
 
   console.log(`[${label}] claiming  slot=${match.slot_index}  escrow=${escrowAddr.slice(0,10)}…`)
 

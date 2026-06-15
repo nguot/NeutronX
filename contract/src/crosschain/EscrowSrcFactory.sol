@@ -159,7 +159,10 @@ contract EscrowSrcFactory is ReentrancyGuard {
     // M-3: bumped each time a slot is reopened after its escrow was cancelled.
     // Folded into the CREATE2 salt so a reopened slot deploys a FRESH clone at
     // a new address — the old (forever-stuck) clone is simply abandoned.
-    mapping(bytes32 => mapping(uint8 => uint8)) private _attempt;
+    // Trufy 3.8: attempt counter is uint32, not uint8 — a uint8 reverts on the
+    // 256th cancel/reopen cycle (checked add at 255) and permanently bricks the
+    // slot. uint32 puts that ceiling out of reach.
+    mapping(bytes32 => mapping(uint8 => uint32)) private _attempt;
 
     // ─── Events ───────────────────────────────────────────────────────────────
     event OrderCreated(
@@ -184,7 +187,7 @@ contract EscrowSrcFactory is ReentrancyGuard {
     // M-3: emitted when a permanently-stuck slot (its escrow was cancelled —
     // refunded to the swapper, with the safety deposit forfeited to whoever
     // cancelled it) is reopened for a fresh fillSlot() attempt.
-    event SlotReopened(bytes32 indexed orderHash, uint8 indexed slotIndex, uint8 attempt);
+    event SlotReopened(bytes32 indexed orderHash, uint8 indexed slotIndex, uint32 attempt);
 
     // ─── Constructor ──────────────────────────────────────────────────────────
     constructor(address _implementation, address _permit2, address _cosigner) {
@@ -326,7 +329,7 @@ contract EscrowSrcFactory is ReentrancyGuard {
         uint64 slotBit = uint64(1) << slotIndex;
         require(order.filledBitmap & slotBit != 0, "slot not filled");
 
-        uint8 attempt = _attempt[orderHash][slotIndex];
+        uint32 attempt = _attempt[orderHash][slotIndex];
         address escrow = Clones.predictDeterministicAddress(implementation, _salt(orderHash, slotIndex, attempt));
         require(EscrowSrc(escrow).cancelled(), "escrow not cancelled");
 
@@ -348,7 +351,7 @@ contract EscrowSrcFactory is ReentrancyGuard {
 
     // M-3: how many times (orderHash, slotIndex) has been reopened via
     // reopenSlot(). 0 means the slot is on its original clone/salt.
-    function attempt(bytes32 orderHash, uint8 slotIndex) external view returns (uint8) {
+    function attempt(bytes32 orderHash, uint8 slotIndex) external view returns (uint32) {
         return _attempt[orderHash][slotIndex];
     }
 
@@ -373,7 +376,7 @@ contract EscrowSrcFactory is ReentrancyGuard {
     // backward compatible with addresses already computed/communicated
     // off-chain for first-attempt fills. Reopened slots (attempt > 0) fold the
     // attempt counter into the salt so they deploy to a fresh address.
-    function _salt(bytes32 orderHash, uint8 slotIndex, uint8 attemptNum) internal pure returns (bytes32) {
+    function _salt(bytes32 orderHash, uint8 slotIndex, uint32 attemptNum) internal pure returns (bytes32) {
         return attemptNum == 0
             ? keccak256(abi.encodePacked(orderHash, slotIndex))
             : keccak256(abi.encodePacked(orderHash, slotIndex, attemptNum));

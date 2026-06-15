@@ -1,7 +1,7 @@
 # Graph Report - dex-aggregator  (2026-06-16)
 
 ## Corpus Check
-- 122 files · ~128,105 words
+- 122 files · ~128,470 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
@@ -10,7 +10,7 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `d9bf0a15`
+- Built from commit: `25c5794c`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
