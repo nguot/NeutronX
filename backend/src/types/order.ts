@@ -10,6 +10,9 @@ export interface OrderInput {
   startPrice:      string
   decayPerBlock:   number
   feeTier:         number
+  /** Block number the auction curve starts decaying from — used to redraw the
+   *  price chart for this order later (e.g. in Order History). */
+  startBlock?:     number
 }
 
 export interface CreateOrderRequest {
@@ -65,6 +68,9 @@ export interface OrderDetail extends Omit<OrderSummary, 'fills'> {
   feeTier:       number
   signature:     string
   fills:         FillSummary[]
+  /** Block number the auction curve started decaying from (see OrderInput.startBlock).
+   *  Derived from deadline - AUCTION_BLOCKS for orders that predate this column. */
+  startBlock:    number
 }
 
 export interface GetOrdersRequest {

@@ -15,6 +15,10 @@ import { getAggregator } from './aggregators'
 
 const ERC20_ABI = ['function balanceOf(address) view returns (uint256)', 'function symbol() view returns (string)', 'function decimals() view returns (uint8)']
 
+// Mirrors frontend/src/pages/DutchAuction.tsx's AUCTION_BLOCKS — used to derive
+// startBlock for orders created before that field was tracked (start_block IS NULL).
+const AUCTION_BLOCKS_FALLBACK = 200
+
 function getProvider(): ethers.providers.JsonRpcProvider {
   return new ethers.providers.JsonRpcProvider(process.env.ALCHEMY_RPC_URL || process.env.RPC_URL || 'http://127.0.0.1:8545')
 }
@@ -147,8 +151,8 @@ export async function createOrder(dto: CreateOrderRequest): Promise<CreateOrderR
       hash, swapper, input_token, output_token,
       input_amount, min_output, deadline, nonce,
       min_fill_bps, start_price, decay_per_block,
-      fee_tier, signature, preferred_aggregator, status
-    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,'pending')
+      fee_tier, signature, preferred_aggregator, start_block, status
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,'pending')
   `, [
     hash,
     order.swapper,
@@ -163,7 +167,8 @@ export async function createOrder(dto: CreateOrderRequest): Promise<CreateOrderR
     order.decayPerBlock,
     order.feeTier,
     cosignerSig,
-    preferredAggregator
+    preferredAggregator,
+    order.startBlock ?? null
   ])
 
   return { orderHash: hash, status: 'pending' }
@@ -235,6 +240,7 @@ export async function getOrder(hash: string): Promise<OrderDetail | null> {
     startPrice: o.start_price,
     decayPerBlock: parseInt(o.decay_per_block),
     feeTier: parseInt(o.fee_tier),
+    startBlock: o.start_block != null ? parseInt(o.start_block) : parseInt(o.deadline) - AUCTION_BLOCKS_FALLBACK,
     status: o.status,
     signature: o.signature,
     createdAt: o.created_at.toISOString(),

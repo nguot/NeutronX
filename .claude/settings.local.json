@@ -216,10 +216,20 @@
       "Bash(node node_modules/ts-node/dist/bin.js _tmp_diag.ts)",
       "PowerShell(wsl -e bash -lic \"cd /mnt/c/Users/vutie/Documents/DATN/dex-aggregator/contract && forge build 2>&1 | grep -iE 'error|Compiler run successful' | head -20; echo '--- done'\")",
       "PowerShell(wsl -e bash -lic \"cd /mnt/c/Users/vutie/Documents/DATN/dex-aggregator/contract && forge test --match-contract 'FillAuctionTest|EscrowSrcFactoryTest|AuditFixesTest|FillAuctionTerminalStateTest|PartialFillReactorTest|FrontRunGriefingTest|CrossChainTimelockTest|FillAuctionInvariant' -vv 2>&1 | grep -iE 'Suite result|FAIL|test_onFillSuccess|test_cancel|invariant_' | head -50\")",
-      "PowerShell(wsl -e bash -lic \"cd /mnt/c/Users/vutie/Documents/DATN/dex-aggregator/contract && forge test --match-contract 'FillAuctionTest|EscrowSrcFactoryTest|AuditFixesTest|FillAuctionTerminalStateTest|PartialFillReactorTest|FrontRunGriefingTest|CrossChainTimelockTest|MevFillerExploits|MultiOrderScenario|FillAuctionInvariant' 2>&1 | grep -iE 'Suite result|FAIL' | head -40\")"
+      "PowerShell(wsl -e bash -lic \"cd /mnt/c/Users/vutie/Documents/DATN/dex-aggregator/contract && forge test --match-contract 'FillAuctionTest|EscrowSrcFactoryTest|AuditFixesTest|FillAuctionTerminalStateTest|PartialFillReactorTest|FrontRunGriefingTest|CrossChainTimelockTest|MevFillerExploits|MultiOrderScenario|FillAuctionInvariant' 2>&1 | grep -iE 'Suite result|FAIL' | head -40\")",
+      "Bash(grep -E \"^FALLBACK_EXECUTOR|^ALCHEMY_RPC_URL|^CHAIN_ID\" backend/.env)",
+      "Bash(grep -E \"^DATABASE_URL|^PG|^POSTGRES\" backend/.env)",
+      "Bash(which psql *)",
+      "Bash(node -e \"console.log\\(require\\('./node_modules/ethers/package.json'\\).version\\)\")",
+      "Bash(node -e \"console.log\\(require\\('./node_modules/@uniswap/sdk-core/package.json'\\).version\\)\")",
+      "Bash(node test_uniswap.js)",
+      "Bash(node _tmp_test_uniswap.js)",
+      "Bash(cd \"/c/Users/vutie/Documents/DATN/dex-aggregator/backend\" && rm -f _tmp_test_uniswap.js)",
+      "Bash(python3 -m json.tool)"
     ],
     "additionalDirectories": [
-      "\\tmp"
+      "\\tmp",
+      "c:\\c\\Users\\vutie\\Documents\\DATN\\dex-aggregator\\backend"
     ]
   }
 }

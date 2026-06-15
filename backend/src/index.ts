@@ -10,6 +10,7 @@ import quoteRouter       from './routes/quote'
 import suggestRouter     from './routes/suggest'
 import tokensRouter      from './routes/tokens'
 import aggregatorsRouter from './routes/aggregators'
+import fallbackRouter    from './routes/fallback'
 import { startFallbackWatcher }   from './watcher/fallbackWatcher'
 import { startIndexer }           from './indexer/eventIndexer'
 import { startEscrowDstWatcher }  from './chain/escrowDstWatcher'
@@ -33,6 +34,7 @@ app.use('/quote',    quoteRouter)
 app.use('/suggest-params', suggestRouter)
 app.use('/tokens',   tokensRouter)
 app.use('/aggregators', aggregatorsRouter)
+app.use('/fallback', fallbackRouter)
 
 app.get('/health', (_, res) => res.json({ ok: true }))
 

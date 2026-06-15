@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, useCallback } from 'react'
 import { ethers } from 'ethers'
 import { useAppConfig } from '../context/AppConfig'
 import type { WalletState } from '../hooks/useWallet'
@@ -25,11 +25,25 @@ function copy(text: string) { navigator.clipboard?.writeText(text) }
 
 // Permit2 AllowanceTransfer — shared across chains, used to gate the swap UI.
 const PERMIT2 = '0x000000000022D473030F116dDEE9F6B43aC78BA3'
-const P2_ABI  = ['function allowance(address,address,address) view returns (uint160,uint48,uint48)']
-const ERC_ABI = ['function allowance(address,address) view returns (uint256)']
+const P2_ABI  = ['function allowance(address,address,address) view returns (uint160,uint48,uint48)', 'function approve(address,address,uint160,uint48)']
+const ERC_ABI = ['function allowance(address,address) view returns (uint256)', 'function approve(address,uint256) returns (bool)']
+const MAX_UINT160 = ethers.BigNumber.from('0xffffffffffffffffffffffffffffffff')
+const MAX_UINT48  = ethers.BigNumber.from('0xffffffffffff')
 
-function ApprovalBadge({ ok }: { ok: boolean }) {
-  return ok ? <span className="status ok">✓ enabled</span> : <span className="status bad">✗ not enabled</span>
+// Shows the allowance state for one (token, spender) pair, with an inline
+// "Approve" button when it isn't enabled yet — so the whole approval set can
+// be granted here instead of one-at-a-time from the Swap page.
+function ApprovalCell({ ok, busy, err, onApprove }: { ok: boolean; busy: boolean; err?: string; onApprove: () => void }) {
+  if (ok) return <span className="status ok">✓ enabled</span>
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 4 }}>
+      <span className="status bad">✗ not enabled</span>
+      <button className="ghost sm" disabled={busy} onClick={onApprove}>
+        {busy ? 'Approving…' : 'Approve'}
+      </button>
+      {err && <span style={{ fontSize: '0.7rem', color: '#dc2626' }}>{err}</span>}
+    </div>
+  )
 }
 
 export default function Explore({ wallet }: { wallet: WalletState }) {
@@ -60,16 +74,15 @@ export default function Explore({ wallet }: { wallet: WalletState }) {
   // ── approvals ──────────────────────────────────────────────────────────────
   // For each Chain-A input token, check the three Permit2 allowances the swap
   // flow depends on: ERC20→Permit2, and Permit2→{PartialFillReactor,FallbackExecutor}.
-  useEffect(() => {
+  const refreshApprovals = useCallback(async () => {
     if (!wallet.connected || !wallet.provider || !wallet.account || inputTokens.length === 0 || !partialFillReactor) {
       setApprovals([])
       return
     }
-    let cancelled = false
     setApprovalsLoading(true)
     const provider = wallet.provider
     const account = wallet.account
-    ;(async () => {
+    try {
       const p2  = new ethers.Contract(PERMIT2, P2_ABI, provider)
       const now = Date.now() / 1000
       const checkSpender = async (token: string, spender: string) => {
@@ -90,10 +103,51 @@ export default function Explore({ wallet }: { wallet: WalletState }) {
           return { symbol: t.symbol, address: t.address, erc20Ok: false, reactorOk: false, fallbackOk: false }
         }
       }))
-      if (!cancelled) setApprovals(rows)
-    })().finally(() => { if (!cancelled) setApprovalsLoading(false) })
-    return () => { cancelled = true }
+      setApprovals(rows)
+    } finally {
+      setApprovalsLoading(false)
+    }
   }, [wallet.connected, wallet.provider, wallet.account, inputTokens, partialFillReactor, fallbackExecutor])
+
+  useEffect(() => { refreshApprovals() }, [refreshApprovals])
+
+  // ── approve actions ───────────────────────────────────────────────────────
+  // Lets the swapper grant every allowance the swap flow needs right here,
+  // instead of being walked through "Approve" / "Enable spending" one token
+  // at a time on the Swap page.
+  const [approving,  setApproving]  = useState<Record<string, boolean>>({})
+  const [approveErr, setApproveErr] = useState<Record<string, string>>({})
+
+  async function withApproval(key: string, fn: () => Promise<void>) {
+    setApproving(a => ({ ...a, [key]: true }))
+    setApproveErr(e => ({ ...e, [key]: '' }))
+    try {
+      await fn()
+      await refreshApprovals()
+    } catch (e: any) {
+      setApproveErr(err => ({ ...err, [key]: e.message ?? String(e) }))
+    } finally {
+      setApproving(a => ({ ...a, [key]: false }))
+    }
+  }
+
+  function approveErc20(token: ApprovalRow) {
+    const signer = wallet.signer
+    if (!signer) return
+    return withApproval(`${token.address}:erc20`, async () => {
+      const erc = new ethers.Contract(token.address, ERC_ABI, signer)
+      await (await erc.approve(PERMIT2, ethers.constants.MaxUint256)).wait()
+    })
+  }
+
+  function approvePermit2(token: ApprovalRow, spender: string, key: string) {
+    const signer = wallet.signer
+    if (!signer || !spender) return
+    return withApproval(key, async () => {
+      const p2 = new ethers.Contract(PERMIT2, P2_ABI, signer)
+      await (await p2.approve(token.address, spender, MAX_UINT160, MAX_UINT48)).wait()
+    })
+  }
 
   const chainAId = inputTokens[0]?.chainId  ?? Number(chainId) ?? 31337
   const chainBId = outputTokens[0]?.chainId ?? 31338
@@ -164,18 +218,30 @@ export default function Explore({ wallet }: { wallet: WalletState }) {
                 </tr>
               </thead>
               <tbody>
-                {approvals.map(a => (
-                  <tr key={a.address}>
-                    <td>{a.symbol}</td>
-                    <td><ApprovalBadge ok={a.erc20Ok} /></td>
-                    <td><ApprovalBadge ok={a.reactorOk} /></td>
-                    <td>
-                      {fallbackExecutor
-                        ? <ApprovalBadge ok={a.fallbackOk} />
-                        : <span className="text-muted">not configured</span>}
-                    </td>
-                  </tr>
-                ))}
+                {approvals.map(a => {
+                  const erc20Key    = `${a.address}:erc20`
+                  const reactorKey  = `${a.address}:reactor`
+                  const fallbackKey = `${a.address}:fallback`
+                  return (
+                    <tr key={a.address}>
+                      <td>{a.symbol}</td>
+                      <td>
+                        <ApprovalCell ok={a.erc20Ok} busy={!!approving[erc20Key]} err={approveErr[erc20Key]}
+                          onApprove={() => approveErc20(a)} />
+                      </td>
+                      <td>
+                        <ApprovalCell ok={a.reactorOk} busy={!!approving[reactorKey]} err={approveErr[reactorKey]}
+                          onApprove={() => approvePermit2(a, partialFillReactor, reactorKey)} />
+                      </td>
+                      <td>
+                        {fallbackExecutor
+                          ? <ApprovalCell ok={a.fallbackOk} busy={!!approving[fallbackKey]} err={approveErr[fallbackKey]}
+                              onApprove={() => approvePermit2(a, fallbackExecutor, fallbackKey)} />
+                          : <span className="text-muted">not configured</span>}
+                      </td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           )}

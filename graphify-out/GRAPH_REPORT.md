@@ -1,16 +1,16 @@
-# Graph Report - dex-aggregator  (2026-06-15)
+# Graph Report - dex-aggregator  (2026-06-16)
 
 ## Corpus Check
-- 121 files · ~121,249 words
+- 122 files · ~123,401 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 945 nodes · 1269 edges · 73 communities (59 shown, 14 thin omitted)
-- Extraction: 100% EXTRACTED · 0% INFERRED · 0% AMBIGUOUS · INFERRED: 4 edges (avg confidence: 0.8)
+- 958 nodes · 1297 edges · 78 communities (64 shown, 14 thin omitted)
+- Extraction: 100% EXTRACTED · 0% INFERRED · 0% AMBIGUOUS · INFERRED: 5 edges (avg confidence: 0.8)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `66a3d9d0`
+- Built from commit: `453b1d56`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -84,16 +84,21 @@
 - [[_COMMUNITY_Community 66|Community 66]]
 - [[_COMMUNITY_Community 67|Community 67]]
 - [[_COMMUNITY_Community 68|Community 68]]
+- [[_COMMUNITY_Community 70|Community 70]]
+- [[_COMMUNITY_Community 71|Community 71]]
 - [[_COMMUNITY_Community 72|Community 72]]
 - [[_COMMUNITY_Community 73|Community 73]]
+- [[_COMMUNITY_Community 74|Community 74]]
+- [[_COMMUNITY_Community 75|Community 75]]
+- [[_COMMUNITY_Community 76|Community 76]]
 - [[_COMMUNITY_Community 77|Community 77]]
 
 ## God Nodes (most connected - your core abstractions)
-1. `useAppConfig()` - 23 edges
+1. `useAppConfig()` - 24 edges
 2. `Security Audit — `FillAuction.sol` & `PartialFillReactor.sol`` - 16 edges
 3. `NeutronX — Smart-Contract Test Catalogue` - 14 edges
-4. `Cross-Chain Swap Test` - 13 edges
-5. `createCrossChainOrder()` - 12 edges
+4. `createCrossChainOrder()` - 13 edges
+5. `Cross-Chain Swap Test` - 13 edges
 6. `db` - 11 edges
 7. `compilerOptions` - 10 edges
 8. `compilerOptions` - 9 edges
@@ -107,23 +112,23 @@
   frontend/src/pages/AdminLogin.tsx → frontend/src/context/AppConfig.tsx
 - `Orders()` --calls--> `useAppConfig()`  [EXTRACTED]
   frontend/src/pages/Orders.tsx → frontend/src/context/AppConfig.tsx
-- `requireAdmin()` --calls--> `verifyToken()`  [EXTRACTED]
-  backend/src/routes/admin.ts → backend/src/services/adminAuth.ts
-- `resolveChainId()` --calls--> `resolveAggregatorChainId()`  [EXTRACTED]
-  backend/src/routes/aggregators.ts → backend/src/services/aggregators/index.ts
+- `Simulate()` --calls--> `toWei()`  [INFERRED]
+  frontend/src/pages/Simulate.tsx → frontend/src/pages/CrossChain.tsx
+- `createCrossChainOrder()` --calls--> `getChain()`  [EXTRACTED]
+  backend/src/services/crosschainService.ts → backend/src/config/chains.ts
 
 ## Import Cycles
 - None detected.
 
-## Communities (73 total, 14 thin omitted)
+## Communities (78 total, 14 thin omitted)
 
 ### Community 0 - "Community 0"
-Cohesion: 0.05
-Nodes (73): ERC20_ABI, ESCROW_SRC_ABI, ESCROW_SRC_FACTORY_ABI, SAFETY_DEPOSIT, claimQueues, ESCROW_DST_ABI, EscrowDstWatcherOpts, FACTORY_ABI (+65 more)
+Cohesion: 0.13
+Nodes (26): router, buildTree(), CCTokenInfo, computeDomainSeparator(), computeLeaf(), createCrossChainOrder(), CreateOrderParams, deriveHashlock() (+18 more)
 
 ### Community 1 - "Community 1"
-Cohesion: 0.11
-Nodes (19): router, router, coverageAt(), MIN_FILL_CANDIDATES, router, fillerRegistry, FillerQuote, SimQuoteRequest (+11 more)
+Cohesion: 0.16
+Nodes (14): router, coverageAt(), MIN_FILL_CANDIDATES, router, simulateOrder(), COINGECKO_IDS, fetchPriceLive(), fetchTokenPriceUsd() (+6 more)
 
 ### Community 2 - "Community 2"
 Cohesion: 0.05
@@ -135,7 +140,7 @@ Nodes (26): author, dependencies, cors, dotenv, ethers, express, pg, @uniswap/sd
 
 ### Community 4 - "Community 4"
 Cohesion: 0.11
-Nodes (24): getAggregator(), router, cancelOrder(), createOrder(), ERC20_ABI, getDomainSeparator(), getFillerSwapFills(), getOrder() (+16 more)
+Nodes (23): router, cancelOrder(), createOrder(), ERC20_ABI, getDomainSeparator(), getFillerSwapFills(), getOrder(), getOrders() (+15 more)
 
 ### Community 5 - "Community 5"
 Cohesion: 0.09
@@ -150,16 +155,16 @@ Cohesion: 0.10
 Nodes (4): common.sh script, _patch_env(), PATH, wire_env()
 
 ### Community 8 - "Community 8"
-Cohesion: 0.16
-Nodes (11): WalletState, CCTokenInfo, CHAIN_NAMES, chainLabel(), CrossChain(), CrossChainProps, ERC_ABI, P2_ABI (+3 more)
+Cohesion: 0.11
+Nodes (16): CCOrder, CCTokenInfo, CrossChainOrders(), HashRow(), Slot, WalletState, CCTokenInfo, CHAIN_NAMES (+8 more)
 
 ### Community 9 - "Community 9"
 Cohesion: 0.19
 Nodes (11): useAppConfig(), AdminProps, AdminTab, ChainTab(), ConfigTab(), FillerInfo, FillersTab(), FillerFill (+3 more)
 
 ### Community 10 - "Community 10"
-Cohesion: 0.13
-Nodes (16): SuggestPanel(), requestSuggestion(), SuggestArgs, Suggestion, CCOrderSummary, CCSlotSummary, DirectQuote, FillerBalance (+8 more)
+Cohesion: 0.12
+Nodes (17): BlockEta, Eta, formatDuration(), CCMode, CCOrderSummary, CCSlotSummary, CCTokenInfo, DirectQuote (+9 more)
 
 ### Community 11 - "Community 11"
 Cohesion: 0.10
@@ -218,16 +223,16 @@ Cohesion: 0.17
 Nodes (12): compilerOptions, esModuleInterop, module, outDir, resolveJsonModule, rootDir, strict, target (+4 more)
 
 ### Community 25 - "Community 25"
-Cohesion: 0.19
-Nodes (11): AuctionChart(), AuctionChartProps, clamp(), colorForFiller(), FillDot, FILLER_COLORS, ActiveOrder, ERC_ABI (+3 more)
+Cohesion: 0.23
+Nodes (9): SuggestPanel(), requestSuggestion(), SuggestArgs, Suggestion, ActiveOrder, ERC_ABI, Fill, P2_ABI (+1 more)
 
 ### Community 26 - "Community 26"
 Cohesion: 0.17
 Nodes (11): compilerOptions, esModuleInterop, jsx, lib, module, moduleResolution, noEmit, skipLibCheck (+3 more)
 
 ### Community 27 - "Community 27"
-Cohesion: 0.20
-Nodes (8): ApprovalRow, CCTokenInfo, ERC_ABI, Explore(), ICON_COLORS, P2_ABI, Row, short()
+Cohesion: 0.16
+Nodes (10): ApprovalRow, CCTokenInfo, ERC_ABI, Explore(), ICON_COLORS, MAX_UINT160, MAX_UINT48, P2_ABI (+2 more)
 
 ### Community 28 - "Community 28"
 Cohesion: 0.26
@@ -337,37 +342,57 @@ Nodes (3): FillDecision, FillSummary, OrderInfo
 Cohesion: 0.36
 Nodes (7): setup_cc.sh script, approve_swapper_token(), fund_and_approve_swapper(), fund_swapper_token(), LOG_FILE, TOKEN_ADDR, TOKEN_AMOUNT
 
+### Community 70 - "Community 70"
+Cohesion: 0.21
+Nodes (13): EscrowSrcWatcherOpts, FACTORY_ABI, handleSlotFilled(), ensureIndexerStateTable(), getCheckpoint(), resolveCheckpoint(), setCheckpoint(), db (+5 more)
+
+### Community 71 - "Community 71"
+Cohesion: 0.20
+Nodes (13): startEscrowDstWatcher(), startEscrowSrcWatcher(), ChainConfig, chainIds(), getChain(), loadChainRegistry(), otherChain(), initCrossChainSchema() (+5 more)
+
 ### Community 72 - "Community 72"
 Cohesion: 0.18
 Nodes (9): AppConfig, AppConfigCtx, AppConfigProvider(), ChainConfig, Ctx, DEFAULT, deriveLegacy(), RawConfig (+1 more)
 
 ### Community 73 - "Community 73"
-Cohesion: 0.12
-Nodes (14): CCOrder, CCTokenInfo, CrossChainOrders(), HashRow(), Slot, BlockEta, Eta, formatDuration() (+6 more)
+Cohesion: 0.13
+Nodes (16): AuctionChart(), AuctionChartProps, clamp(), colorForFiller(), FillDot, FILLER_COLORS, AggregatorCheckResult, FallbackCheckResult (+8 more)
+
+### Community 74 - "Community 74"
+Cohesion: 0.27
+Nodes (10): ERC20_ABI, ESCROW_SRC_ABI, ESCROW_SRC_FACTORY_ABI, SAFETY_DEPOSIT, getCrossChainOrder(), FillerBalance, preflightFillSlot(), PreflightResult (+2 more)
+
+### Community 75 - "Community 75"
+Cohesion: 0.27
+Nodes (10): claimQueues, ESCROW_DST_ABI, EscrowDstWatcherOpts, FACTORY_ABI, handleEscrow(), waitConfirmations(), withCosignerQueue(), deriveSecret() (+2 more)
+
+### Community 76 - "Community 76"
+Cohesion: 0.22
+Nodes (7): router, FillerEntry, fillerRegistry, initFillerSchema(), FillerQuote, SimQuoteRequest, SimResult
 
 ### Community 77 - "Community 77"
-Cohesion: 0.10
-Nodes (28): AGGREGATORS, availableAggregators(), resolveAggregatorChainId(), CHAIN_NAMES, KyberBuildResponse, KyberRouteResponse, kyberswapAdapter, oneInchAdapter (+20 more)
+Cohesion: 0.09
+Nodes (34): AGGREGATORS, availableAggregators(), getAggregator(), resolveAggregatorChainId(), CHAIN_NAMES, KyberBuildResponse, KyberRouteResponse, kyberswapAdapter (+26 more)
 
 ## Knowledge Gaps
-- **461 isolated node(s):** `name`, `version`, `description`, `main`, `start` (+456 more)
+- **470 isolated node(s):** `name`, `version`, `description`, `main`, `start` (+465 more)
   These have ≤1 connection - possible missing edges or undocumented components.
 - **14 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `useAppConfig()` connect `Community 9` to `Community 72`, `Community 73`, `Community 8`, `Community 10`, `Community 25`, `Community 27`?**
+- **Why does `useAppConfig()` connect `Community 9` to `Community 8`, `Community 72`, `Community 10`, `Community 73`, `Community 25`, `Community 27`?**
   _High betweenness centrality (0.004) - this node is a cross-community bridge._
-- **Why does `db` connect `Community 0` to `Community 4`, `Community 77`?**
-  _High betweenness centrality (0.003) - this node is a cross-community bridge._
+- **Why does `db` connect `Community 70` to `Community 0`, `Community 4`, `Community 71`, `Community 75`, `Community 76`, `Community 77`?**
+  _High betweenness centrality (0.004) - this node is a cross-community bridge._
 - **What connects `name`, `version`, `description` to the rest of the system?**
-  _461 weakly-connected nodes found - possible documentation gaps or missing edges._
+  _470 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `Community 0` be split into smaller, more focused modules?**
-  _Cohesion score 0.05158324821246169 - nodes in this community are weakly interconnected._
-- **Should `Community 1` be split into smaller, more focused modules?**
-  _Cohesion score 0.10826210826210826 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.12962962962962962 - nodes in this community are weakly interconnected._
 - **Should `Community 2` be split into smaller, more focused modules?**
   _Cohesion score 0.05405405405405406 - nodes in this community are weakly interconnected._
 - **Should `Community 3` be split into smaller, more focused modules?**
   _Cohesion score 0.07407407407407407 - nodes in this community are weakly interconnected._
+- **Should `Community 4` be split into smaller, more focused modules?**
+  _Cohesion score 0.1111111111111111 - nodes in this community are weakly interconnected._

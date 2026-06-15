@@ -61,8 +61,12 @@ export const kyberswapAdapter: AggregatorAdapter = {
       }),
     })
     if (!buildRes.ok) {
-      console.warn(`KyberSwap route build failed (${buildRes.status}): ${await buildRes.text().catch(() => '')}`)
-      return null
+      // Unlike the /routes failure above, Kyber DID find a route here — it just
+      // refused to build calldata for it (e.g. its wallet-screening rejects a
+      // specific sender/recipient). That's a different failure mode than "no
+      // route exists", so surface the real reason instead of a generic null.
+      const body = await buildRes.text().catch(() => '')
+      throw new Error(`KyberSwap route build failed (${buildRes.status}): ${body}`)
     }
     const { data } = await buildRes.json() as KyberBuildResponse
 

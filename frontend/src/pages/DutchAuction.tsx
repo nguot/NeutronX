@@ -2,9 +2,9 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { ethers } from 'ethers'
 import type { WalletState } from '../hooks/useWallet'
 import { useAppConfig } from '../context/AppConfig'
-import { type TokenInfo, toWei, fromWei, calcStartPrice, humanPriceToContract, maxHumanDecay, DECAY_PER_BLOCK_MAX, TokenPill } from '../lib/tokens'
+import { type TokenInfo, toWei, fromWei, calcStartPrice, contractToHumanPrice, humanPriceToContract, formatPrice, maxHumanDecay, DECAY_PER_BLOCK_MAX, TokenPill } from '../lib/tokens'
 import { AuctionChart, colorForFiller } from '../components/AuctionChart'
-import { BlockEta } from '../lib/blocktime'
+import { BlockEta, formatDuration, NOMINAL_BLOCK_SEC } from '../lib/blocktime'
 import { requestSuggestion } from '../lib/suggest'
 import { SuggestPanel } from '../components/SuggestPanel'
 
@@ -18,6 +18,7 @@ const ERC_ABI = ['function allowance(address,address) view returns (uint256)', '
 // every fill rounds just under the floor and reverts on-chain.
 const START_PREMIUM_BPS  = 200n  // auction opens 2% above the quote (optimistic ask)
 const FLOOR_SLIPPAGE_BPS = 100n  // minOutput floor sits 1% below the quote (worst acceptable)
+const AUCTION_BLOCKS     = 200   // order deadline = current block + this
 
 interface Fill { id: number; filler: string; fillAmount: string; blockNumber: number | null; createdAt: string }
 interface ActiveOrder {
@@ -58,6 +59,11 @@ export default function DutchAuction({ wallet }: { wallet: WalletState }) {
   const inW  = inT ? toWei(inAmt, inT.decimals) : 0n
   const outW = outT ? toWei(outAmt, outT.decimals) : 0n
   const insufficientBalance = inBalance !== null && inW > inBalance
+
+  // Auction range: opens above the market quote (ask), floors below it (worst
+  // acceptable). Shared by the UI display, the decay explainer, and doSwap.
+  const startOut = (outW * (10000n + START_PREMIUM_BPS)) / 10000n
+  const floorOut = (outW * (10000n - FLOOR_SLIPPAGE_BPS)) / 10000n
 
   // ── approvals ──────────────────────────────────────────────────────────────
   // Spenders that need a Permit2 AllowanceTransfer approval from the swapper.
@@ -187,12 +193,10 @@ export default function DutchAuction({ wallet }: { wallet: WalletState }) {
   async function doSwap() {
     if (!wallet.signer || !partialFillReactor || !inT || !outT) return
     setErr(''); setStep('busy'); setMsg('Sign in wallet…')
-    const deadline = wallet.blockNumber + 200
+    const deadline = wallet.blockNumber + AUCTION_BLOCKS
 
-    // Treat the quoted output as the market reference and build an auction range
-    // around it: open ABOVE the quote (ask) and floor BELOW it (worst acceptable).
-    const startOut  = (outW * (10000n + START_PREMIUM_BPS)) / 10000n
-    const floorOut  = (outW * (10000n - FLOOR_SLIPPAGE_BPS)) / 10000n
+    // startOut/floorOut (the auction range) are computed once above and shared
+    // with the UI display and the decay explainer.
     const sp        = calcStartPrice(inW, startOut)
     const floorRate = calcStartPrice(inW, floorOut)
     const blocks    = BigInt(Math.max(1, deadline - wallet.blockNumber))
@@ -222,6 +226,7 @@ export default function DutchAuction({ wallet }: { wallet: WalletState }) {
       outputToken: outT.address, minOutputAmount: floorOut.toString(),
       deadline, nonce: Date.now() % 1000000, minFillBps,
       startPrice: sp.toString(), decayPerBlock: dp.toString(), feeTier: 3000,
+      startBlock: wallet.blockNumber,
     }
     try {
       const sig = await (wallet.signer as ethers.providers.JsonRpcSigner)._signTypedData(
@@ -348,6 +353,13 @@ export default function DutchAuction({ wallet }: { wallet: WalletState }) {
 
   const canSwap = wallet.connected && !!partialFillReactor && inW > 0n && outW > 0n && step === 'ready' && !insufficientBalance
 
+  // Plain-language framing for the "Price decay" explainer below: the auction's
+  // start/floor prices as human "outToken per inToken" rates, and the resulting
+  // default per-block step in those same units (independent of any manually-set decay).
+  const startRateHuman    = inW > 0n ? contractToHumanPrice(calcStartPrice(inW, startOut), inT.decimals, outT.decimals) : 0
+  const floorRateHuman    = inW > 0n ? contractToHumanPrice(calcStartPrice(inW, floorOut), inT.decimals, outT.decimals) : 0
+  const perBlockDecayHuman = (startRateHuman - floorRateHuman) / AUCTION_BLOCKS
+
   function SwapButton() {
     if (!wallet.connected)      return <button className="uni-btn" disabled>Connect wallet</button>
     if (!partialFillReactor)    return <button className="uni-btn" disabled>Reactor not configured</button>
@@ -399,9 +411,6 @@ export default function DutchAuction({ wallet }: { wallet: WalletState }) {
             <span>You receive <span className="uni-label-muted">(market estimate)</span></span>
             <span>
               {quoting && <span className="uni-quoting">fetching price…</span>}
-              {!quoting && quote && (
-                <span className="uni-quote-src">via {quote.source === 'alpha_router' ? 'Uniswap V3' : 'CoinGecko'}</span>
-              )}
               {wallet.connected && outBalance !== null && (
                 <span className="uni-balance">Balance: {fromWei(outBalance, outT.decimals)}</span>
               )}
@@ -431,9 +440,9 @@ export default function DutchAuction({ wallet }: { wallet: WalletState }) {
           <div className="uni-detail-row" style={{ padding: '2px 0' }}>
             <span className="uni-detail-label">Auction range</span>
             <span style={{ fontSize: '0.82rem' }}>
-              {fromWei((outW * (10000n + START_PREMIUM_BPS)) / 10000n, outT.decimals)}
+              {fromWei(startOut, outT.decimals)}
               <span className="uni-label-muted"> → </span>
-              {fromWei((outW * (10000n - FLOOR_SLIPPAGE_BPS)) / 10000n, outT.decimals)} {outT.symbol}
+              {fromWei(floorOut, outT.decimals)} {outT.symbol}
               <span className="uni-label-muted"> (min received)</span>
             </span>
           </div>
@@ -452,6 +461,27 @@ export default function DutchAuction({ wallet }: { wallet: WalletState }) {
           </div>
         )}
 
+        {/* Plain-language explainer for the decay number above — collapsed by default */}
+        {inW > 0n && outW > 0n && (
+          <details style={{ margin: '0 16px 8px' }}>
+            <summary style={{ cursor: 'pointer', fontSize: '0.74rem', color: '#7c3aed', fontWeight: 600 }}>
+              ⓘ What does this mean?
+            </summary>
+            <div className="uni-info-panel" style={{ margin: '6px 0 0' }}>
+              <div>Dutch auction: price ticks down every block from start to floor (see "Auction range" above) until a filler takes it.</div>
+              <div>
+                Default sweep: <code>{formatPrice(startRateHuman)} → {formatPrice(floorRateHuman)} {outT.symbol}/{inT.symbol}</code>, over{' '}
+                {AUCTION_BLOCKS} blocks (~{formatDuration(AUCTION_BLOCKS * NOMINAL_BLOCK_SEC)}) ≈{' '}
+                <code>{formatPrice(perBlockDecayHuman)} {outT.symbol}/{inT.symbol}/block</code>.
+              </div>
+              <div>
+                Allowed range: <code>0 – {formatPrice(maxHumanDecay(inT.decimals, outT.decimals))} {outT.symbol}/{inT.symbol}/block</code> — your{' '}
+                <code>~{formatPrice(perBlockDecayHuman)}</code> default sits comfortably inside it.
+              </div>
+            </div>
+          </details>
+        )}
+
         {/* Fallback route — which DEX aggregator executeFallback uses if the order is still
             open near the deadline. "Auto" lets the watcher compare quotes and pick the best. */}
         {inW > 0n && (
@@ -466,13 +496,22 @@ export default function DutchAuction({ wallet }: { wallet: WalletState }) {
           </div>
         )}
 
-        {/* Parameter suggestion: market-anchored price + minFillBps that keeps the order off the fallback */}
+        {/* Min fill: manually editable, or filled in by "Suggest parameters" below */}
         {inW > 0n && (
           <>
             <div className="uni-detail-row">
               <span className="uni-detail-label">
-                Min fill <span className="uni-label-muted">({(minFillBps / 100).toFixed(0)}% of order per chunk)</span>
+                Min fill <span className="uni-label-muted">(% of order per chunk)</span>
               </span>
+              <input className="uni-detail-input" type="number" min="0" max="100" step="0.1"
+                value={minFillBps / 100}
+                onChange={e => {
+                  const pct = parseFloat(e.target.value)
+                  setMinFillBps(isNaN(pct) ? 0 : Math.max(0, Math.min(10000, Math.round(pct * 100))))
+                }} />
+            </div>
+            <div className="uni-detail-row">
+              <span className="uni-detail-label" />
               <button className="ghost sm" style={{ marginTop: 0 }} disabled={suggesting} onClick={suggestParams}>
                 {suggesting ? 'Analysing fillers…' : '✨ Suggest parameters'}
               </button>

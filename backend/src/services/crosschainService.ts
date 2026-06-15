@@ -110,8 +110,18 @@ export async function getTokenDirectory(): Promise<Record<number, CCTokenInfo[]>
 
 // ─── Crypto helpers (mirrors key_distributor/src/crypto/) ─────────────────────
 
-function getNumSlots(inputAmount: string): number {
-  const amt = BigInt(inputAmount)
+// SlotLib.getNumSlots()'s thresholds are denominated in 18-decimal "ether"
+// units. Normalize inputAmount to that scale first so a token with fewer
+// decimals (e.g. 6-decimal USDC) doesn't always bottom out at the minimum
+// bucket — 1,000,000 USDC now buckets the same as 1,000,000 WETH would.
+function normalizeTo18(amount: bigint, decimals: number): bigint {
+  if (decimals === 18) return amount
+  if (decimals < 18)   return amount * 10n ** BigInt(18 - decimals)
+  return amount / 10n ** BigInt(decimals - 18)
+}
+
+function getNumSlots(inputAmount: string, decimals: number): number {
+  const amt = normalizeTo18(BigInt(inputAmount), decimals)
   if (amt <  500_000_000_000_000_000n)   return 4
   if (amt < 2_000_000_000_000_000_000n)  return 8
   if (amt < 10_000_000_000_000_000_000n) return 16
@@ -262,7 +272,9 @@ export async function createCrossChainOrder(p: CreateOrderParams): Promise<Order
   const rootSecret = await getRootSecret(p.swapper)
   if (!rootSecret) throw new Error('Session not found — call POST /cc/session first')
 
-  const numSlots = getNumSlots(p.inputAmount)
+  const inputDecimals = (await listTokens(p.chainAId))
+    .find(t => t.address.toLowerCase() === p.inputToken.toLowerCase())?.decimals ?? 18
+  const numSlots = getNumSlots(p.inputAmount, inputDecimals)
   const master   = deriveMasterSecret(rootSecret, p)
 
   // Build slot data

@@ -2,6 +2,8 @@ import React, { useState, useEffect, useCallback } from 'react'
 import type { WalletState } from '../hooks/useWallet'
 import { useAppConfig } from '../context/AppConfig'
 import { BlockEta } from '../lib/blocktime'
+import { fromWei } from '../lib/tokens'
+import { AuctionChart, colorForFiller } from '../components/AuctionChart'
 import CrossChainOrders from '../components/CrossChainOrders'
 
 interface Fill {
@@ -34,7 +36,24 @@ interface OrderDetail extends Order {
   startPrice:    string | null
   decayPerBlock: number
   feeTier:       number
+  startBlock:    number
   fillDetails:   Fill[]
+}
+
+interface AggregatorCheckResult {
+  key:           string
+  name:          string
+  ok:            boolean
+  minAmountOut?: string
+  error?:        string
+}
+
+interface FallbackCheckResult {
+  orderHash:           string
+  chainId:             number
+  remainingInput:      string
+  preferredAggregator: string | null
+  results:             AggregatorCheckResult[]
 }
 
 type StatusFilter = 'all' | 'pending' | 'active' | 'filled' | 'cancelled'
@@ -216,47 +235,115 @@ export default function Orders({ wallet }: { wallet: WalletState }) {
 }
 
 function OrderDetailPanel({ order }: { order: OrderDetail }) {
+  const { backendUrl, tokens, currentBlock } = useAppConfig()
+  const inT  = tokens.find(t => t.address.toLowerCase() === order.inputToken.toLowerCase())
+  const outT = tokens.find(t => t.address.toLowerCase() === order.outputToken.toLowerCase())
+  const inDec  = inT?.decimals ?? 18
+  const outDec = outT?.decimals ?? 6
+  const inSym  = inT?.symbol  ?? short(order.inputToken)
+  const outSym = outT?.symbol ?? short(order.outputToken)
+
+  const inWei  = BigInt(order.inputAmount)
+  const filled = order.fillDetails.reduce((s, f) => s + BigInt(f.fillAmount), 0n)
+  const pct    = inWei > 0n ? Number(filled * 100n / inWei) : 0
+  const curBlock = currentBlock ?? order.startBlock
+
+  const [fbCheck, setFbCheck]     = useState<FallbackCheckResult | null>(null)
+  const [fbLoading, setFbLoading] = useState(false)
+  const [fbError, setFbError]     = useState('')
+
+  async function checkFallback() {
+    setFbLoading(true)
+    setFbError('')
+    setFbCheck(null)
+    try {
+      const res  = await fetch(`${backendUrl}/fallback/check/${order.hash}`)
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? 'Check failed')
+      setFbCheck(data)
+    } catch (e: any) { setFbError(e.message) }
+    finally { setFbLoading(false) }
+  }
+
   return (
     <div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px 24px', fontSize: '0.78rem', marginBottom: 12 }}>
+      {/* Dutch-auction price-decay timeline — same chart as the live Swap view,
+          reconstructed from the order's persisted curve params + startBlock. */}
+      {order.startPrice && (
+        <>
+          <div className="text-muted" style={{ textAlign: 'center', marginBottom: 4 }}>
+            Auction ends <BlockEta target={order.deadline} current={curBlock} />
+          </div>
+          <AuctionChart
+            startBlock={order.startBlock} deadline={order.deadline}
+            startPriceContract={BigInt(order.startPrice)} decayContract={BigInt(order.decayPerBlock)}
+            curBlock={curBlock} inDec={inDec} outDec={outDec}
+            inSym={inSym} outSym={outSym}
+            fills={order.fillDetails} totalAmount={inWei}
+          />
+          <div className="uni-fill-section">
+            <div className="uni-fill-label">
+              <span>Filled</span>
+              <span>{fromWei(filled, inDec)} / {fromWei(inWei, inDec)} {inSym} <strong>{pct.toFixed(0)}%</strong></span>
+            </div>
+            <div className="uni-fill-track">
+              {order.fillDetails.map(f => {
+                const segPct = inWei > 0n ? Number(BigInt(f.fillAmount) * 1000n / inWei) / 10 : 0
+                return <div key={f.id} className="uni-fill-segment" style={{ width: `${segPct}%`, background: colorForFiller(f.filler) }} />
+              })}
+            </div>
+          </div>
+        </>
+      )}
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px 24px', fontSize: '0.78rem', margin: '12px 0' }}>
         <Field label="Full Hash"       value={order.hash} mono />
         <Field label="Nonce"           value={String(order.nonce)} />
         <Field label="Min Fill Bps"    value={`${order.minFillBps} (${(order.minFillBps / 100).toFixed(1)}%)`} />
-        <Field label="Input Amount"    value={order.inputAmount} mono />
-        <Field label="Min Output"      value={order.minOutput} mono />
+        <Field label="Input Amount"    value={`${fromWei(inWei, inDec)} ${inSym}`} />
+        <Field label="Min Output"      value={`${fromWei(BigInt(order.minOutput), outDec)} ${outSym}`} />
         <Field label="Fee Tier"        value={String(order.feeTier)} />
-        {order.startPrice && <Field label="Start Price" value={order.startPrice} mono />}
-        <Field label="Decay / Block"   value={String(order.decayPerBlock)} />
         <Field label="Fallback Route"  value={order.preferredAggregator ?? 'Auto (best price)'} />
       </div>
 
-      {order.fillDetails.length > 0 ? (
-        <>
-          <div style={{ fontSize: '0.75rem', fontWeight: 600, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 6 }}>
-            Fills ({order.fillDetails.length})
-          </div>
-          {order.fillDetails.map(f => (
-            <div key={f.id} className="slot-card claimed" style={{ marginTop: 6 }}>
-              <span style={{ color: '#64748b', fontSize: '0.72rem' }}>Filler:</span>{' '}
-              <code>{f.filler}</code>
-              &nbsp;&nbsp;
-              <span style={{ color: '#64748b', fontSize: '0.72rem' }}>Fill Amt:</span>{' '}
-              <code>{f.fillAmount}</code>
-              &nbsp;&nbsp;
-              <span style={{ color: '#64748b', fontSize: '0.72rem' }}>Output:</span>{' '}
-              <code>{f.outputAmount}</code>
-              {f.txHash && (
-                <span>&nbsp;&nbsp;<span style={{ color: '#64748b', fontSize: '0.72rem' }}>Tx:</span>{' '}<code style={{ wordBreak: 'break-all' }}>{f.txHash}</code></span>
-              )}
-              {f.blockNumber && (
-                <span>&nbsp;&nbsp;<span style={{ color: '#64748b', fontSize: '0.72rem' }}>Block:</span>{' '}{f.blockNumber}</span>
-              )}
+      <div className="uni-fill-section">
+        <div className="uni-fill-label">
+          <span>Fallback Route Check</span>
+          <button className="ghost sm" style={{ marginTop: 0 }} onClick={checkFallback} disabled={fbLoading}>
+            {fbLoading ? 'Checking…' : 'Test fallback route'}
+          </button>
+        </div>
+        {fbError && <div className="status bad" style={{ fontSize: '0.78rem', marginTop: 6 }}>{fbError}</div>}
+        {fbCheck && (
+          <div style={{ marginTop: 6, fontSize: '0.78rem' }}>
+            <div className="text-muted" style={{ marginBottom: 4 }}>
+              Remaining: {fromWei(BigInt(fbCheck.remainingInput), inDec)} {inSym} on chain {fbCheck.chainId}
+              {fbCheck.preferredAggregator && <> · pinned to <strong>{fbCheck.preferredAggregator}</strong></>}
             </div>
-          ))}
-        </>
-      ) : (
-        <div style={{ color: '#94a3b8', fontSize: '0.8rem', fontStyle: 'italic' }}>No fills recorded yet.</div>
-      )}
+            {fbCheck.results.map(r => (
+              <div key={r.key} style={{ display: 'flex', alignItems: 'baseline', gap: 8, padding: '3px 0' }}>
+                <span style={{ color: r.ok ? '#16a34a' : '#dc2626', fontWeight: 600 }}>{r.ok ? '✓' : '✗'}</span>
+                <span style={{ minWidth: 160 }}>{r.name}</span>
+                {r.ok
+                  ? <span>{fromWei(BigInt(r.minAmountOut!), outDec)} {outSym} min</span>
+                  : <span className="text-muted" style={{ wordBreak: 'break-all' }}>{r.error}</span>}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {order.fillDetails.length === 0
+        ? <p className="uni-waiting">Waiting for fillers…</p>
+        : order.fillDetails.map(f => (
+          <div key={f.id} className="uni-fill-row">
+            <span className="uni-fill-dot" style={{ background: colorForFiller(f.filler) }} />
+            <span className="uni-fill-filler">{f.filler}</span>
+            <span className="uni-fill-info">{fromWei(BigInt(f.fillAmount), inDec)} {inSym}</span>
+            <span className="uni-fill-block" title={f.txHash ?? undefined}>{f.blockNumber ? `#${f.blockNumber}` : new Date(f.createdAt).toLocaleTimeString()}</span>
+          </div>
+        ))
+      }
     </div>
   )
 }

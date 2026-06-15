@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import type { WalletState } from '../hooks/useWallet'
 import { useAppConfig } from '../context/AppConfig'
-import { tokenByAddress, short, toWei, fromWei, contractToHumanPrice, humanPriceToContract, TokenPill } from '../lib/tokens'
+import { tokenByAddress, short, toWei, fromWei, contractToHumanPrice, humanPriceToContract, calcStartPrice, formatPrice, TokenPill } from '../lib/tokens'
 import { AuctionChart } from '../components/AuctionChart'
 import { BlockEta, formatDuration, NOMINAL_BLOCK_SEC } from '../lib/blocktime'
 import { requestSuggestion, type Suggestion } from '../lib/suggest'
@@ -109,7 +109,11 @@ interface FillerBalance {
   balanceHuman: string
 }
 
+// Per-chain token, as returned by GET /cc/tokens (mirrors Explore.tsx).
+interface CCTokenInfo { symbol: string; address: string; decimals: number; chainId: number; name?: string }
+
 type Mode = 'order' | 'custom' | 'crosschain'
+type CCMode = 'order' | 'custom'
 
 export default function Simulate({ wallet }: { wallet: WalletState }) {
   const { backendUrl, tokens, chains } = useAppConfig()
@@ -159,6 +163,16 @@ export default function Simulate({ wallet }: { wallet: WalletState }) {
   const [rankedFillers, setRankedFillers]         = useState<FillerBalance[]>([])
   const [rankedFillersLoading, setRankedFillersLoading] = useState(false)
 
+  // ── cross-chain custom params (fixed-rate preview, no preflight) ──────────
+  const [ccMode, setCcMode] = useState<CCMode>('order')
+  const [ccInputTokens,  setCcInputTokens]  = useState<CCTokenInfo[]>([])
+  const [ccOutputTokens, setCcOutputTokens] = useState<CCTokenInfo[]>([])
+  const [ccCustIn,  setCcCustIn]  = useState('')
+  const [ccCustOut, setCcCustOut] = useState('')
+  const [ccCustInAmt,  setCcCustInAmt]  = useState('')
+  const [ccCustOutAmt, setCcCustOutAmt] = useState('')
+  const [ccCustDeadlineBlocks, setCcCustDeadlineBlocks] = useState('1800')
+
   const loadOrders = useCallback(async () => {
     setOrdersLoading(true)
     try {
@@ -175,9 +189,11 @@ export default function Simulate({ wallet }: { wallet: WalletState }) {
     try {
       const res  = await fetch(`${backendUrl}/admin/blocks`)
       const data = await res.json()
-      if (res.ok && typeof data.chainA === 'number') setCurrentBlock(data.chainA)
+      const chainAId = chains[0]?.id
+      const block = chainAId != null ? data.blocks?.[chainAId] : undefined
+      if (res.ok && typeof block === 'number') setCurrentBlock(block)
     } catch { /* ignore */ }
-  }, [backendUrl])
+  }, [backendUrl, chains])
 
   useEffect(() => { loadOrders(); refreshBlock() }, [loadOrders, refreshBlock])
 
@@ -190,6 +206,25 @@ export default function Simulate({ wallet }: { wallet: WalletState }) {
     } catch { /* ignore */ }
     setCcOrdersLoading(false)
   }, [backendUrl])
+
+  // Token directory for the cross-chain "Custom parameters" preview — chains[0]
+  // is the source chain (input token), chains[1] the destination (output token),
+  // same convention as Explore.tsx.
+  useEffect(() => {
+    const srcId = chains[0]?.id
+    const dstId = chains[1]?.id
+    if (srcId == null || dstId == null) return
+    fetch(`${backendUrl}/cc/tokens`)
+      .then(r => r.json())
+      .then((data: Record<number, CCTokenInfo[]>) => {
+        const ins = data[srcId] ?? [], outs = data[dstId] ?? []
+        setCcInputTokens(ins)
+        setCcOutputTokens(outs)
+        setCcCustIn(s => s || ins[0]?.symbol || '')
+        setCcCustOut(s => s || outs[0]?.symbol || '')
+      })
+      .catch(() => {})
+  }, [backendUrl, chains])
 
   // Default the preflight "filler" address to the connected wallet once available.
   useEffect(() => {
@@ -480,6 +515,28 @@ export default function Simulate({ wallet }: { wallet: WalletState }) {
   }
   const comparison = computeComparison()
 
+  // Cross-chain "custom parameters" preview: a fixed-rate swap split into
+  // getNumSlots() equal slots (see backend/src/services/crosschainService.ts),
+  // with no Dutch-auction decay. Client-side math only — no /simulate or
+  // /preflight call, since there's no real order/slot to dry-run against.
+  const ccInT  = ccInputTokens.find(t => t.symbol === ccCustIn)
+  const ccOutT = ccOutputTokens.find(t => t.symbol === ccCustOut)
+  const ccInW  = ccInT  ? toWei(ccCustInAmt,  ccInT.decimals)  : 0n
+  const ccOutW = ccOutT ? toWei(ccCustOutAmt, ccOutT.decimals) : 0n
+  const ccPreview = (ccInT && ccOutT && ccInW > 0n && ccOutW > 0n && currentBlock != null) ? (() => {
+    const numSlots       = getNumSlotsPreview(ccInW, ccInT.decimals)
+    const deadlineBlocks = ccCustDeadlineBlocks ? parseInt(ccCustDeadlineBlocks) : 1800
+    return {
+      rate:       contractToHumanPrice(calcStartPrice(ccInW, ccOutW), ccInT.decimals, ccOutT.decimals),
+      numSlots,
+      perSlotIn:  ccInW  / BigInt(numSlots),
+      perSlotOut: ccOutW / BigInt(numSlots),
+      deadline:   currentBlock + deadlineBlocks,
+    }
+  })() : null
+
+  const ccToggleActive = { background: '#f5f3ff', borderColor: '#7c3aed', color: '#7c3aed' }
+
   return (
     <>
       <div className="page-header">
@@ -495,48 +552,84 @@ export default function Simulate({ wallet }: { wallet: WalletState }) {
 
         {mode === 'crosschain' ? (
           <>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-              <span style={{ fontSize: '0.78rem', color: '#64748b' }}>Cross-chain orders</span>
-              <button className="ghost sm" style={{ marginTop: 0 }} onClick={loadCCOrders}>↻ Refresh</button>
+            <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
+              <button className="ghost sm" style={{ marginTop: 0, ...(ccMode === 'order' ? ccToggleActive : {}) }} onClick={() => setCcMode('order')}>From an order</button>
+              <button className="ghost sm" style={{ marginTop: 0, ...(ccMode === 'custom' ? ccToggleActive : {}) }} onClick={() => setCcMode('custom')}>Custom parameters</button>
             </div>
-            {ccOrdersLoading && <div style={{ color: '#94a3b8', fontSize: '0.82rem', padding: '8px 0' }}>Loading…</div>}
-            {!ccOrdersLoading && ccOrders.length === 0 && (
-              <div className="empty-state"><div className="empty-icon">📋</div>No cross-chain orders yet.</div>
-            )}
-            {ccOrders.map(o => {
-              const inT  = tokenByAddress(o.inputToken, tokens)
-              const outT = tokenByAddress(o.outputToken, tokens)
-              const srcName = chains.find(c => c.id === o.chainAId)?.name ?? `Chain ${o.chainAId}`
-              const dstName = chains.find(c => c.id === o.dstChainId)?.name ?? `Chain ${o.dstChainId}`
-              return (
-                <div key={o.orderHash} className={`slot-card ${ccSelectedHash === o.orderHash ? 'claimed' : ''}`}
-                     style={{ cursor: 'pointer' }} onClick={() => selectCCOrder(o.orderHash)}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                    <span className="mono" style={{ fontSize: '0.75rem' }}>{short(o.orderHash)}</span>
-                    <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>{srcName} → {dstName}</span>
-                    <span style={{ marginLeft: 'auto', fontSize: '0.75rem', color: '#94a3b8' }} onClick={e => e.stopPropagation()}>deadline <BlockEta target={o.deadline} showClock={false} /></span>
-                  </div>
-                  <div style={{ fontSize: '0.85rem' }}>
-                    {fromWei(BigInt(o.inputAmount), inT?.decimals ?? 18)} <b>{inT?.symbol ?? short(o.inputToken)}</b>
-                    <span style={{ color: '#94a3b8', margin: '0 6px' }}>→</span>
-                    min {fromWei(BigInt(o.minOutput), outT?.decimals ?? 18)} <b>{outT?.symbol ?? short(o.outputToken)}</b>
-                    <span style={{ color: '#94a3b8', marginLeft: 8 }}>({o.numSlots} slot{o.numSlots === 1 ? '' : 's'})</span>
-                  </div>
-                  {ccSelectedHash === o.orderHash && (
-                    <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }} onClick={e => e.stopPropagation()}>
-                      {o.slots.map(s => (
-                        <button key={s.index}
-                          className={`tag ${s.status === 'available' ? 'available' : 'claimed'}`}
-                          style={{ cursor: 'pointer', outline: ccSelectedSlot === s.index ? '2px solid #7c3aed' : 'none' }}
-                          onClick={() => selectCCSlot(s.index)}>
-                          slot {s.index} · {s.status}
-                        </button>
-                      ))}
-                    </div>
-                  )}
+
+            {ccMode === 'order' ? (
+              <>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                  <span style={{ fontSize: '0.78rem', color: '#64748b' }}>Cross-chain orders</span>
+                  <button className="ghost sm" style={{ marginTop: 0 }} onClick={loadCCOrders}>↻ Refresh</button>
                 </div>
-              )
-            })}
+                {ccOrdersLoading && <div style={{ color: '#94a3b8', fontSize: '0.82rem', padding: '8px 0' }}>Loading…</div>}
+                {!ccOrdersLoading && ccOrders.length === 0 && (
+                  <div className="empty-state"><div className="empty-icon">📋</div>No cross-chain orders yet.</div>
+                )}
+                {ccOrders.map(o => {
+                  const inT  = tokenByAddress(o.inputToken, tokens)
+                  const outT = tokenByAddress(o.outputToken, tokens)
+                  const srcName = chains.find(c => c.id === o.chainAId)?.name ?? `Chain ${o.chainAId}`
+                  const dstName = chains.find(c => c.id === o.dstChainId)?.name ?? `Chain ${o.dstChainId}`
+                  return (
+                    <div key={o.orderHash} className={`slot-card ${ccSelectedHash === o.orderHash ? 'claimed' : ''}`}
+                         style={{ cursor: 'pointer' }} onClick={() => selectCCOrder(o.orderHash)}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                        <span className="mono" style={{ fontSize: '0.75rem' }}>{short(o.orderHash)}</span>
+                        <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>{srcName} → {dstName}</span>
+                        <span style={{ marginLeft: 'auto', fontSize: '0.75rem', color: '#94a3b8' }} onClick={e => e.stopPropagation()}>deadline <BlockEta target={o.deadline} showClock={false} /></span>
+                      </div>
+                      <div style={{ fontSize: '0.85rem' }}>
+                        {fromWei(BigInt(o.inputAmount), inT?.decimals ?? 18)} <b>{inT?.symbol ?? short(o.inputToken)}</b>
+                        <span style={{ color: '#94a3b8', margin: '0 6px' }}>→</span>
+                        min {fromWei(BigInt(o.minOutput), outT?.decimals ?? 18)} <b>{outT?.symbol ?? short(o.outputToken)}</b>
+                        <span style={{ color: '#94a3b8', marginLeft: 8 }}>({o.numSlots} slot{o.numSlots === 1 ? '' : 's'})</span>
+                      </div>
+                      {ccSelectedHash === o.orderHash && (
+                        <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }} onClick={e => e.stopPropagation()}>
+                          {o.slots.map(s => (
+                            <button key={s.index}
+                              className={`tag ${s.status === 'available' ? 'available' : 'claimed'}`}
+                              style={{ cursor: 'pointer', outline: ccSelectedSlot === s.index ? '2px solid #7c3aed' : 'none' }}
+                              onClick={() => selectCCSlot(s.index)}>
+                              slot {s.index} · {s.status}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </>
+            ) : (
+              <>
+                <div className="uni-input-box">
+                  <div className="uni-input-label">You send <span className="uni-label-muted">({chains[0]?.name ?? 'source chain'})</span></div>
+                  <div className="uni-input-row">
+                    <input className="uni-amount" type="number" placeholder="0" value={ccCustInAmt}
+                      onChange={e => setCcCustInAmt(e.target.value)} />
+                    <TokenPill tokens={ccInputTokens} value={ccCustIn} onChange={setCcCustIn} />
+                  </div>
+                </div>
+                <div className="uni-input-box">
+                  <div className="uni-input-label">You receive <span className="uni-label-muted">(minimum · {chains[1]?.name ?? 'destination chain'})</span></div>
+                  <div className="uni-input-row">
+                    <input className="uni-amount" type="number" placeholder="0" value={ccCustOutAmt}
+                      onChange={e => setCcCustOutAmt(e.target.value)} />
+                    <TokenPill tokens={ccOutputTokens} value={ccCustOut} onChange={setCcCustOut} />
+                  </div>
+                </div>
+                <details className="uni-advanced">
+                  <summary>Advanced</summary>
+                  <div className="uni-detail-row">
+                    <span className="uni-detail-label">Deadline <span className="uni-label-muted">(blocks from now)</span></span>
+                    <input className="uni-detail-input" type="number" value={ccCustDeadlineBlocks}
+                      onChange={e => setCcCustDeadlineBlocks(e.target.value)} />
+                  </div>
+                </details>
+              </>
+            )}
           </>
         ) : mode === 'order' ? (
           <>
@@ -627,6 +720,19 @@ export default function Simulate({ wallet }: { wallet: WalletState }) {
         )}
       </div>
 
+      {mode === 'crosschain' && ccMode === 'custom' && ccInT && ccOutT && ccPreview && (
+        <div className="card">
+          <h2 style={{ marginBottom: 8 }}>Order preview</h2>
+          <div style={{ display: 'flex', gap: 24, marginBottom: 8, flexWrap: 'wrap' }}>
+            <Stat label="Rate" value={`${formatPrice(ccPreview.rate)} ${ccOutT.symbol} / ${ccInT.symbol}`} accent />
+            <Stat label="Expires" value={<BlockEta target={ccPreview.deadline} current={currentBlock} showClock={false} />} />
+          </div>
+          <div className="uni-info-panel" style={{ margin: 0 }}>
+            Splits into {ccPreview.numSlots} slots of {fromWei(ccPreview.perSlotIn, ccInT.decimals)} {ccInT.symbol} → {fromWei(ccPreview.perSlotOut, ccOutT.decimals)} {ccOutT.symbol} each — any registered filler can take one. Preview only, no order created.
+          </div>
+        </div>
+      )}
+
       {chart && eff && mode !== 'crosschain' && (
         <div className="card">
           <h2 style={{ marginBottom: 8 }}>Auction preview</h2>
@@ -681,7 +787,7 @@ export default function Simulate({ wallet }: { wallet: WalletState }) {
         </div>
       )}
 
-      {mode === 'crosschain' && ccSelectedHash && ccSelectedSlot != null && (
+      {mode === 'crosschain' && ccMode === 'order' && ccSelectedHash && ccSelectedSlot != null && (
         <div className="card">
           {(() => {
             const o    = ccOrders.find(x => x.orderHash === ccSelectedHash)
@@ -723,7 +829,7 @@ export default function Simulate({ wallet }: { wallet: WalletState }) {
         </div>
       )}
 
-      {mode === 'crosschain' && preflight && (
+      {mode === 'crosschain' && ccMode === 'order' && preflight && (
         <div className="card">
           <h2>Preflight — slot {preflight.slotIndex} ({preflight.slotStatus})</h2>
           <div className={`status ${preflight.fillable ? 'ok' : 'bad'}`}>
@@ -819,6 +925,21 @@ export default function Simulate({ wallet }: { wallet: WalletState }) {
   )
 }
 
+// Mirrors backend/src/services/crosschainService.ts's getNumSlots — number of
+// equal slots a cross-chain order of this input size would split into.
+// Thresholds are in 18-decimal "ether" units, so normalize first — otherwise
+// a token with fewer decimals (e.g. 6-decimal USDC) always bottoms out at 4.
+function getNumSlotsPreview(inputAmount: bigint, decimals: number): number {
+  const amt = decimals === 18 ? inputAmount
+    : decimals < 18 ? inputAmount * 10n ** BigInt(18 - decimals)
+    : inputAmount / 10n ** BigInt(decimals - 18)
+  if (amt <  500_000_000_000_000_000n)   return 4
+  if (amt < 2_000_000_000_000_000_000n)  return 8
+  if (amt < 10_000_000_000_000_000_000n) return 16
+  if (amt < 50_000_000_000_000_000_000n) return 32
+  return 64
+}
+
 // Express a raw wei amount as a percentage of the order's total input amount,
 // capped at 100% (a single filler may individually quote up to the full order).
 function pctOfOrder(amount: string, total: string): number {
@@ -831,7 +952,7 @@ function pctOfOrder(amount: string, total: string): number {
   } catch { return 0 }
 }
 
-function Stat({ label, value, accent, warn, good }: { label: string; value: string; accent?: boolean; warn?: boolean; good?: boolean }) {
+function Stat({ label, value, accent, warn, good }: { label: string; value: React.ReactNode; accent?: boolean; warn?: boolean; good?: boolean }) {
   return (
     <div>
       <div style={{ fontSize: '0.72rem', color: '#94a3b8', marginBottom: 2 }}>{label}</div>

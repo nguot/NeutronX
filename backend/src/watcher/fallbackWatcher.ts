@@ -84,6 +84,77 @@ async function getBestQuote(
   return best
 }
 
+export interface AggregatorCheckResult {
+  key:           string
+  name:          string
+  ok:            boolean
+  minAmountOut?: string
+  router?:       string
+  error?:        string
+}
+
+export interface FallbackCheckResult {
+  orderHash:           string
+  chainId:             number
+  remainingInput:      string
+  preferredAggregator: string | null
+  results:             AggregatorCheckResult[]
+}
+
+/**
+ * Dry-runs the same quoting step the watcher does for `hash` — against every
+ * aggregator available on its chain — without executing anything on-chain.
+ * Lets the Orders UI show whether (and why) a fallback would currently
+ * succeed for this order.
+ */
+export async function checkFallbackRoute(hash: string): Promise<FallbackCheckResult> {
+  const { rows } = await db.query('SELECT * FROM orders WHERE hash = $1', [hash])
+  if (!rows.length) throw new Error('Order not found')
+  const order = rows[0]
+
+  const tokenIn  = TOKEN_META[order.input_token]
+  const tokenOut = TOKEN_META[order.output_token]
+  if (!tokenIn || !tokenOut) {
+    throw new Error(`Unknown token metadata for ${order.input_token} / ${order.output_token}`)
+  }
+
+  const provider = new ethers.providers.JsonRpcProvider(process.env.ALCHEMY_RPC_URL)
+  const { chainId: networkChainId } = await provider.getNetwork()
+  const chainId = resolveAggregatorChainId(networkChainId)
+
+  const reactor = new ethers.Contract(process.env.PARTIAL_FILL_REACTOR!, REACTOR_ABI, provider)
+  const orderHash = computeOrderHash(order)
+  const rem = (await reactor.remainingInput(orderHash, order.input_amount) as ethers.BigNumber).toBigInt()
+
+  const params: QuoteParams = {
+    chainId,
+    rpcUrl:    process.env.ALCHEMY_RPC_URL!,
+    tokenIn:   { address: order.input_token,  ...tokenIn  },
+    tokenOut:  { address: order.output_token, ...tokenOut },
+    amountIn:  rem,
+    recipient: order.swapper,
+    sender:    process.env.FALLBACK_EXECUTOR!,
+  }
+
+  const results = await Promise.all(availableAggregators(chainId).map(async (a): Promise<AggregatorCheckResult> => {
+    try {
+      const quote = await a.getQuote(params)
+      if (!quote) return { key: a.key, name: a.name, ok: false, error: 'No route found' }
+      return { key: a.key, name: a.name, ok: true, minAmountOut: quote.minAmountOut.toString(), router: quote.router }
+    } catch (e: any) {
+      return { key: a.key, name: a.name, ok: false, error: e.message ?? String(e) }
+    }
+  }))
+
+  return {
+    orderHash,
+    chainId,
+    remainingInput: rem.toString(),
+    preferredAggregator: order.preferred_aggregator ?? null,
+    results,
+  }
+}
+
 export async function startFallbackWatcher() {
   const provider   = new ethers.providers.JsonRpcProvider(process.env.ALCHEMY_RPC_URL)
   const wallet     = new ethers.Wallet(process.env.PRIVATE_KEY!, provider)

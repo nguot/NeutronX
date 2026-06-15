@@ -1,0 +1,424 @@
+================================================================================
+ MỤC LỤC ĐỀ XUẤT CHO BÁO CÁO ĐỒ ÁN TỐT NGHIỆP
+ Đề tài: "Xây dựng hệ thống tổng hợp giao dịch phi tập trung hỗ trợ
+          khớp lệnh từng phần và giao dịch xuyên chuỗi" (NeutronX)
+================================================================================
+
+CÁCH ĐỌC FILE NÀY
+-----------------
+- Mỗi mục ghi rõ 3 thứ: [VIẾT GÌ] nội dung cần trình bày, [HÌNH/SƠ ĐỒ] hình vẽ
+  cần có, [GHI CHÚ] mẹo để thầy cô không chuyên môn đọc lướt vẫn hiểu.
+- Phần lý thuyết dài dòng, kinh điển, KHÔNG phải do mình nghĩ ra -> đẩy xuống
+  PHỤ LỤC, trong thân bài chỉ tóm 3-5 câu rồi trỏ tới phụ lục.
+- Nguyên tắc "đọc lướt cũng hiểu": mỗi chương mở đầu 1 đoạn dẫn, kết thúc 1 đoạn
+  tóm tắt; mỗi cơ chế phức tạp đi kèm 1 hình + 1 ví dụ số cụ thể + 1 bảng so sánh.
+- Cấu trúc giữ theo template DATN sẵn có (6 chương + phụ lục) trong baocao/DoAn.tex.
+
+KÝ HIỆU HỆ THỐNG (dùng thống nhất cả báo cáo, nên đưa vào danh mục thuật ngữ):
+  Swapper = người tạo lệnh (người dùng)   |  Filler = bên đi khớp lệnh (bot)
+  Reactor = PartialFillReactor (hợp đồng khớp lệnh từng phần)
+  Auction = FillAuction (hợp đồng đặt cọc/phạt)
+  Fallback = FallbackExecutor (thực thi dự phòng)
+  Escrow Src/Dst = hợp đồng ký quỹ xuyên chuỗi trên Chain A/Chain B
+
+
+================================================================================
+ CHƯƠNG 1 — GIỚI THIỆU ĐỀ TÀI            (đã viết ~80%, chỉ cần soát lại)
+================================================================================
+Mục tiêu chương: nói rõ "vấn đề là gì, tại sao đáng làm, mình làm gì". Trang 1-6.
+
+1.1  Đặt vấn đề
+   [VIẾT GÌ] 4 nhược điểm hiện trạng, theo đúng thứ tự để dẫn dắt:
+     (1) AMM bị trượt giá + MEV khi lệnh lớn;
+     (2) intent-based phần lớn "all-or-nothing", không khớp từng phần;
+     (3) filler không bị ràng buộc trách nhiệm -> đăng ký rồi bỏ;
+     (4) xuyên chuỗi đa phần phụ thuộc cầu nối (bridge) -> rủi ro bị hack.
+   [HÌNH 1.1] Sơ đồ minh họa trượt giá: 1 lệnh lớn đánh vào pool AMM làm giá
+     trượt mạnh, so với khớp từng phần nhiều nhịp giá tốt hơn. (hình tự vẽ đơn giản)
+   [GHI CHÚ] Mỗi nhược điểm gắn 1 câu "hậu quả với người dùng" để người ngoài hiểu.
+
+1.2  Mục tiêu và phạm vi đề tài
+   [VIẾT GÌ] 5 mục tiêu cụ thể (đấu giá Hà Lan khớp từng phần; EIP-712+Permit2 ký
+     gasless; đặt cọc động + phạt; thực thi dự phòng; xuyên chuỗi HTLC khớp từng phần).
+     Phạm vi: token ERC-20, môi trường Anvil fork + 2 chain giả lập, chưa lên mainnet.
+   [HÌNH/SƠ ĐỒ] Không cần. Có thể dùng 1 bảng "Mục tiêu -> Thành phần hiện thực".
+   [GHI CHÚ] Đây là phần thầy cô đối chiếu ở Chương 6, nên viết mục tiêu đo được.
+
+1.3  Định hướng giải pháp
+   [VIẾT GÌ] Chọn hướng intent-based; giới thiệu tên hệ thống NeutronX và 4 tầng;
+     nêu 4 đóng góp chính (sẽ đào sâu ở Chương 5).
+   [HÌNH 1.2] Sơ đồ kiến trúc tổng quan MỨC RẤT CAO (4 khối: Smart Contract /
+     Backend / Filler / Frontend) — chỉ để người đọc có "bản đồ" trước khi vào sâu.
+   [GHI CHÚ] Hình này cố tình đơn giản; bản chi tiết để ở Chương 4.
+
+1.4  Bố cục đồ án
+   [VIẾT GÌ] Giữ nguyên, soát lại cho khớp mục lục cuối.
+
+>> VIỆC CẦN LÀM: xóa "111111" thừa ở đầu mục 1.1.
+
+
+================================================================================
+ CHƯƠNG 2 — KHẢO SÁT VÀ PHÂN TÍCH YÊU CẦU        (9-11 trang)
+================================================================================
+Mục tiêu chương: chứng minh "đã khảo sát kỹ cái có sẵn" và "chốt được yêu cầu".
+
+2.1  Khảo sát hiện trạng các hệ thống tương tự
+   [VIẾT GÌ] Phân tích 4-5 hệ thống đại diện, mỗi cái 1 đoạn ngắn (ý tưởng / cách
+     khớp lệnh / hỗ trợ từng phần? / xuyên chuỗi? / ràng buộc filler?):
+       - Uniswap (AMM)            - 1inch Limit Order Protocol (limit order)
+       - UniswapX (Dutch auction, intent)   - CoW Protocol (batch auction)
+       - 1inch Fusion / cầu nối HTLC điển hình (cho phần xuyên chuỗi)
+   [BẢNG 2.1] BẢNG SO SÁNH (quan trọng nhất chương) — cột: Khớp từng phần |
+     Đấu giá giảm giá | Ký gasless | Ràng buộc cọc/phạt filler | Đảm bảo khớp
+     trước hạn | Xuyên chuỗi không cầu nối. Hàng cuối = NeutronX (tô đậm các ô "có").
+   [GHI CHÚ] Thầy cô đọc lướt chỉ cần nhìn Bảng 2.1 là thấy ngay "khoảng trống"
+     mà đồ án lấp. Đây là bảng bán được đề tài.
+
+2.2  Tổng quan chức năng
+   2.2.1  Biểu đồ use case tổng quát
+     [HÌNH 2.1] BIỂU ĐỒ USE CASE tổng quát. Tác nhân: Swapper, Filler, Backend
+       (cosigner/hệ thống), (Treasury là tác nhân bị động). Use case chính:
+       Tạo & ký lệnh, Hủy/ vô hiệu nonce lệnh, Đăng ký khớp (đặt cọc), Khớp từng
+       phần, Thực thi dự phòng, Rút cọc/Bị phạt, Tạo lệnh xuyên chuỗi, Khớp slot
+       xuyên chuỗi, Theo dõi trạng thái lệnh.
+     [VIẾT GÌ] Giải thích vai trò từng tác nhân + mô tả 1 dòng mỗi use case.
+   2.2.2  Phân rã use case (chọn 2-3 nhóm để phân rã)
+     [HÌNH 2.2/2.3] Use case phân rã cho "Khớp lệnh từng phần" và "Giao dịch
+       xuyên chuỗi".
+   2.2.3  Quy trình nghiệp vụ
+     [HÌNH 2.4] BIỂU ĐỒ HOẠT ĐỘNG (activity diagram) cho quy trình "Vòng đời 1
+       lệnh khớp từng phần": ký lệnh -> đăng ký+cọc -> các nhịp khớp -> (nếu còn
+       dư & gần hạn) fallback -> tất toán cọc. Có nhánh hủy / hết hạn.
+   [GHI CHÚ] Activity diagram này là "xương sống" để hiểu cả hệ thống — vẽ to, rõ
+     swimlane theo tác nhân.
+
+2.3  Đặc tả chức năng (chọn 4-7 use case quan trọng nhất)
+   [VIẾT GÌ] Mỗi use case 1 bảng đặc tả chuẩn: Tên / Tác nhân / Tiền điều kiện /
+     Luồng chính / Luồng phụ (ngoại lệ) / Hậu điều kiện. Đề xuất 6 cái:
+       (a) Tạo và ký lệnh (EIP-712 + Permit2)
+       (b) Đăng ký khớp lệnh và đặt cọc động
+       (c) Thực thi khớp từng phần (executePartialChunk)
+       (d) Thực thi dự phòng trước hạn (FallbackExecutor)
+       (e) Phạt filler bỏ cọc / Rút cọc khi vô can (slash / release)
+       (f) Khớp một slot lệnh xuyên chuỗi (fillSlot -> withdraw)
+   [HÌNH] Chỉ vẽ activity bổ sung cho (c), (d), (f) vì chúng phức tạp.
+   [GHI CHÚ] Đặt tên use case TRÙNG tên hàm hợp đồng để Chương 4 trỏ ngược lại dễ.
+
+2.4  Yêu cầu phi chức năng
+   [VIẾT GÌ] An toàn (chống reentrancy, chống giả mạo chữ ký, chống griefing),
+     tính đúng đắn tài chính (không khóa nhầm/ mất tiền người dùng), hiệu năng
+     (chi phí gas hợp lý), khả năng mở rộng (thêm aggregator/ thêm chain),
+     khả năng kiểm thử & quan sát (event/log, status()).
+   [BẢNG 2.2] Bảng yêu cầu phi chức năng -> cơ chế đáp ứng (trỏ tới Chương 4/5).
+
+
+================================================================================
+ CHƯƠNG 3 — NỀN TẢNG LÝ THUYẾT VÀ CÔNG NGHỆ      (giữ NGẮN GỌN, 8-10 trang)
+================================================================================
+Nguyên tắc: chỉ giữ phần lý thuyết "đủ để hiểu Chương 4". Mỗi mục 0.5-1 trang +
+1 hình. CÁC PHẦN KINH ĐIỂN, DÀI -> đẩy xuống PHỤ LỤC (xem cuối file).
+
+3.1  Ethereum, EVM và hợp đồng thông minh
+   [VIẾT GÌ] 1 đoạn: tài khoản EOA vs contract, giao dịch, gas, tính bất biến.
+   [GHI CHÚ] Chi tiết kiến trúc EVM/opcode -> Phụ lục.
+
+3.2  Chuẩn token ERC-20 và Permit2
+   [VIẾT GÌ] ERC-20 là gì (3 câu). Vấn đề approve truyền thống. Permit2 cho phép
+     "approve một lần, chi tiêu nhiều lần qua AllowanceTransfer.transferFrom" và
+     đây là primitive mà Reactor + EscrowSrcFactory dùng để kéo tiền của swapper.
+   [HÌNH 3.1] Sơ đồ luồng Permit2: Swapper --approve once--> Permit2; sau đó hợp
+     đồng được ủy quyền gọi transferFrom(swapper -> đích). (cốt lõi để hiểu "gasless")
+   [GHI CHÚ] Đây là công nghệ mình DÙNG (không tự nghĩ ra) nhưng RẤT cần hiểu, nên
+     giữ ở thân bài ở mức sơ đồ; đặc tả EIP-2612/Permit2 chi tiết -> Phụ lục.
+
+3.3  Ký dữ liệu có cấu trúc EIP-712
+   [VIẾT GÌ] Tại sao cần ký có cấu trúc (chống lừa ký, ví hiển thị rõ ràng);
+     khái niệm domain separator + typed struct hash. Liên hệ: lệnh NeutronX được
+     ký theo EIP-712, domain name "NeutronX".
+   [HÌNH 3.2] Sơ đồ tạo digest: typeHash + các trường -> structHash; "\x19\x01" +
+     domainSeparator + structHash -> digest -> chữ ký -> ecrecover ra người ký.
+   [GHI CHÚ] Đặc tả đầy đủ encodeType/encodeData -> Phụ lục.
+
+3.4  Mô hình DEX: AMM, sổ lệnh, và giao dịch theo ý định (intent-based)
+   [VIẾT GÌ] 3 mô hình, mỗi cái 2-3 câu + 1 nhược điểm. Nhấn vào intent-based vì
+     đó là hướng đồ án chọn.
+   [HÌNH 3.3] Hình so sánh 3 mô hình (sơ đồ khối ai-làm-gì): AMM (pool), Order
+     book, Intent (swapper ký -> filler thực thi).
+
+3.5  Đấu giá kiểu Hà Lan (Dutch auction) và chống MEV
+   [VIẾT GÌ] Đấu giá Hà Lan: giá bắt đầu cao rồi giảm dần theo thời gian/block;
+     filler nào thấy có lãi thì nhảy vào khớp. Vì sao điều này hạn chế MEV
+     (giá đã định trước theo thời gian, không tạo cơ hội sandwich như swap tức thời).
+   [HÌNH 3.4] ĐỒ THỊ giá giảm theo block: trục X = block, trục Y = giá; đánh dấu
+     startPrice, độ dốc decayPerBlock, và các điểm fill. (frontend đã có AuctionChart
+     -> có thể chụp lại làm hình thực nghiệm ở Chương 4).
+   [GHI CHÚ] Khái niệm MEV/sandwich chi tiết -> Phụ lục, thân bài chỉ 4-5 câu.
+
+3.6  Hợp đồng khóa thời gian theo mã băm (HTLC) cho giao dịch xuyên chuỗi
+   [VIẾT GÌ] HTLC: hashlock H=keccak256(S) + timelock; bên biết bí mật S thì rút
+     được, hết hạn thì hoàn tiền. Đây là nền cho cơ chế xuyên chuỗi KHÔNG cầu nối.
+   [HÌNH 3.5] Sơ đồ HTLC 2 chiều cơ bản: A khóa trên chain 1, B khóa trên chain 2,
+     lộ S để cả hai cùng rút; nếu không, hoàn tiền sau timelock.
+   [GHI CHÚ] Đây là nền tảng mình dựa vào; cách MÌNH cải tiến (clone-per-slot +
+     Merkle để khớp TỪNG PHẦN) để dành kể ở Chương 4/5, không trộn vào đây.
+
+3.7  Công cụ & công nghệ hiện thực
+   [VIẾT GÌ] Liệt kê ngắn (bảng): Solidity + Foundry (forge/anvil), OpenZeppelin,
+     Uniswap v3 TWAP oracle, Node/Express + TypeScript + PostgreSQL, ethers.js,
+     React/Vite frontend.
+   [BẢNG 3.1] Công nghệ | Vai trò trong hệ thống.
+
+
+================================================================================
+ CHƯƠNG 4 — PHÂN TÍCH, THIẾT KẾ, TRIỂN KHAI VÀ ĐÁNH GIÁ HỆ THỐNG  (TRỌNG TÂM)
+================================================================================
+Đây là chương dài nhất (15-22 trang). Đi từ kiến trúc -> từng tầng -> kiểm thử.
+
+4.1  Kiến trúc tổng thể hệ thống
+   [VIẾT GÌ] Mô tả 4 tầng và cách chúng nói chuyện; on-chain vs off-chain.
+   [HÌNH 4.1] SƠ ĐỒ KIẾN TRÚC CHI TIẾT (hình quan trọng nhất chương): 4 khối
+     + các hợp đồng bên trong khối Smart Contract (Reactor, Auction, Fallback,
+     EscrowSrc/Dst Factory) + Backend (API, cosigner, watcher) + DB Postgres
+     (orders/fills) + Filler bots + Frontend; vẽ mũi tên đánh số luồng dữ liệu.
+   [HÌNH 4.2] SƠ ĐỒ TRÌNH TỰ (sequence diagram) "Vòng đời 1 lệnh trong cùng chuỗi":
+     Swapper -> Frontend (ký) -> Backend (cosign+lưu DB) -> Filler (đăng ký+cọc tại
+     Auction) -> Reactor.executePartialChunk (Permit2 chuyển input, filler trả
+     output) -> Auction.onFillSuccess (hoàn cọc) -> [nếu dư] Fallback.
+   [GHI CHÚ] Hai hình 4.1 + 4.2 phải đủ để người đọc lướt nắm toàn bộ — đầu tư vẽ đẹp.
+
+4.2  Mô hình dữ liệu lệnh (PartialFillOrder)
+   [VIẾT GÌ] 11 trường của OrderInfo và ý nghĩa từng trường (swapper, inputToken,
+     inputAmount, outputToken, minOutputAmount, deadline, nonce, minFillBps,
+     startPrice, decayPerBlock, feeTier). Nhấn: từ bản cũ 8 trường -> nay 11 trường,
+     trong đó startPrice/decayPerBlock/feeTier ĐÃ được đưa vào type hash (lỗi C-1)
+     nên đường cong giá filler thực thi cũng được cosigner xác thực, filler không
+     "bơm" giá được nữa.
+   [BẢNG 4.1] Bảng trường lệnh: Tên | Kiểu | Ý nghĩa | Ai đặt giá trị.
+   [GHI CHÚ] Đây là "hợp đồng dữ liệu" trung tâm — mọi hình sau đều tham chiếu.
+
+4.3  Tầng hợp đồng thông minh
+   4.3.1  PartialFillReactor — khớp lệnh từng phần theo đấu giá Hà Lan
+     [VIẾT GÌ] register() (chuyển tiếp đăng ký + cosig), executePartialChunk()
+       theo trình tự Checks-Effects-Interactions; cơ chế "remaining" đóng gói
+       (RemainingLib), con trỏ giá DecayCursor (mỗi nhịp định giá độc lập tại giá
+       hiện tại -> tránh underflow ở nhịp cuối, lỗi M-1); ràng buộc minFillBps
+       (sàn mảnh) + miễn trừ khi khớp nốt phần dư; ràng buộc sàn output theo
+       pro-rata mỗi nhịp và sàn tuyệt đối khi tất toán (C-1); hủy lệnh / vô hiệu nonce.
+     [HÌNH 4.3] Sơ đồ trạng thái 1 lệnh trong Reactor: NEW -> PARTIALLY_FILLED ->
+       FILLED; nhánh CANCELLED / NONCE_INVALIDATED / FALLBACK_INITIATED.
+     [HÌNH 4.4] VÍ DỤ SỐ minh họa khớp từng phần: lệnh 1 WETH, startPrice/decay cho
+       trước; 3 nhịp khớp tại 3 block khác nhau với giá giảm dần -> bảng tính output
+       mỗi nhịp. (Cho người ngoài thấy "tiền chạy thế nào").
+     [GHI CHÚ] Đừng dán nguyên code; trích 5-10 dòng then chốt (vòng định giá +
+       CEI) và giải thích bằng lời.
+   4.3.2  FillAuction — đặt cọc động và cơ chế phạt
+     [VIẾT GÌ] Quy trình register (tính cọc), onFillSuccess (hoàn cọc theo tỉ lệ
+       giao đúng cam kết), slash (phạt khi BỎ phần đã cam kết), releaseRegistration
+       (trả cọc khi vô can: lệnh đã xong / bị hủy / nonce vô hiệu), withdraw (rút
+       theo pull-payment). Giải thích 2 tham số: collateralRate theo bucket cỡ lệnh
+       + timeMultiplier theo thời gian còn lại; refundTable[cỡ lệnh][tỉ lệ khớp].
+       Nhấn các quyết định thiết kế: cọc tuyến tính theo trần (không "ceiling-shop"),
+       snapshot refundRow lúc đăng ký (owner không sửa hồi tố — M-2), tính refund
+       theo cam kết RIÊNG của filler chứ không theo cả lệnh (D-2), và cap mẫu số
+       theo remaining-at-fill khi bị filler khác giành phần (3.5).
+     [HÌNH 4.5] Sơ đồ trạng thái 1 Registration: REGISTERED -> {FILLED | SLASHED |
+       RELEASED}; điều kiện chuyển + SLASH_WINDOW (50 block sau deadline).
+     [HÌNH 4.6/BẢNG 4.2] Minh họa bảng cọc/hoàn: vẽ refundTable 4x5 + 1 ví dụ:
+       filler cam kết X, giao 100% -> hoàn full; giao 20% -> mất phần lớn vào treasury.
+     [HÌNH 4.7] Công thức cọc (đẹp dạng phương trình): collateral =
+       notionalEth × collateralRate[size] × timeMultiplier[time]. Có ví dụ số.
+     [GHI CHÚ] Đây là 1 trong 4 đóng góp -> giải thích "vì sao thiết kế thế" kỹ,
+       nhưng phần đối chiếu với hệ khác để ở Chương 5.
+   4.3.3  FallbackExecutor — thực thi dự phòng đảm bảo lệnh hoàn tất
+     [VIẾT GÌ] Kích hoạt trong cửa sổ FALLBACK_WINDOW (10 block trước deadline);
+       xác thực chữ ký lệnh (C-2), markFallbackInitiated làm remaining=0 nguyên tử
+       (loại trừ lẫn nhau với khớp thường, chống double-spend), kéo phần dư qua
+       Permit2, swap qua router/aggregator trong allowlist (1inch/0x/Uniswap...),
+       ép sàn output đã ký (C-1) + sàn tuyệt đối tích lũy (C-3), hoàn lại input thừa
+       cho swapper (C-4). Allowlist router -> mở rộng aggregator chỉ bằng 1 lời gọi.
+     [HÌNH 4.8] Sequence diagram fallback: gần hạn -> Solver tính route -> gọi
+       executeFallback -> Reactor markFallbackInitiated -> Permit2 pull -> Router
+       swap -> kiểm tra sàn -> output tới swapper -> refund thừa.
+     [GHI CHÚ] Làm rõ "đây là cơ chế bảo đảm lệnh KHÔNG bao giờ hết hạn mà bỏ dở".
+   4.3.4  Cross-chain: EscrowSrc/Dst + Factory (xuyên chuỗi khớp từng phần)
+     [VIẾT GÌ] Mô hình clone-per-slot trên CẢ HAI chain (không dùng HTLC chia sẻ):
+       lệnh chia N slot (power of 2), cây Merkle các (H_i, slotIndex), chỉ ký+lưu
+       root; phân cấp bí mật rootSecret -> masterSecret -> S_i -> H_i (không lưu S_i,
+       suy ra khi cần). Luồng 1 slot: fillSlot (verify 2 chữ ký swapper+cosigner +
+       Merkle proof -> CREATE2 clone -> Permit2 kéo slotAmount -> nạp safety deposit)
+       => filler nạp output trên Chain B (EscrowDst.deploy) => backend watcher gọi
+       claim(S_i) trên Chain B (lộ S_i công khai) => ai cũng có thể withdraw(S_i)
+       trên Chain A trả WETH + deposit cho filler. An toàn timelock: T2 < T1.
+       Quyết định thiết kế chống griefing: MIN_SAFETY_DEPOSIT (3.7), deposit khi
+       cancel trả cho SWAPPER chứ không phải caller (M-3), reopenSlot khi clone bị
+       hủy (M-3), tiền của slot chưa khớp KHÔNG bao giờ rời ví swapper.
+     [HÌNH 4.9] Sơ đồ kiến trúc xuyên chuỗi 2 chain (lấy/vẽ lại từ tests/crosschain
+       README): Chain A (EscrowSrcFactory + clones) | Chain B (EscrowDstFactory +
+       clones) | Backend watcher ở giữa.
+     [HÌNH 4.10] SƠ ĐỒ PHÂN CẤP BÍ MẬT + CÂY MERKLE: rootSecret -> S_i -> H_i ->
+       leaf -> root; chỉ root lên chain. (giải thích "vì sao khớp từng phần mà chỉ
+       cần ký 1 root").
+     [HÌNH 4.11] Sequence diagram xuyên chuỗi đầy đủ 1 slot (10 bước như README),
+       kèm dòng thời gian T1/T2 để thấy bất biến T2<T1 bảo vệ filler.
+     [BẢNG 4.3] So sánh "HTLC chia sẻ (cũ)" vs "clone-per-slot (hiện tại)" — lấy từ
+       bảng trong README crosschain (cô lập lỗi, ủy quyền Permit2 lazy, slot chưa
+       khớp không bị kéo tiền, có safety deposit, dễ kiểm toán bằng status()).
+     [GHI CHÚ] Đây là đóng góp "hiếm gặp" -> đầu tư hình. Một ví dụ token-flow
+       (0.25 WETH <-> 500 USDC mỗi slot) giúp người ngoài hình dung.
+
+4.4  Tầng Backend
+   [VIẾT GÌ] API tạo/đọc lệnh (orders, fills), vai trò COSIGNER (đồng ký để xác
+     thực đường cong giá / cây Merkle), watcher theo dõi sự kiện (chainBWatcher
+     claim escrow; fallbackWatcher kích hoạt dự phòng), lưu trữ Postgres
+     (schema orders/fills/escrow_addr). Trỏ schema.sql.
+   [HÌNH 4.12] Sơ đồ thành phần Backend + ERD rút gọn (bảng orders, fills + quan hệ).
+   [GHI CHÚ] Backend không giữ tiền người dùng — nói rõ để trấn an về tin cậy.
+
+4.5  Tầng Filler (framework mô phỏng bên khớp lệnh)
+   [VIẾT GÌ] 2 chiến lược mẫu: WhaleFiller (vốn lớn, khớp mạnh tay) và CoWFiller
+     (so khớp/đối ứng); vòng lặp listener -> strategy -> execution; cách bot tính
+     cọc qua previewCollateral rồi register + executePartialChunk.
+   [HÌNH 4.13] Sơ đồ hoạt động 1 bot filler (poll lệnh -> quyết định -> đăng ký ->
+     khớp -> rút cọc).
+   [GHI CHÚ] Nhấn: framework để THỬ NGHIỆM cạnh tranh filler, không phải sản phẩm.
+
+4.6  Giao diện người dùng (Frontend)
+   [VIẾT GÌ] Các trang chính: tạo lệnh, Orders (theo dõi), Explore, AuctionChart
+     (đồ thị giá), DutchAuction demo, Simulate. Luồng ký ví (wallet_signTypedData_v4).
+   [HÌNH 4.14] ẢNH CHỤP MÀN HÌNH thực tế: trang tạo lệnh + trang theo dõi + đồ thị
+     đấu giá có các điểm fill. (ảnh thật rất thuyết phục với người chấm)
+   [GHI CHÚ] 2-4 screenshot, chú thích rõ.
+
+4.7  Kiểm thử và đánh giá hệ thống
+   4.7.1  Phương pháp & môi trường kiểm thử
+     [VIẾT GÌ] Foundry unit/invariant test cho hợp đồng; Anvil fork mainnet (cùng
+       chuỗi) + 2 Anvil độc lập (xuyên chuỗi); kịch bản E2E run_cc.sh với 2 filler
+       đồng thời khớp 2 slot cùng 1 lệnh.
+   4.7.2  Kết quả kiểm thử chức năng
+     [BẢNG 4.4] Bảng test case: ID | Mục tiêu | Đầu vào | Kỳ vọng | Kết quả (Pass).
+       Gồm: khớp nhiều nhịp, fallback đúng hạn, slash khi bỏ cọc, release khi vô can,
+       hủy lệnh / vô hiệu nonce, E2E xuyên chuỗi "ALL CHECKS PASSED".
+     [HÌNH 4.15] Ảnh log E2E "ALL CHECKS PASSED" + bảng số dư trước/sau của swapper
+       và 2 filler (WETH/USDC) chứng minh tiền chạy đúng.
+   4.7.3  Đánh giá an toàn (đối chiếu các lỗi đã vá)
+     [BẢNG 4.5] Bảng các lớp lỗ hổng đã xử lý (đặt theo nhãn C-/M-/H-/L-/3.x trong
+       code): reentrancy (CEI + guard), giả mạo chữ ký giá (C-1), double-spend khi
+       fallback (C-2), griefing xuyên chuỗi (M-3, safety deposit), ceiling-shopping
+       (cọc tuyến tính), sửa bảng hoàn hồi tố (M-2)... Mỗi dòng: Nguy cơ | Cách chặn.
+     [GHI CHÚ] Đây là điểm cộng lớn: cho thấy tư duy bảo mật. Diễn giải bằng lời cho
+       người ngoài (vd "kẻ tấn công có thể làm gì nếu không có cơ chế này").
+   4.7.4  Đánh giá hiệu năng / chi phí (nếu kịp)
+     [BẢNG 4.6] Chi phí gas các hàm chính (register, executePartialChunk, fillSlot,
+       executeFallback) đo bằng forge --gas-report.
+
+4.8  Kết luận chương
+   [VIẾT GÌ] Tóm tắt đã hiện thực & kiểm chứng được gì.
+
+
+================================================================================
+ CHƯƠNG 5 — CÁC GIẢI PHÁP VÀ ĐÓNG GÓP NỔI BẬT
+================================================================================
+Mục tiêu: tách riêng phần "điểm mới so với thiên hạ". Chương 4 mô tả "làm thế nào",
+chương này trả lời "mới ở đâu, tốt hơn ở đâu". 6-8 trang. Tránh lặp lại chi tiết
+cài đặt — chỉ nêu ý tưởng + so sánh + lập luận.
+
+5.1  Khớp lệnh từng phần theo đấu giá Hà Lan hạn chế MEV
+   [VIẾT GÌ] So với UniswapX/limit order: định giá độc lập mỗi nhịp tại giá đã suy
+     giảm, sàn pro-rata + sàn tuyệt đối, đường cong giá được cosigner xác thực.
+   [BẢNG 5.1] So sánh đặc tính khớp từng phần: NeutronX vs 1inch LOP vs UniswapX.
+
+5.2  Đặt cọc động kết hợp phạt ràng buộc trách nhiệm filler
+   [VIẾT GÌ] Đây là đóng góp khác biệt rõ nhất: hầu hết hệ khác KHÔNG phạt filler
+     bỏ kèo. Trình bày triết lý: cọc theo cỡ lệnh & thời gian, hoàn theo mức giao
+     đúng cam kết, chỉ phạt khi THỰC SỰ bỏ phần còn fill được (phân biệt "thua cuộc
+     đua" vs "bỏ kèo"). Nêu các tình huống biên đã xử lý (hủy lệnh, nonce vô hiệu,
+     bị filler khác giành phần) để thấy thiết kế "công bằng".
+   [HÌNH 5.1] Cây quyết định: sau deadline+window, một Registration đi về SLASH hay
+     RELEASE? (theo remaining / cancelled / nonceInvalidated).
+
+5.3  Thực thi dự phòng đảm bảo lệnh luôn hoàn tất
+   [VIẾT GÌ] Vì sao cần (chống "đăng ký rồi bỏ" làm lệnh treo tới hết hạn); thiết
+     kế loại trừ lẫn nhau với khớp thường + allowlist aggregator (mở rộng dễ).
+   [BẢNG 5.2] "Có / không có fallback" -> hệ quả với người dùng.
+
+5.4  Giao dịch xuyên chuỗi không cầu nối, hỗ trợ khớp TỪNG PHẦN
+   [VIẾT GÌ] Điểm hiếm gặp: HTLC truyền thống xuyên chuỗi thường all-or-nothing;
+     ở đây dùng Merkle-of-secrets + clone-per-slot để N filler khớp N phần độc lập,
+     không cầu nối, cô lập rủi ro từng slot, tiền slot chưa khớp không rời ví.
+   [BẢNG 5.3] So sánh với cầu nối (bridge) và HTLC chia sẻ: tin cậy / rủi ro giam
+     tiền / khớp từng phần / cô lập lỗi.
+   [GHI CHÚ] Đây là "đinh" của đồ án — viết kỹ phần lập luận vì sao an toàn hơn.
+
+5.5  Tổng hợp đóng góp
+   [BẢNG 5.4] Bảng 4 đóng góp -> vấn đề giải quyết -> bằng chứng (mục/hình ở Chương 4).
+
+
+================================================================================
+ CHƯƠNG 6 — KẾT LUẬN VÀ HƯỚNG PHÁT TRIỂN          (2-3 trang)
+================================================================================
+6.1  Kết luận
+   [VIẾT GÌ] Đối chiếu lần lượt 5 mục tiêu ở 1.2 -> đã đạt tới đâu (nên làm dạng
+     bảng "Mục tiêu -> Kết quả -> Bằng chứng").
+   [BẢNG 6.1] Bảng đối chiếu mục tiêu/kết quả.
+6.2  Hạn chế
+   [VIẾT GÌ] Mới chạy trên Anvil giả lập, chưa audit chuyên nghiệp, cosigner còn
+     tập trung, filler còn là mô phỏng, chưa tối ưu gas/UX production.
+6.3  Hướng phát triển
+   [VIẾT GÌ] Triển khai testnet/mainnet, phân tán cosigner, mở rộng >2 chain
+     (đã có thiết kế N-chain registry — nhắc tới), thêm nhiều aggregator, giải
+     quyết "Chain B wedge", audit độc lập.
+
+
+================================================================================
+ PHỤ LỤC  (đẩy lý thuyết dài/kinh điển & chi tiết kỹ thuật xuống đây)
+================================================================================
+PL-A  Hướng dẫn viết đồ án (giữ theo template — có thể bỏ khi nộp).
+PL-B  Đặc tả use case đầy đủ (các use case không nêu hết ở 2.3).
+PL-C  Chi tiết EVM, mô hình gas, vòng đời giao dịch Ethereum.
+PL-D  Đặc tả đầy đủ EIP-712 (encodeType/encodeData) và Permit2 (AllowanceTransfer,
+      SignatureTransfer) — thân bài chỉ cần sơ đồ 3.2/3.1.
+PL-E  Lý thuyết MEV chi tiết (sandwich, frontrunning, PBS) — thân bài chỉ tóm tắt.
+PL-F  Toàn văn các struct/hàm hợp đồng & bảng tham số mặc định (collateralRate,
+      refundTable, các hằng SLASH_WINDOW/FALLBACK_WINDOW/MIN_SAFETY_DEPOSIT).
+PL-G  Kịch bản & log kiểm thử E2E đầy đủ (setup_cc.sh / run_cc.sh, bảng từng bước).
+PL-H  Bảng tổng hợp các lỗ hổng & bản vá theo nhãn (C-/M-/H-/L-/3.x) kèm trích dẫn
+      dòng code — bản rút gọn để ở Bảng 4.5.
+
+>> NGUYÊN TẮC PHỤ LỤC: cái gì "không phải mình nghĩ ra" + "dài" + "không bắt buộc
+   để hiểu đóng góp" thì xuống đây; thân bài chỉ giữ sơ đồ + 3-5 câu + trỏ phụ lục.
+
+
+================================================================================
+ DANH MỤC HÌNH/SƠ ĐỒ CẦN VẼ (gom lại để dễ phân công làm)
+================================================================================
+ƯU TIÊN CAO (bắt buộc, ai đọc lướt cũng phải nhìn):
+  - H4.1  Kiến trúc chi tiết toàn hệ thống
+  - H4.2  Sequence: vòng đời lệnh cùng chuỗi
+  - H2.1  Use case tổng quát        - H2.4  Activity: vòng đời lệnh
+  - H4.9 + H4.11  Kiến trúc & sequence xuyên chuỗi
+  - H4.10 Phân cấp bí mật + cây Merkle
+  - H3.4  Đồ thị giá đấu giá Hà Lan (kèm screenshot AuctionChart thực tế)
+  - Bảng 2.1 So sánh hệ thống      - Bảng 4.5 Lỗ hổng & bản vá
+
+ƯU TIÊN TRUNG BÌNH:
+  - H1.1 trượt giá, H1.2 kiến trúc cao, H3.1 Permit2, H3.2 EIP-712, H3.3 3 mô hình DEX,
+    H3.5 HTLC; H4.3/H4.5 sơ đồ trạng thái; H4.4/H4.6/H4.7 ví dụ số cọc & giá;
+    H4.8 sequence fallback; H4.12 backend+ERD; H4.13 filler; H4.14 screenshots;
+    H5.1 cây quyết định slash/release; các bảng so sánh Chương 5.
+
+CÔNG CỤ VẼ GỢI Ý: draw.io / Excalidraw cho kiến trúc & flow; PlantUML hoặc
+  mermaid cho sequence/use case/state; matplotlib hoặc chính AuctionChart cho đồ thị giá.
+
+
+================================================================================
+ GHI CHÚ QUAN TRỌNG ĐỂ "THẦY CÔ KHÔNG CHUYÊN MÔN ĐỌC CŨNG HIỂU"
+================================================================================
+1. Mỗi cơ chế phức tạp = 1 HÌNH + 1 VÍ DỤ SỐ cụ thể (kèm con số token) + 1 câu
+   "nếu không có cơ chế này thì điều xấu gì xảy ra".
+2. Dùng nhất quán bộ thuật ngữ Swapper/Filler/Reactor/Auction/Fallback/Escrow;
+   đưa vào Danh mục thuật ngữ & viết tắt ngay đầu báo cáo.
+3. Mỗi chương: đoạn mở đầu (sắp trình bày gì) + đoạn kết (vừa trình bày gì).
+4. Hạn chế dán code; nếu cần chỉ trích 5-10 dòng cốt lõi + chú thích bằng lời.
+5. Mọi khẳng định "an toàn/đảm bảo" phải trỏ tới bằng chứng kiểm thử ở 4.7.
+6. KHÔNG để lý thuyết kinh điển chiếm chỗ của đóng góp: Chương 3 ngắn, đẩy chi
+   tiết xuống Phụ lục; dồn "đất" cho Chương 4 và 5.

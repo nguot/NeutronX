@@ -13,6 +13,10 @@ CREATE TABLE IF NOT EXISTS orders (
     decay_per_block INTEGER NOT NULL,
     fee_tier        INTEGER NOT NULL,
     signature       TEXT NOT NULL,
+    -- block number the auction curve starts decaying from (priceAt(b) = start_price -
+    -- decay_per_block*(b - start_block)). NULL for orders created before this column
+    -- existed; orderService falls back to deadline - AUCTION_BLOCKS for those.
+    start_block     BIGINT,
     status              TEXT    NOT NULL DEFAULT 'pending',
     fallback_initiated  BOOLEAN NOT NULL DEFAULT false,
     -- swapper's preferred fallback aggregator (see backend/src/services/aggregators);
@@ -23,6 +27,7 @@ CREATE TABLE IF NOT EXISTS orders (
 
 -- idempotent migration for pre-existing databases
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS preferred_aggregator TEXT;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS start_block BIGINT;
 
 CREATE TABLE IF NOT EXISTS fills (
     id              TEXT PRIMARY KEY,
