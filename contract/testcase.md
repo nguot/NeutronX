@@ -321,6 +321,7 @@ are fallback / `verifyOrderSignature` paths exercised only by the excluded fork 
 | Trufy 3.6 last-slot output underfunding | `escrowDstWatcher` + `ccFill` per-slot output sizing (off-chain, no Foundry test) |
 | Trufy 3.7 1-wei safety deposit | **`EscrowSrcFactory::test_fillSlot_{zeroSafetyDeposit,dustSafetyDeposit}_reverts`** |
 | Trufy 3.8 zero-amount non-final slots | **`EscrowSrcFactory::test_fillSlot_zeroSlotAmount_reverts`** |
+| Trufy (latest report) 3.1 single server cosigner key | **`EscrowSrcFactory::test_fillSlot_perSessionCosignerKey_reverts`** (per-session key rejected on-chain) + **`..._singleCosigner_servesMultipleSwappers`**; backend now signs with one `COSIGNER_PRIVATE_KEY` (not per-user `rootSecret`) — `crosschainService.getCosignerWallet` |
 | Trufy R2 §3.5 honest-filler forfeiture griefing | **`FillAuction::test_onFillSuccess_shrunkRemainder_fullRefund`**, **`..._underDelivery_withFullRemainder_stillPenalised`**, **`FrontRunGriefing::testFuzz_frontRun_honestFillerKeepsFullStake`** |
 | Grief-fill safety-deposit reclaim (cancel → swapper, hardening) | **`EscrowSrcFactory::test_cancel_afterExpiry_refundsSwapper_andPaysSwapperDeposit`** |
 | Double-settlement / terminal state | **`FillAuctionTerminalState::*`** |

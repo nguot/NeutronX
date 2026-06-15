@@ -167,6 +167,63 @@ contract EscrowSrcFactoryTest is Test {
         factory.fillSlot{value: DEPOSIT}(info, wrongSig, cosignerSig, 0, hashlock0, proof0);
     }
 
+    // ── Trufy 3.1: a per-SESSION cosigner key is rejected. The factory accepts
+    //    exactly one immutable cosigner; the backend must therefore sign every
+    //    order with that single server key, never a per-swapper-derived key.
+    //    This pins the on-chain half of the fix — if the backend regresses to a
+    //    per-session signing key, fillSlot reverts here exactly like this.
+    function test_fillSlot_perSessionCosignerKey_reverts() public {
+        EscrowSrcFactory.OrderInfo memory info = _info();
+        bytes32 orderHash = factory.hashOrder(info);
+        bytes memory swapperSig = _sign(swapperKey, orderHash);
+
+        // A fresh per-session key (what the old backend derived from rootSecret).
+        uint256 perSessionKey = 0x5E5510;
+        assertTrue(vm.addr(perSessionKey) != cosigner, "test setup: keys must differ");
+        bytes memory perSessionSig = _sign(perSessionKey, orderHash);
+
+        bytes32[] memory proof0 = new bytes32[](1);
+        proof0[0] = leaf1;
+
+        vm.prank(filler);
+        vm.expectRevert("invalid signature");
+        factory.fillSlot{value: DEPOSIT}(info, swapperSig, perSessionSig, 0, hashlock0, proof0);
+    }
+
+    // ── Trufy 3.1: the single server cosigner serves multiple distinct swappers.
+    //    Two different swappers' orders both verify against the SAME immutable
+    //    cosigner — the property the per-session model could never satisfy.
+    function test_fillSlot_singleCosigner_servesMultipleSwappers() public {
+        // First swapper (the default `swapper`) fills slot 0.
+        EscrowSrcFactory.OrderInfo memory info0 = _info();
+        bytes32 orderHash0 = factory.hashOrder(info0);
+        bytes32[] memory proof0 = new bytes32[](1);
+        proof0[0] = leaf1;
+        vm.prank(filler);
+        factory.fillSlot{value: DEPOSIT}(
+            info0, _sign(swapperKey, orderHash0), _sign(cosignerKey, orderHash0), 0, hashlock0, proof0
+        );
+
+        // A second, unrelated swapper — same single cosigner signs their order too.
+        uint256 swapper2Key = 0xCAFE;
+        address swapper2     = vm.addr(swapper2Key);
+        weth.mint(swapper2, INPUT_AMOUNT);
+        vm.prank(swapper2);
+        weth.approve(address(permit2), type(uint256).max);
+
+        EscrowSrcFactory.OrderInfo memory info2 = _info();
+        info2.swapper = swapper2;
+        info2.nonce   = 2;
+        bytes32 orderHash2 = factory.hashOrder(info2);
+
+        vm.prank(filler);
+        address escrow2 = factory.fillSlot{value: DEPOSIT}(
+            info2, _sign(swapper2Key, orderHash2), _sign(cosignerKey, orderHash2), 0, hashlock0, proof0
+        );
+        assertTrue(factory.isSlotFilled(orderHash2, 0));
+        assertEq(weth.balanceOf(escrow2), 1 ether);
+    }
+
     // ── if the secret is never revealed, anyone can cancel after expiry ──────
 
     function test_cancel_afterExpiry_refundsSwapper_andPaysSwapperDeposit() public {

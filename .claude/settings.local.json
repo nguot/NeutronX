@@ -225,7 +225,10 @@
       "Bash(node test_uniswap.js)",
       "Bash(node _tmp_test_uniswap.js)",
       "Bash(cd \"/c/Users/vutie/Documents/DATN/dex-aggregator/backend\" && rm -f _tmp_test_uniswap.js)",
-      "Bash(python3 -m json.tool)"
+      "Bash(python3 -m json.tool)",
+      "Bash(command -v wsl)",
+      "Read(//mnt/**)",
+      "Bash(echo \"exit: $?\")"
     ],
     "additionalDirectories": [
       "\\tmp",

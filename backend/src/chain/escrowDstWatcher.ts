@@ -1,5 +1,5 @@
 import { ethers } from 'ethers'
-import { findSlotByHashlock, updateSlotStatus, deriveSecret } from '../services/crosschainService'
+import { findSlotByHashlock, updateSlotStatus, deriveSecret, getCosignerWallet } from '../services/crosschainService'
 import { db } from '../db/client'
 import { ensureIndexerStateTable, resolveCheckpoint, setCheckpoint } from '../db/checkpoint'
 
@@ -209,8 +209,11 @@ async function handleEscrow(
     nonce:       match.nonce,
   }, match.slot_index)
 
-  // cosignerWallet is derived from rootSecret (same key every time, deterministic)
-  const cosignerWallet = new ethers.Wallet(rootSecret, provider)
+  // Relay claim() with the single server cosigner key (Trufy 3.1). The secret
+  // above still comes from this session's per-user rootSecret; the wallet that
+  // *sends* the tx is the server's funded cosigner EOA, the same key that signs
+  // orders and matches the factory's immutable cosigner.
+  const cosignerWallet = getCosignerWallet(provider)
 
   // 3.2: bind both legs to the SAME filler before revealing the secret.
   // assigned_filler is the ACTUAL on-chain source filler (msg.sender of

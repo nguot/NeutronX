@@ -189,6 +189,26 @@ function getProof(layers: string[][], idx: number): string[] {
   return proof
 }
 
+// ─── Cosigner key (single, server-wide) ─────────────────────────────────────────
+//
+// Trufy 3.1: the cosigner is the SERVER's attestation key — one key for every
+// order, whose address must equal the factory's immutable `cosigner` (deployed
+// as COSIGNER_ADDRESS). It is used to (a) EIP-712-sign orders and (b) relay
+// EscrowDst.claim(). It is emphatically NOT per-user: the previous code derived
+// it from each session's `rootSecret`, so every swapper signed with a different
+// key while the factory only accepts one — every real order reverted on the
+// cosigner check. `rootSecret` is now used ONLY to derive that session's HTLC
+// secrets (see deriveSecret); it is never a signing key.
+export function getCosignerWallet(provider?: ethers.providers.Provider): ethers.Wallet {
+  const pk = process.env.COSIGNER_PRIVATE_KEY
+  if (!pk) throw new Error('COSIGNER_PRIVATE_KEY not set — the server cosigner key must match the factory\'s immutable cosigner (COSIGNER_ADDRESS)')
+  return provider ? new ethers.Wallet(pk, provider) : new ethers.Wallet(pk)
+}
+
+export function getCosignerAddress(): string {
+  return getCosignerWallet().address
+}
+
 // ─── Session ──────────────────────────────────────────────────────────────────
 
 export interface SessionInfo {
@@ -198,20 +218,23 @@ export interface SessionInfo {
 }
 
 export async function getOrCreateSession(swapper: string): Promise<SessionInfo> {
-  const existing = await db.query('SELECT cosigner_addr FROM cc_sessions WHERE swapper = $1', [swapper])
+  // The cosigner is server-wide, the same for every swapper (see getCosignerWallet).
+  const cosignerAddr = getCosignerAddress()
+
+  const existing = await db.query('SELECT 1 FROM cc_sessions WHERE swapper = $1', [swapper])
   if (existing.rows.length > 0) {
-    return { swapper, cosignerAddr: existing.rows[0].cosigner_addr, isNew: false }
+    return { swapper, cosignerAddr, isNew: false }
   }
 
-  // Generate root secret and derive cosigner wallet (rootSecret doubles as the private key)
-  const rootSecret  = ethers.utils.hexlify(ethers.utils.randomBytes(32))
-  const cosignerWallet = new ethers.Wallet(rootSecret)
+  // Per-user root secret — used ONLY to derive this session's HTLC secrets,
+  // never as a signing key (Trufy 3.1).
+  const rootSecret = ethers.utils.hexlify(ethers.utils.randomBytes(32))
 
   await db.query(
     'INSERT INTO cc_sessions (swapper, root_secret, cosigner_addr) VALUES ($1, $2, $3)',
-    [swapper, rootSecret, cosignerWallet.address]
+    [swapper, rootSecret, cosignerAddr]
   )
-  return { swapper, cosignerAddr: cosignerWallet.address, isNew: true }
+  return { swapper, cosignerAddr, isNew: true }
 }
 
 async function getRootSecret(swapper: string): Promise<string | null> {
@@ -291,8 +314,8 @@ export async function createCrossChainOrder(p: CreateOrderParams): Promise<Order
 
   const { root: merkleRoot, layers } = buildTree(leaves)
 
-  // EIP-712 sign as cosigner
-  const cosignerWallet = new ethers.Wallet(rootSecret)
+  // EIP-712 sign as cosigner — single server key (NOT derived from rootSecret).
+  const cosignerWallet = getCosignerWallet()
 
   const structHash = ethers.utils.keccak256(
     ethers.utils.defaultAbiCoder.encode(

@@ -10,8 +10,10 @@ import "../src/crosschain/EscrowDstFactory.sol";
 /**
  * Four entry points — each pair deployed to its own chain. A→B swaps use
  * runChainA()+runChainB(); B→A swaps use the mirror-image runChainB_Src()+
- * runChainA_Dst(), reusing the SAME cosigner (one per swapper session, valid
- * for both directions):
+ * runChainA_Dst(), reusing the SAME cosigner. COSIGNER_ADDRESS is the SERVER's
+ * single attestation key (Trufy 3.1) — one key for every swapper and every
+ * order, NOT one per session — and must equal the backend's COSIGNER_PRIVATE_KEY
+ * address. The factory stores it immutably and accepts only signatures from it:
  *
  *   Chain A (source / WETH):
  *     PRIVATE_KEY=0x... COSIGNER_ADDRESS=0x... forge script script/DeployCrossChain.s.sol \
