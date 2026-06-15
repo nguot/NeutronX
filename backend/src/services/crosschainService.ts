@@ -488,15 +488,6 @@ export async function updateSlotFiller(orderHash: string, slotIndex: number, fil
   )
 }
 
-// Reset a stuck 'claimed' slot back to 'available' when Chain B was restarted
-// and the escrow no longer exists on the current Chain B instance.
-export async function resetSlotToAvailable(orderHash: string, slotIndex: number): Promise<void> {
-  await db.query(
-    "UPDATE cc_slots SET status='available', escrow_addr=NULL, assigned_filler=NULL WHERE order_hash=$1 AND slot_index=$2",
-    [orderHash, slotIndex]
-  )
-}
-
 // Filler calls this after successfully calling claimSlot() on Chain A.
 // Transitions 'claimed' → 'done' so the dev UI stops showing "Claim WETH".
 export async function markSlotDone(orderHash: string, slotIndex: number): Promise<void> {

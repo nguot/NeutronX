@@ -228,7 +228,8 @@
       "Bash(python3 -m json.tool)",
       "Bash(command -v wsl)",
       "Read(//mnt/**)",
-      "Bash(echo \"exit: $?\")"
+      "Bash(echo \"exit: $?\")",
+      "Bash(grep -rn \"slots/.*filler\\\\|/filler'\\\\|/filler\\\\`\\\\|updateSlotFiller\\\\|slots/\\\\${.*}/filler\" frontend/src filler/CoWFiller/src filler/WhaleFiller/src)"
     ],
     "additionalDirectories": [
       "\\tmp",

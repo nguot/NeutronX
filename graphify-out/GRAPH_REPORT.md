@@ -1,16 +1,16 @@
 # Graph Report - dex-aggregator  (2026-06-16)
 
 ## Corpus Check
-- 122 files · ~128,141 words
+- 122 files · ~128,105 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 960 nodes · 1304 edges · 72 communities (58 shown, 14 thin omitted)
+- 959 nodes · 1302 edges · 73 communities (59 shown, 14 thin omitted)
 - Extraction: 100% EXTRACTED · 0% INFERRED · 0% AMBIGUOUS · INFERRED: 5 edges (avg confidence: 0.8)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `a968f850`
+- Built from commit: `d9bf0a15`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -48,6 +48,7 @@
 - [[_COMMUNITY_Community 30|Community 30]]
 - [[_COMMUNITY_Community 31|Community 31]]
 - [[_COMMUNITY_Community 32|Community 32]]
+- [[_COMMUNITY_Community 33|Community 33]]
 - [[_COMMUNITY_Community 34|Community 34]]
 - [[_COMMUNITY_Community 35|Community 35]]
 - [[_COMMUNITY_Community 36|Community 36]]
@@ -114,15 +115,15 @@
 ## Import Cycles
 - None detected.
 
-## Communities (72 total, 14 thin omitted)
+## Communities (73 total, 14 thin omitted)
 
 ### Community 0 - "Community 0"
 Cohesion: 0.05
-Nodes (74): ERC20_ABI, ESCROW_SRC_ABI, ESCROW_SRC_FACTORY_ABI, SAFETY_DEPOSIT, claimQueues, ESCROW_DST_ABI, EscrowDstWatcherOpts, FACTORY_ABI (+66 more)
+Nodes (76): ERC20_ABI, ESCROW_SRC_ABI, ESCROW_SRC_FACTORY_ABI, SAFETY_DEPOSIT, claimQueues, ESCROW_DST_ABI, EscrowDstWatcherOpts, FACTORY_ABI (+68 more)
 
 ### Community 1 - "Community 1"
-Cohesion: 0.07
-Nodes (29): readEnvFile(), requireAdmin(), router, writeEnvFile(), router, router, coverageAt(), MIN_FILL_CANDIDATES (+21 more)
+Cohesion: 0.11
+Nodes (19): router, router, coverageAt(), MIN_FILL_CANDIDATES, router, fillerRegistry, FillerQuote, SimQuoteRequest (+11 more)
 
 ### Community 2 - "Community 2"
 Cohesion: 0.05
@@ -134,7 +135,7 @@ Nodes (26): author, dependencies, cors, dotenv, ethers, express, pg, @uniswap/sd
 
 ### Community 4 - "Community 4"
 Cohesion: 0.11
-Nodes (23): router, cancelOrder(), createOrder(), ERC20_ABI, getDomainSeparator(), getFillerSwapFills(), getOrder(), getOrders() (+15 more)
+Nodes (23): getAggregator(), router, cancelOrder(), createOrder(), ERC20_ABI, getDomainSeparator(), getOrder(), getOrders() (+15 more)
 
 ### Community 5 - "Community 5"
 Cohesion: 0.09
@@ -248,6 +249,10 @@ Nodes (6): cors(), DECIMALS, json(), PORT, QuoteRequest, SYMBOLS
 Cohesion: 0.22
 Nodes (7): CHAIN_RPCS, INITIAL, useWallet(), Window, Inner(), NAV, Tab
 
+### Community 33 - "Community 33"
+Cohesion: 0.29
+Nodes (8): readEnvFile(), requireAdmin(), router, writeEnvFile(), getCredentials(), login(), tokenFor(), verifyToken()
+
 ### Community 34 - "Community 34"
 Cohesion: 0.22
 Nodes (8): Consumers, Limitations / notes, Order parameter suggestion — `POST /suggest-params`, PRICE gate — anchored to the live market rate, Request / response, SIZE gate — `minFillBps` chosen by a coverage search, The model: a fill happens iff TWO independent gates pass, Why coverage is the constraint
@@ -342,7 +347,7 @@ Nodes (16): AuctionChart(), AuctionChartProps, clamp(), colorForFiller(), FillDo
 
 ### Community 77 - "Community 77"
 Cohesion: 0.09
-Nodes (34): AGGREGATORS, availableAggregators(), getAggregator(), resolveAggregatorChainId(), CHAIN_NAMES, KyberBuildResponse, KyberRouteResponse, kyberswapAdapter (+26 more)
+Nodes (33): AGGREGATORS, availableAggregators(), resolveAggregatorChainId(), CHAIN_NAMES, KyberBuildResponse, KyberRouteResponse, kyberswapAdapter, oneInchAdapter (+25 more)
 
 ## Knowledge Gaps
 - **470 isolated node(s):** `name`, `version`, `description`, `main`, `start` (+465 more)
@@ -354,14 +359,14 @@ _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `useAppConfig()` connect `Community 9` to `Community 8`, `Community 72`, `Community 10`, `Community 73`, `Community 25`, `Community 27`?**
   _High betweenness centrality (0.004) - this node is a cross-community bridge._
-- **Why does `db` connect `Community 0` to `Community 1`, `Community 4`, `Community 77`?**
+- **Why does `db` connect `Community 0` to `Community 4`, `Community 77`?**
   _High betweenness centrality (0.004) - this node is a cross-community bridge._
 - **What connects `name`, `version`, `description` to the rest of the system?**
   _470 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `Community 0` be split into smaller, more focused modules?**
-  _Cohesion score 0.05209397344228805 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.05040611562350693 - nodes in this community are weakly interconnected._
 - **Should `Community 1` be split into smaller, more focused modules?**
-  _Cohesion score 0.07317073170731707 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.10826210826210826 - nodes in this community are weakly interconnected._
 - **Should `Community 2` be split into smaller, more focused modules?**
   _Cohesion score 0.05405405405405406 - nodes in this community are weakly interconnected._
 - **Should `Community 3` be split into smaller, more focused modules?**

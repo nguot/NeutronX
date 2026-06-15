@@ -7,8 +7,6 @@ import {
   getCrossChainOrder,
   listOpenCCOrders,
   markSlotDone,
-  updateSlotFiller,
-  resetSlotToAvailable,
   getTokenDirectory,
   getFillerFills,
 } from '../services/crosschainService'
@@ -113,31 +111,19 @@ router.patch('/orders/:hash/swapperSig', async (req, res) => {
   }
 })
 
-// PATCH /cc/orders/:hash/slots/:index/filler  { filler: "0x..." }
-// Filler records itself as the registered filler so the UI can grey-out
-// "Claim WETH" buttons on the other filler's UI.
-router.patch('/orders/:hash/slots/:index/filler', async (req, res) => {
-  try {
-    const { filler } = req.body
-    if (!filler) return res.status(400).json({ error: 'filler required' })
-    await updateSlotFiller(req.params.hash, parseInt(req.params.index), filler)
-    return res.json({ ok: true })
-  } catch (e: any) {
-    return res.status(500).json({ error: e.message })
-  }
-})
-
-// PATCH /cc/orders/:hash/slots/:index/reset
-// Resets a stuck 'claimed' slot back to 'available' when Chain B was restarted
-// and the original escrow no longer exists on the current Chain B instance.
-router.patch('/orders/:hash/slots/:index/reset', async (req, res) => {
-  try {
-    await resetSlotToAvailable(req.params.hash, parseInt(req.params.index))
-    return res.json({ ok: true })
-  } catch (e: any) {
-    return res.status(500).json({ error: e.message })
-  }
-})
+// Trufy 3.8: the public PATCH /orders/:hash/slots/:index/filler endpoint was
+// REMOVED. `assigned_filler` is settlement-critical — escrowDstWatcher refuses
+// to reveal the secret unless the destination escrow's funder matches it — so it
+// must never be writable from an unauthenticated API. It is now written ONLY by
+// escrowSrcWatcher.handleSlotFilled() from the on-chain SlotFilled event
+// (msg.sender of fillSlot), i.e. watcher-derived on-chain truth, not mutable API
+// state. No client (frontend / CoWFiller / WhaleFiller) ever called this route.
+//
+// The public PATCH /orders/:hash/slots/:index/reset endpoint was also REMOVED
+// for the same reason: it nulled `assigned_filler` + reset `status` with no auth,
+// a desync/DoS vector on in-flight slots. It only ever served local Chain-B
+// restarts; recovery is now simply to create a new order (the stale order keeps
+// no available slots, so it stays inert and never re-appears as open).
 
 // PATCH /cc/orders/:hash/slots/:index/done
 // Filler calls this after successfully calling claimSlot() on Chain A so the

@@ -680,7 +680,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "routes_admin",
-      "community": 1,
+      "community": 33,
       "norm_label": "admin.ts"
     },
     {
@@ -690,7 +690,7 @@
       "source_location": "L9",
       "_origin": "ast",
       "id": "routes_admin_router",
-      "community": 1,
+      "community": 33,
       "norm_label": "router"
     },
     {
@@ -700,7 +700,7 @@
       "source_location": "L23",
       "_origin": "ast",
       "id": "routes_admin_requireadmin",
-      "community": 1,
+      "community": 33,
       "norm_label": "requireadmin()"
     },
     {
@@ -710,7 +710,7 @@
       "source_location": "L29",
       "_origin": "ast",
       "id": "routes_admin_readenvfile",
-      "community": 1,
+      "community": 33,
       "norm_label": "readenvfile()"
     },
     {
@@ -720,7 +720,7 @@
       "source_location": "L34",
       "_origin": "ast",
       "id": "routes_admin_writeenvfile",
-      "community": 1,
+      "community": 33,
       "norm_label": "writeenvfile()"
     },
     {
@@ -730,7 +730,7 @@
       "source_location": "L42",
       "_origin": "ast",
       "id": "routes_admin_pingfiller",
-      "community": 1,
+      "community": 33,
       "norm_label": "pingfiller()"
     },
     {
@@ -740,7 +740,7 @@
       "source_location": "L153",
       "_origin": "ast",
       "id": "routes_admin_getblock",
-      "community": 1,
+      "community": 33,
       "norm_label": "getblock()"
     },
     {
@@ -787,7 +787,7 @@
       "label": "router",
       "file_type": "code",
       "source_file": "backend/src/routes/crosschain.ts",
-      "source_location": "L19",
+      "source_location": "L17",
       "_origin": "ast",
       "id": "routes_crosschain_router",
       "community": 0,
@@ -960,7 +960,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "services_adminauth",
-      "community": 1,
+      "community": 33,
       "norm_label": "adminauth.ts"
     },
     {
@@ -970,7 +970,7 @@
       "source_location": "L8",
       "_origin": "ast",
       "id": "services_adminauth_getcredentials",
-      "community": 1,
+      "community": 33,
       "norm_label": "getcredentials()"
     },
     {
@@ -980,7 +980,7 @@
       "source_location": "L17",
       "_origin": "ast",
       "id": "services_adminauth_tokenfor",
-      "community": 1,
+      "community": 33,
       "norm_label": "tokenfor()"
     },
     {
@@ -990,7 +990,7 @@
       "source_location": "L22",
       "_origin": "ast",
       "id": "services_adminauth_login",
-      "community": 1,
+      "community": 33,
       "norm_label": "login()"
     },
     {
@@ -1000,7 +1000,7 @@
       "source_location": "L29",
       "_origin": "ast",
       "id": "services_adminauth_verifytoken",
-      "community": 1,
+      "community": 33,
       "norm_label": "verifytoken()"
     },
     {
@@ -1030,7 +1030,7 @@
       "source_location": "L23",
       "_origin": "ast",
       "id": "aggregators_index_getaggregator",
-      "community": 77,
+      "community": 4,
       "norm_label": "getaggregator()"
     },
     {
@@ -1564,20 +1564,10 @@
       "norm_label": "updateslotfiller()"
     },
     {
-      "label": "resetSlotToAvailable()",
-      "file_type": "code",
-      "source_file": "backend/src/services/crosschainService.ts",
-      "source_location": "L493",
-      "_origin": "ast",
-      "id": "services_crosschainservice_resetslottoavailable",
-      "community": 0,
-      "norm_label": "resetslottoavailable()"
-    },
-    {
       "label": "markSlotDone()",
       "file_type": "code",
       "source_file": "backend/src/services/crosschainService.ts",
-      "source_location": "L502",
+      "source_location": "L493",
       "_origin": "ast",
       "id": "services_crosschainservice_markslotdone",
       "community": 0,
@@ -1587,7 +1577,7 @@
       "label": "getFillerFills()",
       "file_type": "code",
       "source_file": "backend/src/services/crosschainService.ts",
-      "source_location": "L511",
+      "source_location": "L502",
       "_origin": "ast",
       "id": "services_crosschainservice_getfillerfills",
       "community": 0,
@@ -1597,7 +1587,7 @@
       "label": "listOpenCCOrders()",
       "file_type": "code",
       "source_file": "backend/src/services/crosschainService.ts",
-      "source_location": "L534",
+      "source_location": "L525",
       "_origin": "ast",
       "id": "services_crosschainservice_listopenccorders",
       "community": 0,
@@ -1610,7 +1600,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "services_fillerregistry",
-      "community": 1,
+      "community": 0,
       "norm_label": "fillerregistry.ts"
     },
     {
@@ -1620,7 +1610,7 @@
       "source_location": "L3",
       "_origin": "ast",
       "id": "services_fillerregistry_fillerentry",
-      "community": 1,
+      "community": 0,
       "norm_label": "fillerentry"
     },
     {
@@ -1630,7 +1620,7 @@
       "source_location": "L11",
       "_origin": "ast",
       "id": "services_fillerregistry_initfillerschema",
-      "community": 1,
+      "community": 0,
       "norm_label": "initfillerschema()"
     },
     {
@@ -1920,7 +1910,7 @@
       "source_location": "L264",
       "_origin": "ast",
       "id": "services_orderservice_getfillerswapfills",
-      "community": 4,
+      "community": 0,
       "norm_label": "getfillerswapfills()"
     },
     {
@@ -10416,9 +10406,9 @@
       "source_file": "backend/src/chain/escrowDstWatcher.ts",
       "source_location": "L2",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "chain_escrowdstwatcher",
-      "target": "services_crosschainservice_getcosignerwallet",
-      "confidence_score": 1.0
+      "target": "services_crosschainservice_getcosignerwallet"
     },
     {
       "relation": "imports",
@@ -10493,9 +10483,9 @@
       "source_file": "backend/src/chain/escrowDstWatcher.ts",
       "source_location": "L216",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "chain_escrowdstwatcher_handleescrow",
-      "target": "services_crosschainservice_getcosignerwallet",
-      "confidence_score": 1.0
+      "target": "services_crosschainservice_getcosignerwallet"
     },
     {
       "relation": "calls",
@@ -11907,17 +11897,6 @@
       "weight": 1.0,
       "confidence_score": 1.0,
       "source": "routes_crosschain",
-      "target": "services_crosschainservice_resetslottoavailable"
-    },
-    {
-      "relation": "imports",
-      "context": "import",
-      "confidence": "EXTRACTED",
-      "source_file": "backend/src/routes/crosschain.ts",
-      "source_location": "L2",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "routes_crosschain",
       "target": "services_crosschainservice_setswappersig"
     },
     {
@@ -13124,9 +13103,9 @@
       "source_file": "backend/src/services/crosschainService.ts",
       "source_location": "L208",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "services_crosschainservice",
-      "target": "services_crosschainservice_getcosigneraddress",
-      "confidence_score": 1.0
+      "target": "services_crosschainservice_getcosigneraddress"
     },
     {
       "relation": "contains",
@@ -13134,9 +13113,9 @@
       "source_file": "backend/src/services/crosschainService.ts",
       "source_location": "L202",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "services_crosschainservice",
-      "target": "services_crosschainservice_getcosignerwallet",
-      "confidence_score": 1.0
+      "target": "services_crosschainservice_getcosignerwallet"
     },
     {
       "relation": "contains",
@@ -13287,16 +13266,6 @@
       "confidence_score": 1.0,
       "source": "services_crosschainservice",
       "target": "services_crosschainservice_orderresult"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "backend/src/services/crosschainService.ts",
-      "source_location": "L432",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "services_crosschainservice",
-      "target": "services_crosschainservice_resetslottoavailable"
     },
     {
       "relation": "contains",
@@ -13488,9 +13457,9 @@
       "source_file": "backend/src/services/crosschainService.ts",
       "source_location": "L318",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "services_crosschainservice_createcrosschainorder",
-      "target": "services_crosschainservice_getcosignerwallet",
-      "confidence_score": 1.0
+      "target": "services_crosschainservice_getcosignerwallet"
     },
     {
       "relation": "calls",
@@ -13499,9 +13468,9 @@
       "source_file": "backend/src/services/crosschainService.ts",
       "source_location": "L209",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "services_crosschainservice_getcosigneraddress",
-      "target": "services_crosschainservice_getcosignerwallet",
-      "confidence_score": 1.0
+      "target": "services_crosschainservice_getcosignerwallet"
     },
     {
       "relation": "calls",
@@ -13510,9 +13479,9 @@
       "source_file": "backend/src/services/crosschainService.ts",
       "source_location": "L222",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "services_crosschainservice_getorcreatesession",
-      "target": "services_crosschainservice_getcosigneraddress",
-      "confidence_score": 1.0
+      "target": "services_crosschainservice_getcosigneraddress"
     },
     {
       "relation": "calls",
@@ -23353,5 +23322,5 @@
     }
   ],
   "hyperedges": [],
-  "built_at_commit": "a968f85057e624620de87f21741270632ed083af"
+  "built_at_commit": "d9bf0a1523cd576a690cc7fd3380a587e695ee48"
 }
