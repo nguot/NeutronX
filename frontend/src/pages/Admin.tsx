@@ -6,6 +6,8 @@ type AdminTab = 'config' | 'fillers' | 'chain'
 interface FillerInfo {
   name:      string
   url:       string
+  address:   string
+  chains:    number[]
   alive:     boolean
   latencyMs: number
   error?:    string
@@ -52,7 +54,9 @@ function ConfigTab({ token, onUnauthorized }: AdminProps) {
   const [form, setForm] = useState({
     backendUrl:         cfg.backendUrl,
     partialFillReactor: cfg.partialFillReactor,
+    fallbackExecutor:   cfg.fallbackExecutor,
     crossChainReactor:  cfg.crossChainReactor,
+    escrowSrcFactoryB:  cfg.escrowSrcFactoryB,
     chainBFactory:      cfg.chainBFactory,
     chainBRpc:          cfg.chainBRpc,
     chainARpc:          cfg.chainARpc,
@@ -65,13 +69,15 @@ function ConfigTab({ token, onUnauthorized }: AdminProps) {
     setForm({
       backendUrl:         cfg.backendUrl,
       partialFillReactor: cfg.partialFillReactor,
+      fallbackExecutor:   cfg.fallbackExecutor,
       crossChainReactor:  cfg.crossChainReactor,
+      escrowSrcFactoryB:  cfg.escrowSrcFactoryB,
       chainBFactory:      cfg.chainBFactory,
       chainBRpc:          cfg.chainBRpc,
       chainARpc:          cfg.chainARpc,
       chainId:            cfg.chainId,
     })
-  }, [cfg.partialFillReactor, cfg.crossChainReactor])
+  }, [cfg.partialFillReactor, cfg.fallbackExecutor, cfg.crossChainReactor, cfg.escrowSrcFactoryB])
 
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setForm(f => ({ ...f, [k]: e.target.value }))
@@ -86,7 +92,9 @@ function ConfigTab({ token, onUnauthorized }: AdminProps) {
         headers: { 'Content-Type': 'application/json', 'x-admin-token': token },
         body:    JSON.stringify({
           partialFillReactor: form.partialFillReactor,
+          fallbackExecutor:   form.fallbackExecutor,
           crossChainReactor:  form.crossChainReactor,
+          escrowSrcFactoryB:  form.escrowSrcFactoryB,
           chainBFactory:      form.chainBFactory,
           chainBRpc:          form.chainBRpc,
           chainARpc:          form.chainARpc,
@@ -120,24 +128,36 @@ function ConfigTab({ token, onUnauthorized }: AdminProps) {
       </div>
       <div className="row">
         <div>
+          <label>FallbackExecutor Address</label>
+          <input value={form.fallbackExecutor} onChange={set('fallbackExecutor')} placeholder="0x…" />
+        </div>
+        <div>
           <label>Chain ID</label>
           <input value={form.chainId} onChange={set('chainId')} className="short" placeholder="31337" />
         </div>
       </div>
 
-      <h2 className="section">Cross-Chain (Chain A → B)</h2>
+      <h2 className="section">Cross-Chain (Chain A ⇄ B)</h2>
       <div className="row">
         <div>
-          <label>CrossChainReactor Address (Chain A)</label>
+          <label>EscrowSrcFactory Address (Chain A)</label>
           <input value={form.crossChainReactor} onChange={set('crossChainReactor')} placeholder="0x…" />
         </div>
+        <div>
+          <label>EscrowSrcFactory Address (Chain B)</label>
+          <input value={form.escrowSrcFactoryB} onChange={set('escrowSrcFactoryB')} placeholder="0x…" />
+        </div>
+      </div>
+      <div className="row">
         <div>
           <label>EscrowDstFactory Address (Chain B)</label>
           <input value={form.chainBFactory} onChange={set('chainBFactory')} placeholder="0x…" />
         </div>
+        <div>
+          <label>Chain B RPC</label>
+          <input value={form.chainBRpc} onChange={set('chainBRpc')} placeholder="http://127.0.0.1:8546" />
+        </div>
       </div>
-      <label>Chain B RPC</label>
-      <input value={form.chainBRpc} onChange={set('chainBRpc')} placeholder="http://127.0.0.1:8546" />
 
       <div style={{ marginTop: 20 }}>
         <button onClick={save} disabled={saving}>{saving ? 'Saving…' : 'Save Config'}</button>
@@ -150,12 +170,20 @@ function ConfigTab({ token, onUnauthorized }: AdminProps) {
 
 // ── Fillers tab ────────────────────────────────────────────────────────────
 function FillersTab({ token, onUnauthorized }: AdminProps) {
-  const { backendUrl } = useAppConfig()
+  const { backendUrl, chains } = useAppConfig()
   const [fillers, setFillers] = useState<FillerInfo[]>([])
   const [loading, setLoading] = useState(false)
   const [newName, setNewName] = useState('')
   const [newUrl,  setNewUrl]  = useState('')
+  const [newAddress, setNewAddress] = useState('')
+  const [newChains,  setNewChains]  = useState<number[]>([])
   const [addStatus, setAddStatus] = useState<{ msg: string; cls: string } | null>(null)
+
+  // Inline "edit address/chains" form for an existing (possibly env-seeded) filler.
+  const [editingName, setEditingName] = useState<string | null>(null)
+  const [editAddress, setEditAddress] = useState('')
+  const [editChains,  setEditChains]  = useState<number[]>([])
+  const [editStatus,  setEditStatus]  = useState<{ msg: string; cls: string } | null>(null)
 
   const loadFillers = useCallback(async () => {
     setLoading(true)
@@ -169,6 +197,10 @@ function FillersTab({ token, onUnauthorized }: AdminProps) {
 
   useEffect(() => { loadFillers() }, [loadFillers])
 
+  function toggleChain(list: number[], id: number): number[] {
+    return list.includes(id) ? list.filter(c => c !== id) : [...list, id]
+  }
+
   async function addFiller() {
     if (!newName || !newUrl) return setAddStatus({ msg: 'Name and URL are required', cls: 'bad' })
     setAddStatus(null)
@@ -176,15 +208,41 @@ function FillersTab({ token, onUnauthorized }: AdminProps) {
       const res  = await fetch(`${backendUrl}/admin/fillers`, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json', 'x-admin-token': token },
-        body:    JSON.stringify({ name: newName, url: newUrl }),
+        body:    JSON.stringify({ name: newName, url: newUrl, address: newAddress, chains: newChains }),
       })
       if (res.status === 401) return onUnauthorized()
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
-      setNewName(''); setNewUrl('')
+      setNewName(''); setNewUrl(''); setNewAddress(''); setNewChains([])
       setAddStatus({ msg: `Filler "${newName}" added.`, cls: 'ok' })
       loadFillers()
     } catch (e: any) { setAddStatus({ msg: e.message, cls: 'bad' }) }
+  }
+
+  function startEdit(f: FillerInfo) {
+    setEditingName(f.name)
+    setEditAddress(f.address)
+    setEditChains(f.chains)
+    setEditStatus(null)
+  }
+
+  async function saveEdit() {
+    if (!editingName) return
+    if (editAddress && !/^0x[0-9a-fA-F]{40}$/.test(editAddress)) {
+      return setEditStatus({ msg: 'Address must be a 0x… address', cls: 'bad' })
+    }
+    try {
+      const res = await fetch(`${backendUrl}/admin/fillers/${encodeURIComponent(editingName)}`, {
+        method:  'PATCH',
+        headers: { 'Content-Type': 'application/json', 'x-admin-token': token },
+        body:    JSON.stringify({ address: editAddress, chains: editChains }),
+      })
+      if (res.status === 401) return onUnauthorized()
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error)
+      setEditingName(null)
+      loadFillers()
+    } catch (e: any) { setEditStatus({ msg: e.message, cls: 'bad' }) }
   }
 
   async function removeFiller(name: string) {
@@ -214,18 +272,55 @@ function FillersTab({ token, onUnauthorized }: AdminProps) {
       )}
 
       {fillers.map(f => (
-        <div key={f.name} className="filler-row">
-          <span className={`dot ${f.alive ? 'alive' : 'dead'}`} />
-          <span className="filler-name">{f.name}</span>
-          <span className="filler-url">{f.url}</span>
-          <span className="filler-ping">
-            {f.alive ? (
-              <span style={{ color: '#16a34a' }}>✓ alive {f.latencyMs}ms</span>
-            ) : (
-              <span style={{ color: '#dc2626' }} title={f.error}>✗ unreachable</span>
+        <div key={f.name} style={{ marginBottom: 8 }}>
+          <div className="filler-row">
+            <span className={`dot ${f.alive ? 'alive' : 'dead'}`} />
+            <span className="filler-name">{f.name}</span>
+            <span className="filler-url">{f.url}</span>
+            <span className="filler-ping">
+              {f.alive ? (
+                <span style={{ color: '#16a34a' }}>✓ alive {f.latencyMs}ms</span>
+              ) : (
+                <span style={{ color: '#dc2626' }} title={f.error}>✗ unreachable</span>
+              )}
+            </span>
+            <button className="ghost sm" style={{ marginTop: 0 }} onClick={() => startEdit(f)}>Edit</button>
+            <button className="red sm" style={{ marginTop: 0 }} onClick={() => removeFiller(f.name)}>Remove</button>
+          </div>
+          <div style={{ fontSize: '0.75rem', color: '#94a3b8', paddingLeft: 24 }}>
+            address: <span className="mono">{f.address || 'not set'}</span>
+            {f.chains.length > 0 && (
+              <span style={{ marginLeft: 12 }}>
+                chains: {f.chains.map(id => chains.find(c => c.id === id)?.name ?? id).join(', ')}
+              </span>
             )}
-          </span>
-          <button className="red sm" style={{ marginTop: 0 }} onClick={() => removeFiller(f.name)}>Remove</button>
+          </div>
+
+          {editingName === f.name && (
+            <div className="row" style={{ marginTop: 6, paddingLeft: 24, alignItems: 'flex-end' }}>
+              <div>
+                <label>Address</label>
+                <input value={editAddress} onChange={e => setEditAddress(e.target.value)} placeholder="0x…" />
+              </div>
+              <div>
+                <label>Chains</label>
+                <div style={{ display: 'flex', gap: 10, alignItems: 'center', height: 36 }}>
+                  {chains.map(c => (
+                    <label key={c.id} style={{ display: 'flex', gap: 4, alignItems: 'center', fontSize: '0.8rem', fontWeight: 400 }}>
+                      <input type="checkbox" checked={editChains.includes(c.id)}
+                        onChange={() => setEditChains(toggleChain(editChains, c.id))} />
+                      {c.name}
+                    </label>
+                  ))}
+                </div>
+              </div>
+              <button className="sm" style={{ marginTop: 0 }} onClick={saveEdit}>Save</button>
+              <button className="ghost sm" style={{ marginTop: 0 }} onClick={() => setEditingName(null)}>Cancel</button>
+            </div>
+          )}
+          {editingName === f.name && editStatus && (
+            <div className={`status ${editStatus.cls}`} style={{ paddingLeft: 24 }}>{editStatus.msg}</div>
+          )}
         </div>
       ))}
 
@@ -239,6 +334,22 @@ function FillersTab({ token, onUnauthorized }: AdminProps) {
         <div>
           <label>Quote URL (base, without /quote)</label>
           <input value={newUrl} onChange={e => setNewUrl(e.target.value)} placeholder="http://localhost:4001" />
+        </div>
+        <div>
+          <label>Address (optional)</label>
+          <input value={newAddress} onChange={e => setNewAddress(e.target.value)} placeholder="0x…" />
+        </div>
+        <div>
+          <label>Chains</label>
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center', height: 36 }}>
+            {chains.map(c => (
+              <label key={c.id} style={{ display: 'flex', gap: 4, alignItems: 'center', fontSize: '0.8rem', fontWeight: 400 }}>
+                <input type="checkbox" checked={newChains.includes(c.id)}
+                  onChange={() => setNewChains(toggleChain(newChains, c.id))} />
+                {c.name}
+              </label>
+            ))}
+          </div>
         </div>
       </div>
       <button onClick={addFiller}>Add Filler</button>

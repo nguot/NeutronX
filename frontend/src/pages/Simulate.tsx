@@ -59,10 +59,60 @@ interface OrderDetail extends OrderSummary {
   feeTier:       number
 }
 
-type Mode = 'order' | 'custom'
+interface CCSlotSummary {
+  index:          number
+  status:         string
+  assignedFiller: string | null
+}
 
-export default function Simulate({ wallet: _wallet }: { wallet: WalletState }) {
-  const { backendUrl, tokens } = useAppConfig()
+interface CCOrderSummary {
+  orderHash:   string
+  swapper:     string
+  inputToken:  string
+  inputAmount: string
+  outputToken: string
+  minOutput:   string
+  deadline:    number
+  numSlots:    number
+  t2Expiry:    number
+  chainAId:    number
+  dstChainId:  number
+  slots:       CCSlotSummary[]
+}
+
+// Mirrors backend/src/services/preflightService.ts's PreflightResult.
+interface PreflightResult {
+  orderHash:  string
+  slotIndex:  number
+  slotStatus: string
+  slotAmount: string
+  filler:     string
+  srcChainId: number
+  dstChainId: number
+  srcBlock:   number
+  dstBlock:   number
+  srcFill:    { ok: boolean; reason?: string }
+  dstBalance: { token: string; have: string; need: string; ok: boolean }
+  nativeBalance: {
+    src: { have: string; need: string; ok: boolean }
+    dst: { have: string; ok: boolean }
+  }
+  timing:    { t2Expiry: number; ok: boolean }
+  fillable:  boolean
+}
+
+// Mirrors backend/src/services/preflightService.ts's FillerBalance.
+interface FillerBalance {
+  name:         string
+  address:      string
+  balance:      string
+  balanceHuman: string
+}
+
+type Mode = 'order' | 'custom' | 'crosschain'
+
+export default function Simulate({ wallet }: { wallet: WalletState }) {
+  const { backendUrl, tokens, chains } = useAppConfig()
 
   const [mode, setMode] = useState<Mode>('order')
 
@@ -97,6 +147,18 @@ export default function Simulate({ wallet: _wallet }: { wallet: WalletState }) {
   const [blockOffset, setBlockOffset]   = useState(0)     // blocks-from-now, drives the slider
   const [simulating, setSimulating]     = useState(false) // lightweight indicator for the slider-driven re-run
 
+  // ── cross-chain order/slot picker + preflight ─────────────────────────────
+  const [ccOrders, setCcOrders]               = useState<CCOrderSummary[]>([])
+  const [ccOrdersLoading, setCcOrdersLoading] = useState(false)
+  const [ccSelectedHash, setCcSelectedHash]   = useState<string | null>(null)
+  const [ccSelectedSlot, setCcSelectedSlot]   = useState<number | null>(null)
+  const [ccFiller, setCcFiller]               = useState('')
+  const [preflight, setPreflight]             = useState<PreflightResult | null>(null)
+  const [preflightLoading, setPreflightLoading] = useState(false)
+  const [preflightError, setPreflightError]   = useState<string | null>(null)
+  const [rankedFillers, setRankedFillers]         = useState<FillerBalance[]>([])
+  const [rankedFillersLoading, setRankedFillersLoading] = useState(false)
+
   const loadOrders = useCallback(async () => {
     setOrdersLoading(true)
     try {
@@ -118,6 +180,65 @@ export default function Simulate({ wallet: _wallet }: { wallet: WalletState }) {
   }, [backendUrl])
 
   useEffect(() => { loadOrders(); refreshBlock() }, [loadOrders, refreshBlock])
+
+  const loadCCOrders = useCallback(async () => {
+    setCcOrdersLoading(true)
+    try {
+      const res  = await fetch(`${backendUrl}/cc/orders`)
+      const data = await res.json()
+      if (res.ok) setCcOrders(data.orders ?? [])
+    } catch { /* ignore */ }
+    setCcOrdersLoading(false)
+  }, [backendUrl])
+
+  // Default the preflight "filler" address to the connected wallet once available.
+  useEffect(() => {
+    if (wallet.account && !ccFiller) setCcFiller(wallet.account)
+  }, [wallet.account, ccFiller])
+
+  function selectCCOrder(hash: string) {
+    setCcSelectedHash(hash)
+    setCcSelectedSlot(null)
+    setPreflight(null); setPreflightError(null)
+    setRankedFillers([])
+  }
+
+  function selectCCSlot(index: number) {
+    setCcSelectedSlot(index)
+    setPreflight(null); setPreflightError(null)
+  }
+
+  // Registered fillers (Admin → Fillers tab) operating on this slot's dst
+  // chain, ranked by their current output-token balance — lets the user pick
+  // a likely-fillable filler instead of typing an address by hand.
+  useEffect(() => {
+    if (!ccSelectedHash || ccSelectedSlot == null) { setRankedFillers([]); return }
+    let cancelled = false
+    setRankedFillersLoading(true)
+    fetch(`${backendUrl}/cc/orders/${ccSelectedHash}/slots/${ccSelectedSlot}/fillers`)
+      .then(r => r.json())
+      .then(data => { if (!cancelled) setRankedFillers(data.fillers ?? []) })
+      .catch(() => { if (!cancelled) setRankedFillers([]) })
+      .finally(() => { if (!cancelled) setRankedFillersLoading(false) })
+    return () => { cancelled = true }
+  }, [backendUrl, ccSelectedHash, ccSelectedSlot])
+
+  async function runPreflight() {
+    if (!ccSelectedHash || ccSelectedSlot == null) return
+    if (!/^0x[0-9a-fA-F]{40}$/.test(ccFiller)) {
+      setPreflightError('Enter a valid filler address (or connect a wallet)'); return
+    }
+    setPreflightLoading(true); setPreflightError(null); setPreflight(null)
+    try {
+      const res  = await fetch(`${backendUrl}/cc/orders/${ccSelectedHash}/slots/${ccSelectedSlot}/preflight?filler=${ccFiller}`)
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? 'Preflight failed')
+      setPreflight(data)
+    } catch (e: any) {
+      setPreflightError(e.message)
+    }
+    setPreflightLoading(false)
+  }
 
   // Drop a stale suggestion when the custom inputs change.
   useEffect(() => { setSugg(null) }, [custIn, custOut, custAmount])
@@ -162,6 +283,7 @@ export default function Simulate({ wallet: _wallet }: { wallet: WalletState }) {
   function switchMode(m: Mode) {
     setMode(m)
     setResult(null); setDirectQuote(null); setDirectError(null); setStatus(null); setBlockOffset(0)
+    if (m === 'crosschain' && ccOrders.length === 0) loadCCOrders()
   }
 
   // Resolve the input/output token info for whichever mode is active.
@@ -368,9 +490,55 @@ export default function Simulate({ wallet: _wallet }: { wallet: WalletState }) {
         <div className="tabs">
           <button className={`tab-btn ${mode === 'order' ? 'active' : ''}`} onClick={() => switchMode('order')}>From an order</button>
           <button className={`tab-btn ${mode === 'custom' ? 'active' : ''}`} onClick={() => switchMode('custom')}>Custom parameters</button>
+          <button className={`tab-btn ${mode === 'crosschain' ? 'active' : ''}`} onClick={() => switchMode('crosschain')}>Cross-chain order</button>
         </div>
 
-        {mode === 'order' ? (
+        {mode === 'crosschain' ? (
+          <>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+              <span style={{ fontSize: '0.78rem', color: '#64748b' }}>Cross-chain orders</span>
+              <button className="ghost sm" style={{ marginTop: 0 }} onClick={loadCCOrders}>↻ Refresh</button>
+            </div>
+            {ccOrdersLoading && <div style={{ color: '#94a3b8', fontSize: '0.82rem', padding: '8px 0' }}>Loading…</div>}
+            {!ccOrdersLoading && ccOrders.length === 0 && (
+              <div className="empty-state"><div className="empty-icon">📋</div>No cross-chain orders yet.</div>
+            )}
+            {ccOrders.map(o => {
+              const inT  = tokenByAddress(o.inputToken, tokens)
+              const outT = tokenByAddress(o.outputToken, tokens)
+              const srcName = chains.find(c => c.id === o.chainAId)?.name ?? `Chain ${o.chainAId}`
+              const dstName = chains.find(c => c.id === o.dstChainId)?.name ?? `Chain ${o.dstChainId}`
+              return (
+                <div key={o.orderHash} className={`slot-card ${ccSelectedHash === o.orderHash ? 'claimed' : ''}`}
+                     style={{ cursor: 'pointer' }} onClick={() => selectCCOrder(o.orderHash)}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                    <span className="mono" style={{ fontSize: '0.75rem' }}>{short(o.orderHash)}</span>
+                    <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>{srcName} → {dstName}</span>
+                    <span style={{ marginLeft: 'auto', fontSize: '0.75rem', color: '#94a3b8' }} onClick={e => e.stopPropagation()}>deadline <BlockEta target={o.deadline} showClock={false} /></span>
+                  </div>
+                  <div style={{ fontSize: '0.85rem' }}>
+                    {fromWei(BigInt(o.inputAmount), inT?.decimals ?? 18)} <b>{inT?.symbol ?? short(o.inputToken)}</b>
+                    <span style={{ color: '#94a3b8', margin: '0 6px' }}>→</span>
+                    min {fromWei(BigInt(o.minOutput), outT?.decimals ?? 18)} <b>{outT?.symbol ?? short(o.outputToken)}</b>
+                    <span style={{ color: '#94a3b8', marginLeft: 8 }}>({o.numSlots} slot{o.numSlots === 1 ? '' : 's'})</span>
+                  </div>
+                  {ccSelectedHash === o.orderHash && (
+                    <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }} onClick={e => e.stopPropagation()}>
+                      {o.slots.map(s => (
+                        <button key={s.index}
+                          className={`tag ${s.status === 'available' ? 'available' : 'claimed'}`}
+                          style={{ cursor: 'pointer', outline: ccSelectedSlot === s.index ? '2px solid #7c3aed' : 'none' }}
+                          onClick={() => selectCCSlot(s.index)}>
+                          slot {s.index} · {s.status}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </>
+        ) : mode === 'order' ? (
           <>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
               <span style={{ fontSize: '0.78rem', color: '#64748b' }}>Pending &amp; active orders</span>
@@ -459,7 +627,7 @@ export default function Simulate({ wallet: _wallet }: { wallet: WalletState }) {
         )}
       </div>
 
-      {chart && eff && (
+      {chart && eff && mode !== 'crosschain' && (
         <div className="card">
           <h2 style={{ marginBottom: 8 }}>Auction preview</h2>
           <AuctionChart
@@ -488,30 +656,118 @@ export default function Simulate({ wallet: _wallet }: { wallet: WalletState }) {
         </div>
       )}
 
-      <div className="card">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={{ fontSize: '0.82rem', color: '#475569' }}>
-            Current block (Chain A): <strong>{currentBlock ?? '—'}</strong>
-          </span>
-          <button className="ghost sm" style={{ marginTop: 0 }} onClick={refreshBlock}>↻</button>
-        </div>
-
-        {mode === 'order' && orderDetail && eff && (
-          <div className="uni-detail-row" style={{ padding: '10px 0 0' }}>
-            <span className="uni-detail-label">Start price</span>
-            <span style={{ fontSize: '0.85rem', fontWeight: 600, color: '#0f172a' }}>
-              {contractToHumanPrice(BigInt(orderDetail.startPrice ?? '0'), eff.inDec, eff.outDec).toFixed(4)} {eff.outSym} / {eff.inSym}
+      {mode !== 'crosschain' && (
+        <div className="card">
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '0.82rem', color: '#475569' }}>
+              Current block (Chain A): <strong>{currentBlock ?? '—'}</strong>
             </span>
+            <button className="ghost sm" style={{ marginTop: 0 }} onClick={refreshBlock}>↻</button>
           </div>
-        )}
 
-        <button onClick={runSimulation} disabled={running || (mode === 'order' && !orderDetail)}>
-          {running ? 'Simulating…' : 'Run Simulation'}
-        </button>
-        {status && <div className={`status ${status.cls}`}>{status.msg}</div>}
-      </div>
+          {mode === 'order' && orderDetail && eff && (
+            <div className="uni-detail-row" style={{ padding: '10px 0 0' }}>
+              <span className="uni-detail-label">Start price</span>
+              <span style={{ fontSize: '0.85rem', fontWeight: 600, color: '#0f172a' }}>
+                {contractToHumanPrice(BigInt(orderDetail.startPrice ?? '0'), eff.inDec, eff.outDec).toFixed(4)} {eff.outSym} / {eff.inSym}
+              </span>
+            </div>
+          )}
 
-      {(result || directQuote || directError) && eff && (
+          <button onClick={runSimulation} disabled={running || (mode === 'order' && !orderDetail)}>
+            {running ? 'Simulating…' : 'Run Simulation'}
+          </button>
+          {status && <div className={`status ${status.cls}`}>{status.msg}</div>}
+        </div>
+      )}
+
+      {mode === 'crosschain' && ccSelectedHash && ccSelectedSlot != null && (
+        <div className="card">
+          {(() => {
+            const o    = ccOrders.find(x => x.orderHash === ccSelectedHash)
+            const outT = o ? tokenByAddress(o.outputToken, tokens) : undefined
+            const sym  = outT?.symbol ?? (o ? short(o.outputToken) : '')
+            return (
+              <>
+                <div style={{ fontSize: '0.78rem', color: '#64748b', marginBottom: 4 }}>
+                  Registered fillers {sym && `— ranked by ${sym} balance on the dst chain`}
+                </div>
+                {rankedFillersLoading && <div style={{ color: '#94a3b8', fontSize: '0.82rem', padding: '4px 0' }}>Loading…</div>}
+                {!rankedFillersLoading && rankedFillers.length === 0 && (
+                  <div style={{ color: '#94a3b8', fontSize: '0.82rem', padding: '4px 0' }}>
+                    No registered fillers configured for this chain — add one in Admin → Fillers, or enter an address below.
+                  </div>
+                )}
+                {rankedFillers.map(rf => (
+                  <div key={rf.address} className={`slot-card ${ccFiller.toLowerCase() === rf.address.toLowerCase() ? 'claimed' : ''}`}
+                       style={{ cursor: 'pointer', marginBottom: 6 }} onClick={() => setCcFiller(rf.address)}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.82rem' }}>
+                      <span><strong>{rf.name}</strong> <span className="mono" style={{ color: '#94a3b8' }}>{short(rf.address)}</span></span>
+                      <span>{Number(rf.balanceHuman).toFixed(4)} {sym}</span>
+                    </div>
+                  </div>
+                ))}
+              </>
+            )
+          })()}
+
+          <div className="uni-detail-row">
+            <span className="uni-detail-label">Filler address <span className="uni-label-muted">(the "from" used for the dry-run)</span></span>
+            <input className="uni-detail-input" type="text" placeholder="0x…" value={ccFiller}
+              onChange={e => setCcFiller(e.target.value)} />
+          </div>
+          <button onClick={runPreflight} disabled={preflightLoading}>
+            {preflightLoading ? 'Checking…' : `Run Preflight — slot ${ccSelectedSlot}`}
+          </button>
+          {preflightError && <div className="status bad">{preflightError}</div>}
+        </div>
+      )}
+
+      {mode === 'crosschain' && preflight && (
+        <div className="card">
+          <h2>Preflight — slot {preflight.slotIndex} ({preflight.slotStatus})</h2>
+          <div className={`status ${preflight.fillable ? 'ok' : 'bad'}`}>
+            {preflight.fillable
+              ? '✅ This fill would currently succeed for this filler.'
+              : '⚠️ This fill would currently fail — see the checks below.'}
+          </div>
+
+          <PreflightRow
+            label="Step 1 — fillSlot() dry-run on src chain"
+            ok={preflight.srcFill.ok}
+            detail={preflight.srcFill.reason ?? 'would succeed'}
+          />
+          {(() => {
+            const outT = tokenByAddress(preflight.dstBalance.token, tokens)
+            const dec  = outT?.decimals ?? 18
+            const sym  = outT?.symbol ?? short(preflight.dstBalance.token)
+            return (
+              <PreflightRow
+                label="Output-token balance on dst chain (step 3 funding)"
+                ok={preflight.dstBalance.ok}
+                detail={`have ${fromWei(BigInt(preflight.dstBalance.have), dec)} / need ${fromWei(BigInt(preflight.dstBalance.need), dec)} ${sym}`}
+              />
+            )
+          })()}
+          <PreflightRow
+            label="Safety deposit (native, src chain)"
+            ok={preflight.nativeBalance.src.ok}
+            detail={`have ${fromWei(BigInt(preflight.nativeBalance.src.have), 18)} / need ${fromWei(BigInt(preflight.nativeBalance.src.need), 18)} ETH`}
+          />
+          <PreflightRow
+            label="Gas balance (native, dst chain)"
+            ok={preflight.nativeBalance.dst.ok}
+            detail={`have ${fromWei(BigInt(preflight.nativeBalance.dst.have), 18)} ETH`}
+          />
+          <PreflightRow
+            label="Timing — t2Expiry (dst escrow deploy deadline)"
+            ok={preflight.timing.ok}
+            detail={`current src block ${preflight.srcBlock} / expires at block ${preflight.timing.t2Expiry}`}
+          />
+        </div>
+      )}
+
+      {(result || directQuote || directError) && eff && mode !== 'crosschain' && (
         <div className="card">
           <h2>Results</h2>
 
@@ -583,6 +839,21 @@ function Stat({ label, value, accent, warn, good }: { label: string; value: stri
         fontSize: '1.1rem', fontWeight: 700,
         color: warn ? '#d97706' : good ? '#16a34a' : accent ? '#7c3aed' : '#0f172a'
       }}>{value}</div>
+    </div>
+  )
+}
+
+// One row of the cross-chain preflight checklist — a single pass/fail check
+// with a human-readable detail (revert reason, balance comparison, etc.).
+function PreflightRow({ label, ok, detail }: { label: string; ok: boolean; detail: string }) {
+  return (
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, padding: '6px 0', borderBottom: '1px solid #f1f5f9', fontSize: '0.8rem' }}>
+      <span style={{ color: '#475569' }}>{label}</span>
+      <span style={{ textAlign: 'right' }}>
+        <span style={{ color: ok ? '#16a34a' : '#dc2626', fontWeight: 700 }}>{ok ? '✓' : '✗'}</span>
+        {' '}
+        <span style={{ color: '#94a3b8' }}>{detail}</span>
+      </span>
     </div>
   )
 }

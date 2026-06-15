@@ -11,6 +11,7 @@ import { ethers } from 'ethers'
 import { readFileSync } from 'fs'
 import { resolve } from 'path'
 import { parse as parseEnv } from 'dotenv'
+import { getAggregator } from './aggregators'
 
 const ERC20_ABI = ['function balanceOf(address) view returns (uint256)', 'function symbol() view returns (string)', 'function decimals() view returns (uint8)']
 
@@ -98,6 +99,11 @@ function hashOrder(order: CreateOrderRequest['order'], signature: string): strin
 export async function createOrder(dto: CreateOrderRequest): Promise<CreateOrderResponse> {
   const { order } = dto
 
+  const preferredAggregator = dto.preferredAggregator || null
+  if (preferredAggregator && !getAggregator(preferredAggregator)) {
+    throw new Error(`Unknown preferredAggregator '${preferredAggregator}'`)
+  }
+
   // Reject orders the swapper can't fulfill — a valid Permit2 approval with zero
   // token balance produces a "pending" order that no filler can ever fill.
   const erc = new ethers.Contract(order.inputToken, ERC20_ABI, getProvider())
@@ -141,8 +147,8 @@ export async function createOrder(dto: CreateOrderRequest): Promise<CreateOrderR
       hash, swapper, input_token, output_token,
       input_amount, min_output, deadline, nonce,
       min_fill_bps, start_price, decay_per_block,
-      fee_tier, signature, status
-    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,'pending')
+      fee_tier, signature, preferred_aggregator, status
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,'pending')
   `, [
     hash,
     order.swapper,
@@ -156,7 +162,8 @@ export async function createOrder(dto: CreateOrderRequest): Promise<CreateOrderR
     order.startPrice,
     order.decayPerBlock,
     order.feeTier,
-    cosignerSig
+    cosignerSig,
+    preferredAggregator
   ])
 
   return { orderHash: hash, status: 'pending' }
@@ -177,6 +184,7 @@ export async function getOrders(swapper?: string, status?: string, page = 1, lim
     SELECT
       hash, swapper, input_token, output_token,
       input_amount, min_output, deadline, status, created_at,
+      preferred_aggregator,
       (SELECT COUNT(*) FROM fills WHERE order_hash = orders.hash) AS fills
     FROM orders
     ${where}
@@ -197,7 +205,8 @@ export async function getOrders(swapper?: string, status?: string, page = 1, lim
       deadline: parseInt(r.deadline),
       status: r.status,
       fills: parseInt(r.fills),
-      createdAt: r.created_at.toISOString()
+      createdAt: r.created_at.toISOString(),
+      preferredAggregator: r.preferred_aggregator ?? null
     })),
     total: parseInt(total.rows[0].count),
     page
@@ -229,6 +238,7 @@ export async function getOrder(hash: string): Promise<OrderDetail | null> {
     status: o.status,
     signature: o.signature,
     createdAt: o.created_at.toISOString(),
+    preferredAggregator: o.preferred_aggregator ?? null,
     fills: fills.rows.map(f => ({
       id: f.id,
       filler: f.filler,
@@ -240,6 +250,33 @@ export async function getOrder(hash: string): Promise<OrderDetail | null> {
       createdAt: f.created_at.toISOString()
     }))
   }
+}
+
+// Single-chain Dutch-auction fills by a filler address — powers the
+// "Single-chain swap fills" section on the Fillers page, alongside
+// crosschainService.getFillerFills() for the cc_slots side.
+export async function getFillerSwapFills(filler: string) {
+  const r = await db.query(`
+    SELECT f.id, f.order_hash, f.fill_amount, f.output_amount,
+           f.tx_hash, f.block_number, f.created_at,
+           o.input_token, o.output_token, o.input_amount AS order_total
+    FROM fills f
+    JOIN orders o ON o.hash = f.order_hash
+    WHERE LOWER(f.filler) = LOWER($1)
+    ORDER BY f.created_at DESC
+  `, [filler])
+  return r.rows.map(f => ({
+    id:           f.id,
+    orderHash:    f.order_hash,
+    fillAmount:   f.fill_amount,
+    outputAmount: f.output_amount,
+    txHash:       f.tx_hash,
+    blockNumber:  f.block_number ? parseInt(f.block_number) : null,
+    createdAt:    f.created_at.toISOString(),
+    inputToken:   f.input_token,
+    outputToken:  f.output_token,
+    orderTotal:   f.order_total,
+  }))
 }
 
 export async function cancelOrder(hash: string, swapper: string): Promise<CancelOrderResponse> {

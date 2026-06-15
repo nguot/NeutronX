@@ -1,12 +1,14 @@
 import { ethers } from 'ethers'
 import { provider, wallet } from '../contract/contracts'
-import { SUPPORTED_TOKENS } from '../config'
+import { SUPPORTED_TOKENS, CHAIN_B_RPC } from '../config'
 
 // Dev-mode inventory seeder.
 // Run once at startup (auto, in DEV_MODE) or manually: `npm run fund`.
 // Gives the filler wallet "infinite-ish" money on a mainnet Anvil fork so it can
 // fill any order regardless of size: a big ETH balance (gas + stake collateral),
 // WETH wrapped from ETH, and major ERC-20s pulled from a Binance hot wallet.
+// Seeds both Chain A and (if configured) Chain B so the filler can serve
+// orders in either direction without relying on setup_cc.sh's fixed amounts.
 
 const WETH = '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2'
 
@@ -24,7 +26,11 @@ const TARGETS: Record<string, string> = {
   // fills. Defaults to the "infinite-ish" 20M for normal dev/demo use.
   USDC: process.env.SEED_USDC_TARGET || '20000000',
   USDT: '20000000',
-  DAI:  '5000000',
+  // Binance 14 (WHALE_1) holds ~3.39M DAI on this fork and WHALE_2 holds 0 —
+  // fundFromWhale() needs ONE whale to cover the full target, so keep this
+  // well under ~3.39M (also leaves headroom if both fillers seed from the
+  // same anvil instance).
+  DAI:  '1000000',
   WBTC: '500',
   LINK: '1000000',
   UNI:  '1000000',
@@ -34,27 +40,30 @@ const ETH_BALANCE = '100000' // ether — for gas + staking collateral
 const WETH_ABI  = ['function deposit() payable', 'function balanceOf(address) view returns (uint256)']
 const ERC20_ABI = ['function transfer(address,uint256) returns (bool)', 'function balanceOf(address) view returns (uint256)']
 
-async function fundEth(): Promise<void> {
+async function fundEth(provider: ethers.providers.JsonRpcProvider, wallet: ethers.Wallet, label: string): Promise<void> {
   await provider.send('anvil_setBalance', [
     wallet.address,
     ethers.utils.hexValue(ethers.utils.parseEther(ETH_BALANCE)),
   ])
-  console.log(`[Seed] ETH balance → ${ETH_BALANCE} ETH`)
+  console.log(`[Seed:${label}] ETH balance → ${ETH_BALANCE} ETH`)
 }
 
-async function wrapWeth(target: bigint): Promise<void> {
+async function wrapWeth(provider: ethers.providers.JsonRpcProvider, wallet: ethers.Wallet, target: bigint, label: string): Promise<void> {
   const weth = new ethers.Contract(WETH, WETH_ABI, wallet)
   const bal  = (await weth.balanceOf(wallet.address)).toBigInt()
-  if (bal >= target) { console.log('[Seed] WETH already funded'); return }
+  if (bal >= target) { console.log(`[Seed:${label}] WETH already funded`); return }
   const tx = await weth.deposit({ value: target - bal })
   await tx.wait()
-  console.log(`[Seed] WETH → ${ethers.utils.formatEther(target)}`)
+  console.log(`[Seed:${label}] WETH → ${ethers.utils.formatEther(target)}`)
 }
 
-async function fundFromWhale(token: string, target: bigint, symbol: string, decimals: number): Promise<void> {
+async function fundFromWhale(
+  provider: ethers.providers.JsonRpcProvider, wallet: ethers.Wallet,
+  token: string, target: bigint, symbol: string, decimals: number, label: string
+): Promise<void> {
   const erc = new ethers.Contract(token, ERC20_ABI, provider)
   const bal = (await erc.balanceOf(wallet.address)).toBigInt()
-  if (bal >= target) { console.log(`[Seed] ${symbol} already funded`); return }
+  if (bal >= target) { console.log(`[Seed:${label}] ${symbol} already funded`); return }
   const need = target - bal
 
   for (const whale of WHALES) {
@@ -70,26 +79,35 @@ async function fundFromWhale(token: string, target: bigint, symbol: string, deci
       const tx = await new ethers.Contract(token, ERC20_ABI, signer).transfer(wallet.address, need)
       await tx.wait()
       await provider.send('anvil_stopImpersonatingAccount', [whale])
-      console.log(`[Seed] ${symbol} → ${ethers.utils.formatUnits(target, decimals)} (from ${whale.slice(0, 8)}…)`)
+      console.log(`[Seed:${label}] ${symbol} → ${ethers.utils.formatUnits(target, decimals)} (from ${whale.slice(0, 8)}…)`)
       return
     } catch {
       await provider.send('anvil_stopImpersonatingAccount', [whale]).catch(() => {})
     }
   }
-  console.warn(`[Seed] ⚠ could not fund ${symbol} from any whale — continuing`)
+  console.warn(`[Seed:${label}] ⚠ could not fund ${symbol} from any whale — continuing`)
 }
 
-export async function seedInventory(): Promise<void> {
-  console.log(`[Seed] funding ${wallet.address} …`)
-  await fundEth()
+async function seedChain(provider: ethers.providers.JsonRpcProvider, wallet: ethers.Wallet, label: string): Promise<void> {
+  console.log(`[Seed:${label}] funding ${wallet.address} …`)
+  await fundEth(provider, wallet, label)
   for (const [addr, meta] of Object.entries(SUPPORTED_TOKENS)) {
     const human = TARGETS[meta.symbol]
     if (!human) continue
     const target = ethers.utils.parseUnits(human, meta.decimals).toBigInt()
-    if (meta.symbol === 'WETH') await wrapWeth(target)
-    else                        await fundFromWhale(addr, target, meta.symbol, meta.decimals)
+    if (meta.symbol === 'WETH') await wrapWeth(provider, wallet, target, label)
+    else                        await fundFromWhale(provider, wallet, addr, target, meta.symbol, meta.decimals, label)
   }
-  console.log('[Seed] done.')
+  console.log(`[Seed:${label}] done.`)
+}
+
+export async function seedInventory(): Promise<void> {
+  await seedChain(provider, wallet, 'Chain A')
+  if (CHAIN_B_RPC) {
+    const providerB = new ethers.providers.JsonRpcProvider(CHAIN_B_RPC)
+    const walletB   = wallet.connect(providerB)
+    await seedChain(providerB, walletB, 'Chain B')
+  }
 }
 
 // Allow running standalone: `npm run fund`

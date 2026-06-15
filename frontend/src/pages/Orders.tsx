@@ -25,6 +25,7 @@ interface Order {
   status:      string
   fills:       number
   createdAt:   string
+  preferredAggregator: string | null
 }
 
 interface OrderDetail extends Order {
@@ -226,6 +227,7 @@ function OrderDetailPanel({ order }: { order: OrderDetail }) {
         <Field label="Fee Tier"        value={String(order.feeTier)} />
         {order.startPrice && <Field label="Start Price" value={order.startPrice} mono />}
         <Field label="Decay / Block"   value={String(order.decayPerBlock)} />
+        <Field label="Fallback Route"  value={order.preferredAggregator ?? 'Auto (best price)'} />
       </div>
 
       {order.fillDetails.length > 0 ? (

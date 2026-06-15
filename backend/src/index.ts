@@ -9,11 +9,15 @@ import adminRouter       from './routes/admin'
 import quoteRouter       from './routes/quote'
 import suggestRouter     from './routes/suggest'
 import tokensRouter      from './routes/tokens'
+import aggregatorsRouter from './routes/aggregators'
 import { startFallbackWatcher }   from './watcher/fallbackWatcher'
 import { startIndexer }           from './indexer/eventIndexer'
-import { startChainBWatcher }     from './chain/chainBWatcher'
+import { startEscrowDstWatcher }  from './chain/escrowDstWatcher'
+import { startEscrowSrcWatcher }  from './chain/escrowSrcWatcher'
 import { initCrossChainSchema }   from './services/crosschainService'
 import { initTokenSchema }        from './services/tokenService'
+import { initFillerSchema }       from './services/fillerRegistry'
+import { loadChainRegistry }      from './config/chains'
 dotenv.config()
 
 const app = express()
@@ -28,6 +32,7 @@ app.use('/admin',    adminRouter)
 app.use('/quote',    quoteRouter)
 app.use('/suggest-params', suggestRouter)
 app.use('/tokens',   tokensRouter)
+app.use('/aggregators', aggregatorsRouter)
 
 app.get('/health', (_, res) => res.json({ ok: true }))
 
@@ -36,7 +41,29 @@ app.listen(PORT, async () => {
     console.log(`Backend running on port ${PORT}`)
     await initTokenSchema()
     await initCrossChainSchema()
+    await initFillerSchema()
     startIndexer()
     startFallbackWatcher()
-    startChainBWatcher()
+    // One watcher per registry chain, watching that chain's EscrowDstFactory —
+    // fillers settle here whenever this chain is an order's destination.
+    for (const chain of loadChainRegistry()) {
+        startEscrowDstWatcher({
+            chainId:       chain.id,
+            rpc:           chain.rpc,
+            factoryAddr:   chain.escrowDstFactory,
+            confirmations: chain.confirmations,
+            label:         chain.name,
+        })
+    }
+    // One watcher per registry chain, watching that chain's EscrowSrcFactory —
+    // records the filler address on a slot as soon as it claims it, so fillers
+    // no longer need to self-report via PATCH .../slots/:index/filler.
+    for (const chain of loadChainRegistry()) {
+        startEscrowSrcWatcher({
+            chainId:     chain.id,
+            rpc:         chain.rpc,
+            factoryAddr: chain.escrowSrcFactory,
+            label:       chain.name,
+        })
+    }
 })

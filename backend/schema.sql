@@ -15,8 +15,14 @@ CREATE TABLE IF NOT EXISTS orders (
     signature       TEXT NOT NULL,
     status              TEXT    NOT NULL DEFAULT 'pending',
     fallback_initiated  BOOLEAN NOT NULL DEFAULT false,
+    -- swapper's preferred fallback aggregator (see backend/src/services/aggregators);
+    -- NULL = "auto", let the fallback watcher pick the best quote across all of them.
+    preferred_aggregator TEXT,
     created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- idempotent migration for pre-existing databases
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS preferred_aggregator TEXT;
 
 CREATE TABLE IF NOT EXISTS fills (
     id              TEXT PRIMARY KEY,

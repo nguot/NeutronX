@@ -6,8 +6,9 @@ import CrossChain   from './pages/CrossChain'
 import Explore      from './pages/Explore'
 import Simulate     from './pages/Simulate'
 import Orders       from './pages/Orders'
+import Fillers      from './pages/Fillers'
 
-type Tab = 'swap' | 'crosschain' | 'orders' | 'explore' | 'simulate'
+type Tab = 'swap' | 'crosschain' | 'orders' | 'explore' | 'simulate' | 'fillers'
 
 const NAV: { id: Tab; label: string }[] = [
   { id: 'swap',       label: 'Swap' },
@@ -15,11 +16,12 @@ const NAV: { id: Tab; label: string }[] = [
   { id: 'orders',     label: 'Orders' },
   { id: 'explore',    label: 'Explore' },
   { id: 'simulate',   label: 'Simulate' },
+  { id: 'fillers',    label: 'Fillers' },
 ]
 
 function Inner() {
   const [tab, setTab] = useState<Tab>('swap')
-  const { wallet, error, connect } = useWallet()
+  const { wallet, error, connect, switchNetwork } = useWallet()
 
   return (
     <div>
@@ -58,10 +60,11 @@ function Inner() {
 
       <main className="page-content">
         {tab === 'swap'       && <DutchAuction wallet={wallet} />}
-        {tab === 'crosschain' && <CrossChain   wallet={wallet} />}
+        {tab === 'crosschain' && <CrossChain   wallet={wallet} switchNetwork={switchNetwork} />}
         {tab === 'orders'     && <Orders        wallet={wallet} />}
-        {tab === 'explore'    && <Explore />}
+        {tab === 'explore'    && <Explore wallet={wallet} />}
         {tab === 'simulate'   && <Simulate      wallet={wallet} />}
+        {tab === 'fillers'    && <Fillers />}
       </main>
     </div>
   )

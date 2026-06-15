@@ -28,27 +28,50 @@ contract FallbackExecutor is ReentrancyGuard {
 
     IPermit2           public immutable permit2;
     PartialFillReactor public immutable reactor;
-    address            public immutable uniswapRouter;
+    address            public immutable owner;
+
+    // Adapter-agnostic router allowlist — lets the off-chain solver pick
+    // whichever aggregator (Uniswap, 1inch, 0x, ...) quoted best, without
+    // redeploying or re-wiring the reactor.
+    mapping(address => bool) public allowedRouters;
 
     event FallbackExecuted(bytes32 indexed orderHash, uint256 amountIn, uint256 amountOut);
+    event RouterAllowed(address indexed router, bool allowed);
 
-    constructor(address _permit2, address _reactor, address _uniswapRouter) {
-        require(_permit2       != address(0), "zero permit2");
-        require(_reactor       != address(0), "zero reactor");
-        require(_uniswapRouter != address(0), "zero router");
-        permit2       = IPermit2(_permit2);
-        reactor       = PartialFillReactor(_reactor);
-        uniswapRouter = _uniswapRouter;
+    constructor(address _permit2, address _reactor, address _initialRouter) {
+        require(_permit2      != address(0), "zero permit2");
+        require(_reactor      != address(0), "zero reactor");
+        require(_initialRouter != address(0), "zero router");
+        permit2 = IPermit2(_permit2);
+        reactor = PartialFillReactor(_reactor);
+        owner   = msg.sender;
+
+        allowedRouters[_initialRouter] = true;
+        emit RouterAllowed(_initialRouter, true);
+    }
+
+    /// Owner-managed allowlist of swap router/aggregator contracts that
+    /// `executeFallback` is permitted to approve + call into. Adding a new
+    /// DEX aggregator (1inch, 0x, ...) is just one call to this function.
+    function setRouterAllowed(address router, bool allowed) external {
+        require(msg.sender == owner, "not owner");
+        require(router != address(0), "zero router");
+        allowedRouters[router] = allowed;
+        emit RouterAllowed(router, allowed);
     }
 
     /// @param order        order cần fallback
-    /// @param routeCalldata  calldata do solver tính sẵn qua Alpha Router
+    /// @param router         allowlisted aggregator router to swap through
+    /// @param routeCalldata  calldata do solver tính sẵn (qua bất kỳ aggregator nào)
     /// @param minAmountOut   minimum output do solver tính sẵn
     function executeFallback(
         PartialFillReactor.SignedOrder calldata order,
+        address router,
         bytes calldata routeCalldata,
         uint256 minAmountOut
     ) external nonReentrant {
+        require(allowedRouters[router], "router not allowed");
+
         bytes32 orderHash = _hashOrder(order.info);
 
         // C-2: authenticate the order (cosigner sig, deadline, nonce) before
@@ -65,6 +88,8 @@ contract FallbackExecutor is ReentrancyGuard {
         // filler can no longer pull the same `rem` via executePartialChunk.
         reactor.markFallbackInitiated(orderHash);
 
+        uint256 inBalBefore = IERC20(order.info.inputToken).balanceOf(address(this));
+
         permit2.transferFrom(
             order.info.swapper,
             address(this),
@@ -73,11 +98,11 @@ contract FallbackExecutor is ReentrancyGuard {
             order.info.inputToken
         );
 
-        IERC20(order.info.inputToken).forceApprove(uniswapRouter, rem);
+        IERC20(order.info.inputToken).forceApprove(router, rem);
 
         uint256 balBefore = IERC20(order.info.outputToken).balanceOf(order.info.swapper);
 
-        (bool ok,) = uniswapRouter.call(routeCalldata);
+        (bool ok,) = router.call(routeCalldata);
         require(ok, "swap failed");
 
         uint256 amountOut = IERC20(order.info.outputToken).balanceOf(order.info.swapper) - balBefore;
@@ -86,6 +111,19 @@ contract FallbackExecutor is ReentrancyGuard {
         uint256 signedFloor = FullMath.mulDiv(order.info.minOutputAmount, rem, order.info.inputAmount);
         require(amountOut >= minAmountOut, "insufficient output");
         require(amountOut >= signedFloor,  "below signed min output");
+
+        // C-3: enforce the order's absolute minOutputAmount against the
+        // cumulative total paid across all partial fills plus this fallback leg.
+        reactor.recordFallbackOutput(orderHash, amountOut, order.info.minOutputAmount);
+
+        // C-4: an exact-output style route may spend less than `rem`. The order
+        // is already terminal, so any unconsumed input must be refunded to the
+        // swapper rather than left stranded in this contract.
+        IERC20(order.info.inputToken).forceApprove(router, 0);
+        uint256 leftover = IERC20(order.info.inputToken).balanceOf(address(this)) - inBalBefore;
+        if (leftover > 0) {
+            IERC20(order.info.inputToken).safeTransfer(order.info.swapper, leftover);
+        }
 
         emit FallbackExecuted(orderHash, rem, amountOut);
     }

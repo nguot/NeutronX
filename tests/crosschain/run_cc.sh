@@ -83,13 +83,13 @@ log STEP "Step 2 — Snapshotting balances (both fillers + swapper)"
 
 declare -a WETH_A_BEFORE USDC_B_BEFORE
 for i in 0 1; do
-  WETH_A_BEFORE[$i]=$(cast call "$WETH" "balanceOf(address)(uint256)" "${FILLER_ADDRS[$i]}" --rpc-url "$RPC_A")
-  USDC_B_BEFORE[$i]=$(cast call  "$USDC" "balanceOf(address)(uint256)" "${FILLER_ADDRS[$i]}" --rpc-url "$RPC_B")
+  WETH_A_BEFORE[$i]=$(cast call "$WETH" "balanceOf(address)(uint256)" "${FILLER_ADDRS[$i]}" --rpc-url "$RPC_A" | awk '{print $1}')
+  USDC_B_BEFORE[$i]=$(cast call  "$USDC" "balanceOf(address)(uint256)" "${FILLER_ADDRS[$i]}" --rpc-url "$RPC_B" | awk '{print $1}')
   log INFO "${FILLER_NAMES[$i]} (${FILLER_ADDRS[$i]}) — WETH on A: ${WETH_A_BEFORE[$i]} | USDC on B: ${USDC_B_BEFORE[$i]}"
 done
 
-USDC_SWAPPER_B_BEFORE=$(cast call "$USDC" "balanceOf(address)(uint256)" "$ACCOUNT0" --rpc-url "$RPC_B")
-WETH_SWAPPER_A_BEFORE=$(cast call "$WETH" "balanceOf(address)(uint256)" "$ACCOUNT0" --rpc-url "$RPC_A")
+USDC_SWAPPER_B_BEFORE=$(cast call "$USDC" "balanceOf(address)(uint256)" "$ACCOUNT0" --rpc-url "$RPC_B" | awk '{print $1}')
+WETH_SWAPPER_A_BEFORE=$(cast call "$WETH" "balanceOf(address)(uint256)" "$ACCOUNT0" --rpc-url "$RPC_A" | awk '{print $1}')
 log INFO "Swapper USDC on Chain B : $USDC_SWAPPER_B_BEFORE"
 log INFO "Swapper WETH on Chain A : $WETH_SWAPPER_A_BEFORE"
 
@@ -115,7 +115,7 @@ ORDER_RESP=$(curl -sf -X POST "$BACKEND/cc/orders" \
     \"deadline\":    $DEADLINE,
     \"nonce\":       \"$NONCE\",
     \"chainAId\":    31337,
-    \"reactorAddr\": \"$ESCROW_SRC_FACTORY\",
+    \"dstChainId\":  31338,
     \"t2Buffer\":    $T2_BUFFER
   }")
 
@@ -292,6 +292,7 @@ for i in 0 1; do
 import urllib.request, json, subprocess
 
 escrow = "$escrow"
+from_block = hex($CURRENT_BLOCK_B)
 
 # topic0 = keccak256("Claimed(address,bytes32)")
 topic0 = subprocess.check_output(
@@ -304,7 +305,7 @@ req = urllib.request.Request(
     "http://127.0.0.1:8546",
     data=json.dumps({
         "jsonrpc": "2.0", "method": "eth_getLogs", "id": 1,
-        "params": [{"address": escrow, "topics": [topic0]}]
+        "params": [{"address": escrow, "topics": [topic0], "fromBlock": from_block, "toBlock": "latest"}]
     }).encode(),
     headers={"Content-Type": "application/json"}
 )
@@ -347,15 +348,15 @@ log STEP "Step 11 — Verifying final balances"
 
 declare -a WETH_A_AFTER USDC_B_AFTER WETH_GAINED USDC_SPENT ESCROW_STATUS_A
 for i in 0 1; do
-  WETH_A_AFTER[$i]=$(cast call "$WETH" "balanceOf(address)(uint256)" "${FILLER_ADDRS[$i]}" --rpc-url "$RPC_A")
-  USDC_B_AFTER[$i]=$(cast call  "$USDC" "balanceOf(address)(uint256)" "${FILLER_ADDRS[$i]}" --rpc-url "$RPC_B")
+  WETH_A_AFTER[$i]=$(cast call "$WETH" "balanceOf(address)(uint256)" "${FILLER_ADDRS[$i]}" --rpc-url "$RPC_A" | awk '{print $1}')
+  USDC_B_AFTER[$i]=$(cast call  "$USDC" "balanceOf(address)(uint256)" "${FILLER_ADDRS[$i]}" --rpc-url "$RPC_B" | awk '{print $1}')
   WETH_GAINED[$i]=$(python3 -c "print(${WETH_A_AFTER[$i]} - ${WETH_A_BEFORE[$i]})")
   USDC_SPENT[$i]=$(python3  -c "print(${USDC_B_BEFORE[$i]} - ${USDC_B_AFTER[$i]})")
-  ESCROW_STATUS_A[$i]=$(cast call "${ESCROW_ADDR_A[$i]}" "status()(string)" --rpc-url "$RPC_A")
+  ESCROW_STATUS_A[$i]=$(cast call "${ESCROW_ADDR_A[$i]}" "status()(string)" --rpc-url "$RPC_A" | tr -d '"')
 done
 
-USDC_SWAPPER_B_AFTER=$(cast call "$USDC" "balanceOf(address)(uint256)" "$ACCOUNT0" --rpc-url "$RPC_B")
-WETH_SWAPPER_A_AFTER=$(cast call "$WETH" "balanceOf(address)(uint256)" "$ACCOUNT0" --rpc-url "$RPC_A")
+USDC_SWAPPER_B_AFTER=$(cast call "$USDC" "balanceOf(address)(uint256)" "$ACCOUNT0" --rpc-url "$RPC_B" | awk '{print $1}')
+WETH_SWAPPER_A_AFTER=$(cast call "$WETH" "balanceOf(address)(uint256)" "$ACCOUNT0" --rpc-url "$RPC_A" | awk '{print $1}')
 
 USDC_GAINED=$(python3 -c "print($USDC_SWAPPER_B_AFTER - $USDC_SWAPPER_B_BEFORE)")
 WETH_SWAPPER_SPENT=$(python3 -c "print($WETH_SWAPPER_A_BEFORE - $WETH_SWAPPER_A_AFTER)")

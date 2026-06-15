@@ -6,6 +6,8 @@ import "../src/FallbackExecutor.sol";
 import "../src/PartialFillReactor.sol";
 import "../src/FillAuction.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "./mocks/MockERC20.sol";
+import "./mocks/MockAggregatorRouter.sol";
 
 interface IPermit2Full {
     function approve(
@@ -21,7 +23,7 @@ struct ExactInputSingleParams {
     address tokenOut;
     uint24 fee;
     address recipient;
-    uint256 deadline; // ← thiếu cái này
+    uint256 deadline;
     uint256 amountIn;
     uint256 amountOutMinimum;
     uint160 sqrtPriceLimitX96;
@@ -90,15 +92,25 @@ contract FallbackExecutorTest is Test {
         view
         returns (PartialFillReactor.SignedOrder memory)
     {
+        return _makeOrderWithFloor(USDC, 1000e6, 1);
+    }
+
+    // Lets the swap-mechanics tests pin the output token + signed floor without
+    // depending on real Uniswap calldata or live fork pricing.
+    function _makeOrderWithFloor(address outputToken, uint256 minOutputAmount, uint256 nonce)
+        internal
+        view
+        returns (PartialFillReactor.SignedOrder memory)
+    {
         PartialFillReactor.OrderInfo memory info = PartialFillReactor
             .OrderInfo({
                 swapper: swapper,
                 inputToken: WETH,
                 inputAmount: INPUT_AMOUNT,
-                outputToken: USDC,
-                minOutputAmount: 1000e6, // min 1000 USDC
+                outputToken: outputToken,
+                minOutputAmount: minOutputAmount,
                 deadline: block.number + 100,
-                nonce: 1,
+                nonce: nonce,
                 minFillBps: 0,
                 startPrice: uint128(2500e18), // 2500 USDC per WETH scaled 1e18
                 decayPerBlock: 0,
@@ -120,45 +132,87 @@ contract FallbackExecutorTest is Test {
         return abi.encodePacked(r, s, v);
     }
 
-    function test_fallback_swapsSuccessfully() public {
-        PartialFillReactor.SignedOrder memory order = _makeOrder();
+    // Generic mechanism: an arbitrary allowlisted router (not Uniswap-specific)
+    // is approved for `rem`, called with solver-supplied calldata, and the
+    // resulting output transfer to the swapper is what's measured — no
+    // dependence on live Uniswap pricing on the fork.
+    function test_fallback_swapsSuccessfully_viaArbitraryAllowlistedRouter() public {
+        MockERC20 mockOut = new MockERC20("MOUT", "MOUT");
+        MockAggregatorRouter mockRouter = new MockAggregatorRouter();
+        fallbackExecutor.setRouterAllowed(address(mockRouter), true);
 
-        // roll đến trong FALLBACK_WINDOW
-        vm.roll(block.number + 91); // còn 9 blocks đến deadline, < FALLBACK_WINDOW(10)
+        uint256 minOutputAmount = 1000e18;
+        uint256 quotedAmountOut = 1200e18; // solver's quote, above the signed floor
 
-        //hardcode routeData
+        PartialFillReactor.SignedOrder memory order =
+            _makeOrderWithFloor(address(mockOut), minOutputAmount, 1);
+
+        vm.roll(block.number + 91);
+
         bytes memory routeCalldata = abi.encodeWithSelector(
-            bytes4(
-                keccak256(
-                    "exactInputSingle((address,address,uint24,address,uint256,uint256,uint256,uint160))"
-                )
-            ),
-            WETH,
-            USDC,
-            uint24(500),
-            swapper,
-            block.timestamp + 300, // deadline
-            INPUT_AMOUNT,
-            uint256(2000e6),
-            uint160(0)
+            MockAggregatorRouter.swap.selector,
+            WETH, INPUT_AMOUNT, address(mockOut), quotedAmountOut, swapper
         );
 
-        uint256 usdcBefore = IERC20(USDC).balanceOf(swapper);
         uint256 wethBefore = IERC20(WETH).balanceOf(swapper);
 
         vm.prank(caller);
-        fallbackExecutor.executeFallback(order, routeCalldata, 2000e6);
+        fallbackExecutor.executeFallback(order, address(mockRouter), routeCalldata, quotedAmountOut);
 
-        assertGt(
-            IERC20(USDC).balanceOf(swapper),
-            usdcBefore,
-            "swapper should receive USDC"
+        assertEq(mockOut.balanceOf(swapper), quotedAmountOut, "swapper should receive the quoted output");
+        assertEq(wethBefore - IERC20(WETH).balanceOf(swapper), INPUT_AMOUNT, "swapper should spend exactly the input");
+    }
+
+    // C-1: the swapper's signed floor (pro-rated minOutputAmount) must be
+    // enforced even if a sloppy/malicious solver passes a lower minAmountOut.
+    function test_fallback_revert_belowSignedFloor() public {
+        MockERC20 mockOut = new MockERC20("MOUT", "MOUT");
+        MockAggregatorRouter mockRouter = new MockAggregatorRouter();
+        fallbackExecutor.setRouterAllowed(address(mockRouter), true);
+
+        uint256 minOutputAmount = 1000e18; // swapper's signed floor (full fill)
+        uint256 solverMinOut    = 500e18;  // solver under-promises...
+        uint256 actualAmountOut = 600e18;  // ...and the route delivers within that promise, but below the floor
+
+        PartialFillReactor.SignedOrder memory order =
+            _makeOrderWithFloor(address(mockOut), minOutputAmount, 1);
+
+        vm.roll(block.number + 91);
+
+        bytes memory routeCalldata = abi.encodeWithSelector(
+            MockAggregatorRouter.swap.selector,
+            WETH, INPUT_AMOUNT, address(mockOut), actualAmountOut, swapper
         );
-        assertLt(
-            IERC20(WETH).balanceOf(swapper),
-            wethBefore,
-            "swapper should spend WETH"
+
+        vm.prank(caller);
+        vm.expectRevert("below signed min output");
+        fallbackExecutor.executeFallback(order, address(mockRouter), routeCalldata, solverMinOut);
+    }
+
+    // The solver-supplied minAmountOut is also enforced on its own terms,
+    // independent of the swapper's signed floor.
+    function test_fallback_revert_insufficientOutput() public {
+        MockERC20 mockOut = new MockERC20("MOUT", "MOUT");
+        MockAggregatorRouter mockRouter = new MockAggregatorRouter();
+        fallbackExecutor.setRouterAllowed(address(mockRouter), true);
+
+        uint256 minOutputAmount = 100e18;  // signed floor is low, won't bind
+        uint256 solverMinOut    = 1000e18; // solver promises this much...
+        uint256 actualAmountOut = 500e18;  // ...but the route delivers less
+
+        PartialFillReactor.SignedOrder memory order =
+            _makeOrderWithFloor(address(mockOut), minOutputAmount, 1);
+
+        vm.roll(block.number + 91);
+
+        bytes memory routeCalldata = abi.encodeWithSelector(
+            MockAggregatorRouter.swap.selector,
+            WETH, INPUT_AMOUNT, address(mockOut), actualAmountOut, swapper
         );
+
+        vm.prank(caller);
+        vm.expectRevert("insufficient output");
+        fallbackExecutor.executeFallback(order, address(mockRouter), routeCalldata, solverMinOut);
     }
 
     function test_fallback_revert_tooEarly() public {
@@ -166,7 +220,7 @@ contract FallbackExecutorTest is Test {
 
         vm.prank(caller);
         vm.expectRevert("too early");
-        fallbackExecutor.executeFallback(order, bytes(""), 0);
+        fallbackExecutor.executeFallback(order, UNISWAP_ROUTER, bytes(""), 0);
     }
 
     function test_fallback_revert_expired() public {
@@ -177,6 +231,139 @@ contract FallbackExecutorTest is Test {
         // caught by _validateOrder ("expired") before the executor's own check.
         vm.prank(caller);
         vm.expectRevert("expired");
-        fallbackExecutor.executeFallback(order, bytes(""), 0);
+        fallbackExecutor.executeFallback(order, UNISWAP_ROUTER, bytes(""), 0);
+    }
+
+    function test_fallback_revert_routerNotAllowed() public {
+        PartialFillReactor.SignedOrder memory order = _makeOrder();
+        vm.roll(block.number + 91);
+
+        address rogueRouter = makeAddr("rogueRouter");
+
+        vm.prank(caller);
+        vm.expectRevert("router not allowed");
+        fallbackExecutor.executeFallback(order, rogueRouter, bytes(""), 0);
+    }
+
+    // C-4: an exact-output style route may consume less than `rem`. The leftover
+    // input must be refunded to the swapper rather than stranded in this contract.
+    function test_fallback_refundsUnconsumedInput() public {
+        MockERC20 mockOut = new MockERC20("MOUT", "MOUT");
+        MockAggregatorRouter mockRouter = new MockAggregatorRouter();
+        fallbackExecutor.setRouterAllowed(address(mockRouter), true);
+
+        uint256 minOutputAmount = 1000e18;
+        uint256 quotedAmountOut = 1200e18;
+        uint256 amountInActual  = INPUT_AMOUNT / 2; // route only needs half the approved input
+
+        PartialFillReactor.SignedOrder memory order =
+            _makeOrderWithFloor(address(mockOut), minOutputAmount, 1);
+
+        vm.roll(block.number + 91);
+
+        bytes memory routeCalldata = abi.encodeWithSelector(
+            MockAggregatorRouter.swapPartialIn.selector,
+            WETH, amountInActual, address(mockOut), quotedAmountOut, swapper
+        );
+
+        uint256 wethBefore = IERC20(WETH).balanceOf(swapper);
+
+        vm.prank(caller);
+        fallbackExecutor.executeFallback(order, address(mockRouter), routeCalldata, quotedAmountOut);
+
+        assertEq(mockOut.balanceOf(swapper), quotedAmountOut, "swapper should receive the quoted output");
+        assertEq(wethBefore - IERC20(WETH).balanceOf(swapper), amountInActual, "swapper should only spend what the route consumed");
+        assertEq(IERC20(WETH).balanceOf(address(fallbackExecutor)), 0, "no input left stranded in the executor");
+    }
+
+    // C-3: a prior partial fill can individually clear its pro-rata floor while,
+    // due to floor-division, the order's cumulative paid total still ends up
+    // below the swapper's signed minOutputAmount once the fallback leg
+    // (which itself clears ITS pro-rata floor) completes the order.
+    // recordFallbackOutput's absolute-floor check must catch this.
+    function test_fallback_revert_cumulativeBelowAbsoluteFloor() public {
+        MockERC20 mockOut = new MockERC20("MOUT", "MOUT");
+        MockAggregatorRouter mockRouter = new MockAggregatorRouter();
+        fallbackExecutor.setRouterAllowed(address(mockRouter), true);
+
+        // Tiny custom order (inputAmount=3, minOutputAmount=5, price=1.5) so
+        // floor-division creates an exact 1-unit gap, mirroring
+        // CompletionFloor.t.sol's example but ending via fallback.
+        uint256 inputAmount     = 3;
+        uint256 minOutputAmount = 5;
+        uint128 price           = 1.5e18;
+
+        PartialFillReactor.OrderInfo memory info = PartialFillReactor.OrderInfo({
+            swapper: swapper,
+            inputToken: WETH,
+            inputAmount: inputAmount,
+            outputToken: address(mockOut),
+            minOutputAmount: minOutputAmount,
+            deadline: block.number + 100,
+            nonce: 99,
+            minFillBps: 0,
+            startPrice: price,
+            decayPerBlock: 0,
+            feeTier: 500
+        });
+        PartialFillReactor.SignedOrder memory order =
+            PartialFillReactor.SignedOrder({info: info, sig: _signOrder(info)});
+
+        bytes32 orderHash = keccak256(abi.encode(
+            reactor.ORDER_TYPE_HASH(),
+            info.swapper, info.inputToken, info.inputAmount,
+            info.outputToken, info.minOutputAmount,
+            info.deadline, info.nonce, info.minFillBps,
+            info.startPrice, info.decayPerBlock, info.feeTier
+        ));
+
+        // The reactor (not just FallbackExecutor) needs to pull via Permit2 for
+        // the partial fill below.
+        vm.prank(swapper);
+        IPermit2Full(PERMIT2).approve(WETH, address(reactor), type(uint160).max, type(uint48).max);
+
+        // fillerA partially fills 2 of 3: outputAmount = 2*1.5 = 3, pro-rata
+        // floor = floor(5*2/3) = 3 (3>=3 ok). Leaves a 1-unit remainder.
+        address fillerA = makeAddr("fillerA");
+        mockOut.mint(fillerA, 1000);
+        vm.prank(fillerA);
+        mockOut.approve(address(reactor), type(uint256).max);
+
+        vm.prank(fillerA);
+        reactor.register(order, 2);
+
+        vm.prank(fillerA);
+        reactor.executePartialChunk(order, 2);
+        assertEq(reactor.remainingInput(orderHash, inputAmount), 1, "1 wei left");
+
+        // Fallback for the remaining 1: signedFloor = floor(5*1/3) = 1. Mock
+        // router delivers exactly 1 -> clears its own pro-rata floor, but
+        // cumulative (3 + 1 = 4) < minOutputAmount (5).
+        vm.roll(block.number + 91);
+
+        bytes memory routeCalldata = abi.encodeWithSelector(
+            MockAggregatorRouter.swap.selector,
+            WETH, uint256(1), address(mockOut), uint256(1), swapper
+        );
+
+        vm.prank(caller);
+        vm.expectRevert("min output total");
+        fallbackExecutor.executeFallback(order, address(mockRouter), routeCalldata, 1);
+    }
+
+    function test_setRouterAllowed_onlyOwner() public {
+        address newRouter = makeAddr("oneInchRouter");
+        assertFalse(fallbackExecutor.allowedRouters(newRouter));
+
+        vm.prank(caller);
+        vm.expectRevert("not owner");
+        fallbackExecutor.setRouterAllowed(newRouter, true);
+
+        // setUp() deployed fallbackExecutor as this test contract, so it is the owner.
+        fallbackExecutor.setRouterAllowed(newRouter, true);
+        assertTrue(fallbackExecutor.allowedRouters(newRouter));
+
+        fallbackExecutor.setRouterAllowed(newRouter, false);
+        assertFalse(fallbackExecutor.allowedRouters(newRouter));
     }
 }

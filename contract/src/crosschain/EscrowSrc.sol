@@ -100,6 +100,10 @@ contract EscrowSrc {
         require(_amount   >  0,                                      "zero amount");
         require(_expiry   >  block.number,                          "expiry in past");
         require(_hashlock != bytes32(0),                            "zero hashlock");
+        // M-3: a zero safety deposit makes grief-filling a slot (taking the
+        // swapper's funds into an escrow the griefer can never unlock) free
+        // beyond gas. Require the filler to put real value at risk.
+        require(msg.value  >  0,                                     "zero safety deposit");
         require(IERC20(_token).balanceOf(address(this)) >= _amount, "underfunded");
 
         _initialized  = true;

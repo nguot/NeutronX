@@ -1,4 +1,5 @@
 import { db } from '../db/client'
+import { chainIds } from '../config/chains'
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  Token registry  —  single source of truth for the swap & cross-chain UIs
@@ -9,14 +10,13 @@ import { db } from '../db/client'
 //  one `tokens` table, seeded below. Adding a token is a DB insert — no frontend
 //  redeploy.
 //
-//  Each token is registered on BOTH local chains:
-//    • Chain A (31337) — the mainnet fork; the single-chain Dutch-auction swap and
-//      the cross-chain "input" (locked by the swapper) live here.
-//    • Chain B (31338) — the cross-chain "output" chain (claimed by fillers).
-//  Both anvil instances fork mainnet, so a token keeps the same address on each.
+//  Each token is registered on every chain in the chain registry
+//  (backend/config/chains.json). All local anvil instances fork mainnet, so a
+//  token keeps the same address on each.
 
-export const CHAIN_A_ID = 31337   // mainnet fork — single-chain swap + cross-chain input
-export const CHAIN_B_ID = 31338   // cross-chain output chain
+// Chain the single-chain Dutch-auction swap (PARTIAL_FILL_REACTOR) runs on —
+// separate from the cross-chain registry.
+export const SINGLE_CHAIN_ID = parseInt(process.env.CHAIN_ID || '31337')
 
 export interface TokenInfo {
   symbol:   string
@@ -52,7 +52,7 @@ export async function initTokenSchema(): Promise<void> {
       UNIQUE (chain_id, address)
     )
   `)
-  for (const chainId of [CHAIN_A_ID, CHAIN_B_ID]) {
+  for (const chainId of chainIds()) {
     for (let i = 0; i < COMMON_TOKENS.length; i++) {
       const t = COMMON_TOKENS[i]
       await db.query(`

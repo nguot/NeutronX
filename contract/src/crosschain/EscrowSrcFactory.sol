@@ -149,6 +149,11 @@ contract EscrowSrcFactory is ReentrancyGuard {
     mapping(bytes32 => OrderState) private _orders;
     mapping(bytes32 => bool)       private _created; // true once the first fillSlot() ran
 
+    // M-3: bumped each time a slot is reopened after its escrow was cancelled.
+    // Folded into the CREATE2 salt so a reopened slot deploys a FRESH clone at
+    // a new address — the old (forever-stuck) clone is simply abandoned.
+    mapping(bytes32 => mapping(uint8 => uint8)) private _attempt;
+
     // ─── Events ───────────────────────────────────────────────────────────────
     event OrderCreated(
         bytes32 indexed orderHash,
@@ -168,6 +173,11 @@ contract EscrowSrcFactory is ReentrancyGuard {
         uint256         amount,
         uint256         safetyDeposit
     );
+
+    // M-3: emitted when a permanently-stuck slot (its escrow was cancelled —
+    // refunded to the swapper, with the safety deposit forfeited to whoever
+    // cancelled it) is reopened for a fresh fillSlot() attempt.
+    event SlotReopened(bytes32 indexed orderHash, uint8 indexed slotIndex, uint8 attempt);
 
     // ─── Constructor ──────────────────────────────────────────────────────────
     constructor(address _implementation, address _permit2, address _cosigner) {
@@ -264,7 +274,7 @@ contract EscrowSrcFactory is ReentrancyGuard {
             : order.slotAmount;
 
         // ── Deploy the per-fill clone and fund it ─────────────────────────────
-        bytes32 salt = keccak256(abi.encodePacked(orderHash, slotIndex));
+        bytes32 salt = _salt(orderHash, slotIndex, _attempt[orderHash][slotIndex]);
         escrow = Clones.cloneDeterministic(implementation, salt);
 
         // Redirect the swapper's standing Permit2 allowance straight into the
@@ -279,6 +289,39 @@ contract EscrowSrcFactory is ReentrancyGuard {
         emit SlotFilled(orderHash, slotIndex, msg.sender, escrow, hashlock, amount, msg.value);
     }
 
+    // ─── reopenSlot ───────────────────────────────────────────────────────────
+    /**
+     * M-3: a slot's escrow can become permanently stuck if it was filled by a
+     * filler who can never produce the secret (e.g. someone who front-ran a
+     * leaked (hashlock, slotIndex, proof) tuple without the corresponding
+     * Chain-B leg). Once that escrow has expired and been cancelled — refunding
+     * the swapper's input and forfeiting the filler's safety deposit to whoever
+     * called cancel() — the slot's `filledBitmap` bit would otherwise stay set
+     * forever, permanently burning the slot.
+     *
+     * This function is permissionless and callable by anyone once the CURRENT
+     * clone for (orderHash, slotIndex) reports `cancelled() == true`. It clears
+     * the slot's filled bit and bumps the attempt counter, so the next
+     * fillSlot() for this slot deploys a brand-new clone at a fresh CREATE2
+     * address (the old, cancelled clone is simply abandoned).
+     */
+    function reopenSlot(bytes32 orderHash, uint8 slotIndex) external nonReentrant {
+        OrderState storage order = _orders[orderHash];
+        require(_created[orderHash], "no such order");
+
+        uint64 slotBit = uint64(1) << slotIndex;
+        require(order.filledBitmap & slotBit != 0, "slot not filled");
+
+        uint8 attempt = _attempt[orderHash][slotIndex];
+        address escrow = Clones.predictDeterministicAddress(implementation, _salt(orderHash, slotIndex, attempt));
+        require(EscrowSrc(escrow).cancelled(), "escrow not cancelled");
+
+        order.filledBitmap &= ~slotBit;
+        _attempt[orderHash][slotIndex] = attempt + 1;
+
+        emit SlotReopened(orderHash, slotIndex, attempt + 1);
+    }
+
     // ─── View helpers ─────────────────────────────────────────────────────────
 
     function getOrder(bytes32 orderHash) external view returns (OrderState memory) {
@@ -289,20 +332,38 @@ contract EscrowSrcFactory is ReentrancyGuard {
         return (_orders[orderHash].filledBitmap & (uint64(1) << slotIndex)) != 0;
     }
 
+    // M-3: how many times (orderHash, slotIndex) has been reopened via
+    // reopenSlot(). 0 means the slot is on its original clone/salt.
+    function attempt(bytes32 orderHash, uint8 slotIndex) external view returns (uint8) {
+        return _attempt[orderHash][slotIndex];
+    }
+
     function hashOrder(OrderInfo calldata info) external pure returns (bytes32) {
         return _hashOrder(info);
     }
 
     /**
      * Returns the address an EscrowSrc clone WILL be deployed to for
-     * (orderHash, slotIndex), before fillSlot() is called.
+     * (orderHash, slotIndex), before fillSlot() is called. Reflects the
+     * current attempt count, so it always points at the LIVE clone — even
+     * after a reopenSlot() has moved the slot to a fresh address.
      */
     function computeAddress(bytes32 orderHash, uint8 slotIndex) external view returns (address) {
-        bytes32 salt = keccak256(abi.encodePacked(orderHash, slotIndex));
+        bytes32 salt = _salt(orderHash, slotIndex, _attempt[orderHash][slotIndex]);
         return Clones.predictDeterministicAddress(implementation, salt);
     }
 
     // ─── Internal helpers ─────────────────────────────────────────────────────
+
+    // M-3: attempt 0 keeps the original (orderHash, slotIndex) salt — fully
+    // backward compatible with addresses already computed/communicated
+    // off-chain for first-attempt fills. Reopened slots (attempt > 0) fold the
+    // attempt counter into the salt so they deploy to a fresh address.
+    function _salt(bytes32 orderHash, uint8 slotIndex, uint8 attemptNum) internal pure returns (bytes32) {
+        return attemptNum == 0
+            ? keccak256(abi.encodePacked(orderHash, slotIndex))
+            : keccak256(abi.encodePacked(orderHash, slotIndex, attemptNum));
+    }
 
     function _hashOrder(OrderInfo calldata info) internal pure returns (bytes32) {
         return keccak256(abi.encode(

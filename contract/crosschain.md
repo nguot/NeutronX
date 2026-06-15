@@ -70,43 +70,74 @@ $ cast --help
 # Cross-Chain Swap — Cryptographic Design Notes
 
 This section explains three pieces of cryptography that the cross-chain swap
-flow (`src/crosschain/CrossChainReactor.sol`) depends on:
+flow depends on:
 
-1. [Signature standard](#1-signature-standard-eip-712) — how the server's "cosigner" authorizes an order
+1. [Signature standard](#1-signature-standard-eip-712) — how the swapper and the server's "cosigner" jointly authorize an order
 2. [Merkle tree](#2-merkle-tree--build-off-chain-verify-on-chain) — how N partial-fill slots are committed and verified cheaply
 3. [Nonce](#3-nonce) — what the `nonce` field actually does (and doesn't do)
 
-All on-chain code referenced below lives in `src/crosschain/CrossChainReactor.sol`.
+All on-chain code referenced below lives in `src/crosschain/EscrowSrcFactory.sol`
+(Chain A — lazy order registration, both signature checks, Merkle
+verification, per-slot `EscrowSrc` clones via `EscrowSrc.sol`) and
+`src/crosschain/EscrowDstFactory.sol` / `EscrowDst.sol` (Chain B — per-slot
+output-token escrows). These replace the old, now-deleted
+`CrossChainReactor.sol`, which pulled the swapper's entire `inputAmount` into
+one shared contract up front; see the header comment in `EscrowSrcFactory.sol`
+for the full rationale behind the per-slot-clone redesign.
+
 The off-chain counterpart (tree building, signing) lives in
 `backend/src/services/crosschainService.ts`.
 
 ## 1. Signature standard (EIP-712)
 
-Every cross-chain order must be **cosigned by the server** (the "cosigner",
-the KeyDistributor's signing key) before `createOrder()` will accept it. The
-contract verifies this using [EIP-712](https://eips.ethereum.org/EIPS/eip-712)
-typed structured-data signatures — the same scheme MetaMask renders as a
-human-readable struct instead of an opaque hex blob.
+Every cross-chain order must be authorized by **both the swapper and the
+server's "cosigner"** (the KeyDistributor's signing key) before the first
+`fillSlot()` for it will succeed. The contract verifies both using
+[EIP-712](https://eips.ethereum.org/EIPS/eip-712) typed structured-data
+signatures — the same scheme MetaMask renders as a human-readable struct
+instead of an opaque hex blob.
 
-### Why a cosigner signature at all?
+### Why two signatures, not one?
 
-The server is the only party that knows the swapper's `rootSecret` and is the
-only party that builds the Merkle tree (see §2). The cosigner signature is how
-the contract proves, on-chain, that:
+The old `CrossChainReactor` only needed a cosigner signature, checked inside
+an explicit `createOrder()` that the swapper called themselves — so the
+swapper's own transaction was proof enough that *they* approved the order.
+The current design has **no `createOrder()`**: the order is registered
+*lazily*, inside the first `fillSlot()` call by whichever filler claims a
+slot first. Since the swapper isn't the caller anymore, the contract needs an
+explicit signature from them too:
 
-- this *exact* order (every field, byte for byte) was seen and approved by the server, and
-- the `merkleRoot` in the order was the one the server actually built for it.
+- **`swapperSig`** — proves the swapper authorized *this exact* order (every
+  field: amounts, deadline, `merkleRoot`, `numSlots`). Without it, a filler
+  could submit any `OrderInfo` naming a victim as `swapper` and pull from
+  their standing Permit2 allowance.
+- **`cosignerSig`** — proves the backend's KeyDistributor built *this exact*
+  Merkle tree and holds the secrets `S_i` for every `H_i` in it (same role as
+  the old cosigner check). Without it, a filler could submit a `merkleRoot`
+  whose leaves they know the secrets to themselves, with no `S_i` ever needing
+  to be revealed on Chain B.
 
-Without it, anyone could call `createOrder()` with a forged `merkleRoot` —
-e.g. a tree whose leaves they know secrets for — and drain the swapper's
-locked tokens. The signature check happens in `createOrder()`:
+Both checks happen inside `fillSlot()`, on the first call for a given
+`orderHash` only:
 
 ```solidity
-orderHash = _hashOrder(info);
-require(!_created[orderHash], "order already exists");
-_verifyCosignerSig(orderHash, cosignerSig);
-_created[orderHash] = true;
+bytes32 orderHash = _hashOrder(info);
+OrderState storage order = _orders[orderHash];
+
+if (!_created[orderHash]) {
+    // ... validate info: amount > 0, numSlots power of two,
+    //     deadline in the future, merkleRoot != 0 ...
+
+    _verifySig(orderHash, swapperSig,  info.swapper);
+    _verifySig(orderHash, cosignerSig, cosigner);
+
+    // ... store OrderState, mark _created[orderHash] = true ...
+}
 ```
+
+Every later `fillSlot()` for the same order hits `_created[orderHash] ==
+true` and skips straight to the per-slot Merkle check + clone deployment
+(see §2).
 
 ### Domain separator
 
@@ -124,8 +155,20 @@ DOMAIN_SEPARATOR = keccak256(abi.encode(
 
 The backend mirrors this exactly in `computeDomainSeparator(chainId, reactorAddr)`
 so it can produce a digest the contract will accept. Because `address(this)`
-and `block.chainid` are baked in, a signature minted for the Chain A reactor
-can never be replayed against a different deployment or a different chain.
+and `block.chainid` are baked in, a signature minted for one
+`EscrowSrcFactory` deployment can never be replayed against a different
+deployment or a different chain.
+
+**Practical consequence:** every time `EscrowSrcFactory` is redeployed (e.g.
+re-running `tests/crosschain/setup_cc.sh` in dev), `address(this)` changes, so
+`DOMAIN_SEPARATOR` changes, so the digest both `swapperSig` and `cosignerSig`
+were computed over no longer matches what `_verifySig` recomputes against the
+new deployment. **Any order created before the redeploy becomes unfillable**
+— `fillSlot()` reverts `"invalid signature"` on its first call. There's no
+"upgrade" path for an in-flight order; it has to be recreated (re-signed) from
+the frontend after the new factory address has propagated to
+`backend/.env` (`CROSS_CHAIN_REACTOR`) and both fillers' `.env`
+(`ESCROW_SRC_FACTORY`), and all three services have been restarted.
 
 ### Struct hash
 
@@ -164,43 +207,63 @@ the cosigner's address.
 ### Final digest and recovery
 
 The EIP-712 digest follows the standard `"\x19\x01" ‖ domainSeparator ‖ structHash`
-layout, and is recovered with OpenZeppelin's `ECDSA`:
+layout, and is recovered with OpenZeppelin's `ECDSA`. A single helper handles
+*both* signatures — only `expectedSigner` differs:
 
 ```solidity
-function _verifyCosignerSig(bytes32 orderHash, bytes calldata sig) internal view {
+function _verifySig(bytes32 orderHash, bytes calldata sig, address expectedSigner) internal view {
     bytes32 digest = keccak256(abi.encodePacked("\x19\x01", DOMAIN_SEPARATOR, orderHash));
     address signer = ECDSA.recover(digest, sig);
-    require(signer != address(0) && signer == cosigner, "invalid cosigner sig");
+    require(signer != address(0) && signer == expectedSigner, "invalid signature");
 }
 ```
 
-`cosigner` is an `immutable` set once at deploy time (see `constructor`), so
-there's no key-rotation path on this contract — a new cosigner means a new
-reactor deployment.
+`fillSlot()` calls this twice: once with `expectedSigner = info.swapper`
+(checking `swapperSig`), once with `expectedSigner = cosigner` (checking
+`cosignerSig`). `cosigner` is `immutable`, set once at deploy time — there's
+no key-rotation path, so a new cosigner key means a new factory deployment
+(and, per the note above, every existing order's signatures become invalid).
 
-On the backend side, `crosschainService.ts` builds the identical digest —
-`keccak256(solidityPack(['string','bytes32','bytes32'], ['\x19\x01', domainSeparator, structHash]))`
-— and signs it with `cosignerWallet._signingKey().signDigest(digest)`,
-producing the `cosignerSig` bytes that get submitted to `createOrder()`.
+On the backend side:
+- The order-creation path in `crosschainService.ts` builds the cosigner's
+  digest the same way —
+  `keccak256(solidityPack(['string','bytes32','bytes32'], ['\x19\x01',
+  computeDomainSeparator(chainAId, reactorAddr), structHash]))` — and signs it
+  with `cosignerWallet._signingKey().signDigest(digest)`, producing
+  `cosignerSig`.
+- `setSwapperSig()` recomputes the same digest and uses
+  `ethers.utils.recoverAddress` to check the frontend-submitted `swapperSig`
+  recovers to `order.swapper` *before* storing it — i.e. the backend
+  validates the swapper's signature eagerly, even though the contract only
+  checks it later, on the first `fillSlot()`.
 
 ### Replay guard
 
-Note that the *replay* protection for orders is **not** the EIP-712 signature
-itself (a valid signature could in principle be resubmitted) — it's the
-`_created` mapping keyed on the full `orderHash`:
+The *replay* protection for orders is the `_created` mapping keyed on the
+full `orderHash` — but unlike the old `CrossChainReactor`, hitting it again is
+**not a revert**. It's an idempotency guard around the lazy-registration
+block:
 
 ```solidity
-mapping(bytes32 => bool) private _created; // prevents replay of the same orderHash
+mapping(bytes32 => bool) private _created; // true once the first fillSlot() ran
 ...
-require(!_created[orderHash], "order already exists");
-...
-_created[orderHash] = true;
+if (!_created[orderHash]) {
+    // validate + verify both signatures + store OrderState
+    _created[orderHash] = true;
+}
 ```
+
+Any `fillSlot()` call after the first — for the same `orderHash`, *any* slot —
+skips registration entirely and falls straight through to the per-slot Merkle
+check (§2). That's by design: re-submitting the same `(info, swapperSig,
+cosignerSig)` for a *different* `slotIndex` is the normal path for a second
+filler claiming another slot of the same order. The actual per-slot replay
+guard — "this specific slot, once" — is `order.filledBitmap` (§2).
 
 Because `orderHash` is derived from *every* field of `OrderInfo` (including
 `deadline` and `merkleRoot`, both of which the server varies per session), in
-practice no two real orders ever collide — see §3 for why `nonce` doesn't need
-to do this job by itself.
+practice no two distinct sessions ever produce the same `orderHash` — see §3
+for why `nonce` doesn't need to do this job by itself.
 
 ## 2. Merkle tree — build off-chain, verify on-chain
 
@@ -268,47 +331,82 @@ need to track "is this sibling on the left or right" — `MerkleProof.verify`
 
 ### Why powers of two?
 
-`SlotLib.getNumSlots(inputAmount)` picks `numSlots ∈ {2, 4, 8, 16, 32}` based
+`SlotLib.getNumSlots(inputAmount)` picks `numSlots ∈ {4, 8, 16, 32, 64}` based
 on order size (mirrored off-chain in `crosschainService.ts`'s `getNumSlots`),
-and `createOrder()` enforces it:
+and `fillSlot()` enforces both the power-of-two AND range constraints in a
+single check, on the first call for an order:
 
 ```solidity
 require(SlotLib.isPowerOfTwo(info.numSlots), "numSlots not power of 2");
-require(info.numSlots <= 32,                 "numSlots too large");
 ```
+
+```solidity
+function isPowerOfTwo(uint8 n) internal pure returns (bool) {
+    return n >= 2 && n <= 64 && (n & (n - 1)) == 0;
+}
+```
+
+The upper bound (64) isn't arbitrary: `OrderState.filledBitmap` is a `uint64`,
+exactly one bit per slot at the max `numSlots` — 64 is both the
+crypto-balance sweet spot (tree depth `log2(64) = 6`) and the largest value
+that still fits the bitmap.
 
 A power-of-two leaf count keeps the tree perfectly balanced, so **every**
 proof is exactly `log2(N)` hashes long (`SlotLib.proofLength`) — predictable
 gas costs and no edge cases for unbalanced subtrees.
 
-### Verifying a claim (on-chain)
+### Verifying a slot at fill-time (on-chain)
 
-`claimSlot()` reconstructs the leaf from data the filler reveals and checks it
-against the stored root using OpenZeppelin's `MerkleProof`:
+Unlike the old `CrossChainReactor` (where claiming and revealing the secret
+happened in the same call), `fillSlot()` never sees the secret `S_i` at all —
+only the **hashlock** `H_i` the backend assigned to this slot, plus its Merkle
+proof:
 
 ```solidity
-// Step 1: derive H_i from the secret the filler provides
-bytes32 hashlock = keccak256(abi.encodePacked(secret));
-// Step 2: rebuild the leaf exactly as the server did off-chain
+// "slot already filled" — checked + set BEFORE touching funds, so a revert
+// here atomically undoes everything below (CREATE2, Permit2 pull, msg.value).
+uint64 slotBit = uint64(1) << slotIndex;
+require(order.filledBitmap & slotBit == 0, "slot already filled");
+order.filledBitmap |= slotBit;
+
+// Rebuild the leaf exactly as the server did off-chain and verify it
+// against the order's stored root — BEFORE pulling any funds.
 bytes32 leaf = keccak256(bytes.concat(keccak256(abi.encode(hashlock, slotIndex))));
-// Step 3: verify the proof against the order's stored root
-require(
-    MerkleProof.verify(merkleProof, order.merkleRoot, leaf),
-    "invalid merkle proof"
-);
+require(MerkleProof.verify(merkleProof, order.merkleRoot, leaf), "invalid merkle proof");
 ```
 
 If this passes, the contract knows: *"the server committed to a slot at index
-`slotIndex` whose hashlock is `H_i`, and the caller has just revealed the
-matching preimage `secret = S_i`."* That's sufficient to release
+`slotIndex` whose hashlock is `H_i`, and this filler is the first to claim
+it."* That's sufficient to deploy an `EscrowSrc` clone, redirect
 `order.slotAmount` (or `lastSlotAmount` for the final slot, which absorbs the
-integer-division remainder) to the registered filler — see `slotFiller` /
-`registerFiller()` for the anti-front-running step that happens *before* the
-secret is revealed on Chain B.
+integer-division remainder) into it via Permit2, and fund it with the
+filler's safety deposit — **no secret has been revealed yet**.
 
-A claimed slot is recorded in a `uint64 claimedBitmap` (one bit per slot, up
-to 64 slots — though `numSlots` is capped at 32) rather than a separate
-mapping, so the "already claimed?" check is a single `SLOAD` + bitmask.
+`order.filledBitmap` (one bit per slot, up to 64 — see "Why powers of two?"
+above) is both the "already filled?" check and the per-slot replay guard, in a
+single `SLOAD` + bitmask.
+
+### Revealing S_i — withdraw/claim happen later, on *both* chains
+
+The hashlock preimage `S_i` only surfaces after the filler completes their
+Chain B leg:
+
+1. Filler funds the precomputed `EscrowDst` clone on Chain B and calls
+   `EscrowDstFactory.deploy(H_i, swapper, outputToken, amount, T2)`.
+2. The backend's `chainBWatcher` sees the new escrow, re-derives `S_i` (it was
+   never stored — see "Secret hierarchy" above), and calls
+   `EscrowDst.claim(S_i)`. This checks `keccak256(S_i) == H_i`, pays the
+   swapper their output tokens, and **emits `S_i` in plaintext** via the
+   `Claimed` event.
+3. Anyone (normally the filler) reads `S_i` off Chain B and calls
+   `EscrowSrc(escrowAddrA).withdraw(S_i)` on Chain A, which re-checks
+   `keccak256(S_i) == hashlock` and pays the filler their input tokens plus
+   their safety deposit.
+
+The single Merkle-leaf hashlock `H_i` is therefore checked **twice**, by two
+different contracts on two different chains, against the **same** `S_i` —
+that symmetry is what makes the two legs atomic (see §4 for the timelock
+ordering that makes it safe).
 
 ## 3. Nonce
 
@@ -340,10 +438,14 @@ identical `nonce`, because `deadline` (a future block number) and
 
 Concretely: `tests/crosschain/run_cc.sh` always submits `"nonce": "1"` and this
 is harmless — repeated runs succeed because `deadline` moves forward each
-time, producing a fresh `orderHash`. The *practical* failure mode you'll see
-from a stale resubmission isn't `"order already exists"` but
-`"invalid merkle proof"` — i.e. the secret tree on the backend has moved on
-from the order the contract has stored under that (now stale) `orderHash`.
+time, producing a fresh `orderHash`, which `fillSlot()` registers
+independently (see "Replay guard" in §1). There is no `"order already
+exists"` revert to worry about any more — the lazy-registration check is a
+silent no-op on a known `orderHash`. The failure mode you'd see from a truly
+*stale* resubmission (same `orderHash`, but the backend's secret tree has
+since moved on for that swapper) is `"invalid merkle proof"` on `fillSlot()` —
+the `H_i`/proof the backend now hands out no longer matches the `merkleRoot`
+baked into that old `orderHash`.
 
 ### Bottom line
 

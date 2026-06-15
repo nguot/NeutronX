@@ -1,8 +1,11 @@
 import http from 'http'
+import { ethers } from 'ethers'
 import { provider, wallet } from '../contract/contracts'
+import { ERC20_ABI } from '../contract/abis'
 import { decide } from '../strategy/strategy'
 import { devFill } from '../dev/devFill'
 import { ccFill, ccClaimSlot } from '../dev/ccFill'
+import { SUPPORTED_TOKENS, CHAIN_B_RPC } from '../config'
 import type { OrderInfo } from '../types'
 import * as dotenv from 'dotenv'
 dotenv.config()
@@ -10,6 +13,13 @@ dotenv.config()
 const FILLER_NAME = 'WhaleFiller'
 const PORT        = parseInt(process.env.QUOTE_PORT ?? '3001')
 const BACKEND_URL = process.env.BACKEND_URL ?? 'http://localhost:3000'
+
+// Cross-chain orders carry a `deadline` measured in the SOURCE chain's block
+// number (chainAId), which may differ from this filler's own Chain A. /health
+// reports both chains' block numbers so the dev UI can compute "blocks left"
+// against the right chain.
+const CHAIN_A_ID = 31337
+const CHAIN_B_ID = 31338
 
 const SYMBOLS: Record<string,string> = {
   '0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2':'WETH',
@@ -96,12 +106,22 @@ function buildHtml(): string {
   .slot-btn.locked{color:var(--dim);border-color:var(--line);cursor:not-allowed}
   .slot-btn.claimed{color:var(--ok);border-color:var(--line);cursor:not-allowed}
   .slot-btn.busy{color:var(--busy);border-color:#5a4a1a;cursor:not-allowed}
+  .balances{display:flex;gap:16px;flex-wrap:wrap;margin-bottom:16px}
+  .bal-chain{border:1px solid var(--line);background:var(--panel);padding:10px 14px;min-width:160px}
+  .bal-chain-title{color:var(--accent);font-weight:bold;margin-bottom:6px}
+  .bal-row{display:flex;justify-content:space-between;gap:12px;font-size:12px;padding:1px 0}
+  .bal-sym{color:var(--dim)}
+  .bal-amt{color:var(--fg)}
 </style>
 </head>
 <body>
 <pre class="banner">${banner}</pre>
 <div class="prompt"><span class="ps">PS C:\\NeutronX\\${FILLER_NAME}&gt;</span> <span class="cmd">Watch-Orders -Status pending,active</span></div>
 <div class="sub">wallet ${wallet.address} · port ${PORT}</div>
+
+<div class="section-title" style="border-top:none;margin-top:0">💰 Wallet Balances</div>
+<div id="balances" class="balances"><div class="empty">Loading…</div></div>
+
 <div class="toolbar">
   <button onclick="load()">[ ↻ refresh ]</button>
   <span id="blocknum"></span>
@@ -109,7 +129,7 @@ function buildHtml(): string {
 <div id="orders"><div class="empty">Loading…</div></div>
 
 <div class="section-title">⛓ Cross-Chain Orders</div>
-<div class="dim" style="margin-bottom:12px">Orders with available Merkle slots — fill a slot to earn WETH on Chain A by locking USDC on Chain B</div>
+<div class="dim" style="margin-bottom:12px">Orders with available Merkle slots — fill a slot to earn the order's input token on its source chain by locking its output token on the destination chain</div>
 <div id="cc-orders"><div class="empty">Loading…</div></div>
 
 <script>
@@ -121,13 +141,13 @@ function sym(addr){return SYMS[addr.toLowerCase()]??addr.slice(0,8)+'…'}
 function dec(addr){return DECS[addr.toLowerCase()]??18}
 // Full-precision token amount (wei -> decimal string), no rounding/truncation —
 // .toFixed(4) used to show "0.0000" for genuinely-nonzero high-decimal amounts (e.g. WBTC).
-function human(raw,addr){
-  const d=dec(addr)
+function humanRaw(raw,d){
   const s=BigInt(raw||'0').toString().padStart(d+1,'0')
   const intPart=s.slice(0,s.length-d)
   const frac=s.slice(s.length-d).replace(/0+$/,'')
   return frac?intPart+'.'+frac:intPart
 }
+function human(raw,addr){return humanRaw(raw,dec(addr))}
 // Full-precision non-negative ratio -> decimal string.
 function ratio(num,den,precision){
   let intPart=num/den, rem=num%den, frac=''
@@ -289,6 +309,8 @@ async function fill(hash){
   }
 }
 
+const ccOrderMeta={}
+
 async function ccLoad(){
   const ccDiv=document.getElementById('cc-orders')
   try{
@@ -302,18 +324,21 @@ async function ccLoad(){
     ccDiv.innerHTML=orders.map(o=>{
       const inSym=sym(o.inputToken),outSym=sym(o.outputToken)
       const slotAmt=BigInt(o.minOutput)/BigInt(o.numSlots)
-      const blocksLeft=Math.max(0,o.deadline-currentBlock)
+      // o.deadline is a block number on the order's SOURCE chain (chainAId),
+      // which may not be this filler's Chain A — use that chain's block count.
+      const blocksLeft=Math.max(0,o.deadline-(blk.blocks?.[o.chainAId]??currentBlock))
       const slots=o.slots??[]
+      ccOrderMeta[o.orderHash]={inSym,outSym,chainAId:o.chainAId,dstChainId:o.dstChainId}
       const slotsHtml=slots.map(s=>{
         const id=\`cc-btn-\${o.orderHash}-\${s.index}\`
         if(s.status==='available')
           return \`<button class="slot-btn available" id="\${id}" onclick="ccFillSlot('\${o.orderHash}',\${s.index})">Slot \${s.index}<br>▶ Fill</button>\`
         if(s.status==='locked')
-          return \`<button class="slot-btn locked" id="\${id}" onclick="ccResetLocked('\${o.orderHash}',\${s.index})" title="Reset stuck locked slot — only use if Chain B was restarted">Slot \${s.index}<br>↺ Reset</button>\`
+          return \`<button class="slot-btn locked" id="\${id}" onclick="ccResetLocked('\${o.orderHash}',\${s.index})" title="Reset stuck locked slot — only use if Chain \${o.dstChainId} was restarted">Slot \${s.index}<br>↺ Reset</button>\`
         if(s.status==='claimed'){
           const mine=!s.assignedFiller||s.assignedFiller.toLowerCase()==='${wallet.address.toLowerCase()}'
           if(mine)
-            return \`<button class="slot-btn available" id="\${id}" onclick="ccClaimSlot('\${o.orderHash}',\${s.index})" title="Backend claimed USDC — collect your WETH on Chain A">Slot \${s.index}<br>⚡ Claim WETH</button>\`
+            return \`<button class="slot-btn available" id="\${id}" onclick="ccClaimSlot('\${o.orderHash}',\${s.index})" title="Backend claimed \${outSym} on Chain \${o.dstChainId} — collect your \${inSym} on Chain \${o.chainAId}">Slot \${s.index}<br>⚡ Claim \${inSym}</button>\`
           return \`<button class="slot-btn locked" id="\${id}" disabled title="Filled by \${s.assignedFiller}">Slot \${s.index}<br>🔒 Other filler</button>\`
         }
         return \`<button class="slot-btn claimed" id="\${id}" disabled>Slot \${s.index}<br>✓ done</button>\`
@@ -323,6 +348,7 @@ async function ccLoad(){
           <span class="hash">\${o.orderHash}</span>
           <span class="badge active">cross-chain</span>
           <span class="pair">\${inSym} → \${outSym}</span>
+          <span class="dim">Chain \${o.chainAId} → Chain \${o.dstChainId}</span>
           <span class="dim">\${blocksLeft} blocks left</span>
         </div>
         <div class="prog-label">
@@ -340,10 +366,11 @@ async function ccLoad(){
 }
 
 async function ccClaimSlot(hash,slotIndex){
+  const meta=ccOrderMeta[hash]||{}
   const resultEl=document.getElementById('cc-r-'+hash)
   const btnEl=document.getElementById('cc-btn-'+hash+'-'+slotIndex)
   resultEl.className='result busy'
-  resultEl.textContent='Slot '+slotIndex+': reading S_i from Chain B → withdraw on Chain A…'
+  resultEl.textContent='Slot '+slotIndex+': reading S_i from dst chain (Chain '+(meta.dstChainId??'?')+') → withdraw on src chain (Chain '+(meta.chainAId??'?')+')…'
   if(btnEl){btnEl.disabled=true;btnEl.className='slot-btn busy';btnEl.innerHTML='Slot '+slotIndex+'<br>⏳ claiming'}
   try{
     const r=await fetch('/dev-cc-claim',{method:'POST',headers:{'Content-Type':'application/json'},
@@ -352,14 +379,14 @@ async function ccClaimSlot(hash,slotIndex){
     if(!r.ok) throw new Error(data.error??JSON.stringify(data))
     if(data.txHash==='reset-to-available'){
       resultEl.className='result busy'
-      resultEl.textContent='↺ slot '+slotIndex+' Chain B stale (Chain B restarted) — slot reset to available, click ▶ Fill'
+      resultEl.textContent='↺ slot '+slotIndex+' dst chain (Chain '+(meta.dstChainId??'?')+') stale (restarted) — slot reset to available, click ▶ Fill'
       setTimeout(()=>ccLoad(),800)
     } else {
       resultEl.className='result ok'
       if(data.txHash==='already-claimed'){
         resultEl.textContent='slot '+slotIndex+' was already claimed on-chain — marked done'
       } else {
-        resultEl.textContent='slot '+slotIndex+' WETH withdrawn on Chain A  tx: '+data.txHash
+        resultEl.textContent='slot '+slotIndex+' '+(meta.inSym??'')+' withdrawn on Chain '+(meta.chainAId??'?')+'  tx: '+data.txHash
       }
       if(btnEl){btnEl.className='slot-btn claimed';btnEl.innerHTML='Slot '+slotIndex+'<br>✓ done';btnEl.disabled=true}
       setTimeout(()=>ccLoad(),2000)
@@ -367,7 +394,7 @@ async function ccClaimSlot(hash,slotIndex){
   }catch(e){
     resultEl.className='result no'
     resultEl.textContent='slot '+slotIndex+': '+(e.message??String(e)).slice(0,500)
-    if(btnEl){btnEl.className='slot-btn available';btnEl.innerHTML='Slot '+slotIndex+'<br>⚡ Claim WETH';btnEl.disabled=false}
+    if(btnEl){btnEl.className='slot-btn available';btnEl.innerHTML='Slot '+slotIndex+'<br>⚡ Claim '+(meta.inSym??'');btnEl.disabled=false}
   }
 }
 
@@ -393,10 +420,11 @@ async function ccResetLocked(hash,slotIndex){
 }
 
 async function ccFillSlot(hash,slotIndex){
+  const meta=ccOrderMeta[hash]||{}
   const resultEl=document.getElementById('cc-r-'+hash)
   const btnEl=document.getElementById('cc-btn-'+hash+'-'+slotIndex)
   resultEl.className='result busy'
-  resultEl.textContent='Slot '+slotIndex+': fillSlot → fund Chain B → deploy escrow → wait S_i → withdraw (~30s)…'
+  resultEl.textContent='Slot '+slotIndex+': fillSlot → fund dst chain (Chain '+(meta.dstChainId??'?')+') → deploy escrow → wait S_i → withdraw on src chain (Chain '+(meta.chainAId??'?')+') (~30s)…'
   if(btnEl){btnEl.disabled=true;btnEl.className='slot-btn busy';btnEl.innerHTML='Slot '+slotIndex+'<br>⏳ filling'}
   try{
     const r=await fetch('/dev-cc-fill',{method:'POST',headers:{'Content-Type':'application/json'},
@@ -404,7 +432,7 @@ async function ccFillSlot(hash,slotIndex){
     const data=await r.json()
     if(!r.ok) throw new Error(data.error??JSON.stringify(data))
     resultEl.className='result ok'
-    resultEl.textContent='slot '+slotIndex+' WETH withdrawn on Chain A  tx: '+data.txHash
+    resultEl.textContent='slot '+slotIndex+' '+(meta.inSym??'')+' withdrawn on Chain '+(meta.chainAId??'?')+'  tx: '+data.txHash
     if(btnEl){btnEl.className='slot-btn claimed';btnEl.innerHTML='Slot '+slotIndex+'<br>✓';btnEl.disabled=true}
     setTimeout(()=>ccLoad(),2000)
   }catch(e){
@@ -414,10 +442,26 @@ async function ccFillSlot(hash,slotIndex){
   }
 }
 
+async function loadBalances(){
+  const div=document.getElementById('balances')
+  try{
+    const r=await fetch('/balances').then(r=>r.json())
+    div.innerHTML=r.chains.map(c=>{
+      const rows=[\`<div class="bal-row"><span class="bal-sym">ETH</span><span class="bal-amt">\${humanRaw(c.eth,18)}</span></div>\`]
+        .concat(c.tokens.map(t=>\`<div class="bal-row"><span class="bal-sym">\${t.symbol}</span><span class="bal-amt">\${humanRaw(t.balance,t.decimals)}</span></div>\`))
+      return \`<div class="bal-chain"><div class="bal-chain-title">\${c.label}</div>\${rows.join('')}</div>\`
+    }).join('')
+  }catch(e){
+    div.innerHTML='<div class="empty">balances unavailable: '+e.message+'</div>'
+  }
+}
+
 load()
 ccLoad()
+loadBalances()
 setInterval(load,12000)
 setInterval(ccLoad,15000)
+setInterval(loadBalances,12000)
 </script>
 </body>
 </html>`
@@ -481,8 +525,39 @@ export function startQuoteServer(): void {
 
     // GET /health
     if (req.method === 'GET' && req.url === '/health') {
-      const block = await provider.getBlockNumber().catch(() => null)
-      json(res, 200, { ok: true, filler: FILLER_NAME, block })
+      const [block, blockB] = await Promise.all([
+        provider.getBlockNumber().catch(() => null),
+        CHAIN_B_RPC ? new ethers.providers.JsonRpcProvider(CHAIN_B_RPC).getBlockNumber().catch(() => null) : Promise.resolve(null),
+      ])
+      json(res, 200, { ok: true, filler: FILLER_NAME, block, blocks: { [CHAIN_A_ID]: block, [CHAIN_B_ID]: blockB } })
+      return
+    }
+
+    // GET /balances
+    if (req.method === 'GET' && req.url === '/balances') {
+      try {
+        const readChain = async (label: string, p: ethers.providers.JsonRpcProvider) => {
+          const tokenAddrs = Object.keys(SUPPORTED_TOKENS)
+          const [ethBal, ...tokenBals] = await Promise.all([
+            p.getBalance(wallet.address),
+            ...tokenAddrs.map(addr => new ethers.Contract(addr, ERC20_ABI, p).balanceOf(wallet.address)),
+          ])
+          return {
+            label,
+            eth: ethBal.toString(),
+            tokens: tokenAddrs.map((addr, i) => ({
+              symbol:   SUPPORTED_TOKENS[addr].symbol,
+              decimals: SUPPORTED_TOKENS[addr].decimals,
+              balance:  tokenBals[i].toString(),
+            })),
+          }
+        }
+        const chains = [await readChain('Chain A', provider)]
+        if (CHAIN_B_RPC) chains.push(await readChain('Chain B', new ethers.providers.JsonRpcProvider(CHAIN_B_RPC)))
+        json(res, 200, { filler: FILLER_NAME, wallet: wallet.address, chains })
+      } catch (e: any) {
+        json(res, 500, { error: e?.message ?? String(e) })
+      }
       return
     }
 

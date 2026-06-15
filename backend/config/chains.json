@@ -1,0 +1,18 @@
+[
+  {
+    "id": 31337,
+    "name": "Chain A",
+    "rpc": "http://127.0.0.1:8545",
+    "confirmations": 0,
+    "escrowSrcFactory": "0x9bDD64340D3CE0607f51bBC7508CA40D45849ab8",
+    "escrowDstFactory": "0xC54051689e0931FdCF3e708b665f521f7ab42Fb0"
+  },
+  {
+    "id": 31338,
+    "name": "Chain B",
+    "rpc": "http://127.0.0.1:8546",
+    "confirmations": 0,
+    "escrowSrcFactory": "0xC54051689e0931FdCF3e708b665f521f7ab42Fb0",
+    "escrowDstFactory": "0x9bDD64340D3CE0607f51bBC7508CA40D45849ab8"
+  }
+]

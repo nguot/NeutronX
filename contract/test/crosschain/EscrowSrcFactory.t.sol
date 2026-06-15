@@ -194,4 +194,75 @@ contract EscrowSrcFactoryTest is Test {
         assertEq(keeper.balance, keeperEthBefore + DEPOSIT);
         assertEq(EscrowSrc(escrow).status(), "cancelled");
     }
+
+    // ── M-3: a zero-value safety deposit is rejected ──────────────────────────
+
+    function test_fillSlot_zeroSafetyDeposit_reverts() public {
+        EscrowSrcFactory.OrderInfo memory info = _info();
+        bytes32 orderHash = factory.hashOrder(info);
+        bytes memory swapperSig  = _sign(swapperKey, orderHash);
+        bytes memory cosignerSig = _sign(cosignerKey, orderHash);
+
+        bytes32[] memory proof0 = new bytes32[](1);
+        proof0[0] = leaf1;
+
+        vm.prank(filler);
+        vm.expectRevert("zero safety deposit");
+        factory.fillSlot{value: 0}(info, swapperSig, cosignerSig, 0, hashlock0, proof0);
+    }
+
+    // ── M-3: a slot whose escrow was grief-filled (by someone who can never
+    // reveal the secret) and then cancelled after expiry can be reopened —
+    // clearing the permanently-set filledBitmap bit and pointing
+    // computeAddress at a fresh CREATE2 clone for any future fill ───────────
+
+    function test_reopenSlot_beforeCancel_reverts() public {
+        EscrowSrcFactory.OrderInfo memory info = _info();
+        bytes32 orderHash = factory.hashOrder(info);
+        bytes memory swapperSig  = _sign(swapperKey, orderHash);
+        bytes memory cosignerSig = _sign(cosignerKey, orderHash);
+
+        bytes32[] memory proof0 = new bytes32[](1);
+        proof0[0] = leaf1;
+
+        vm.prank(filler);
+        factory.fillSlot{value: DEPOSIT}(info, swapperSig, cosignerSig, 0, hashlock0, proof0);
+
+        vm.expectRevert("escrow not cancelled");
+        factory.reopenSlot(orderHash, 0);
+    }
+
+    function test_reopenSlot_afterCancel_clearsBitmapAndBumpsAttempt() public {
+        EscrowSrcFactory.OrderInfo memory info = _info();
+        bytes32 orderHash = factory.hashOrder(info);
+        bytes memory swapperSig  = _sign(swapperKey, orderHash);
+        bytes memory cosignerSig = _sign(cosignerKey, orderHash);
+
+        bytes32[] memory proof0 = new bytes32[](1);
+        proof0[0] = leaf1;
+
+        vm.prank(filler);
+        address escrow0 = factory.fillSlot{value: DEPOSIT}(info, swapperSig, cosignerSig, 0, hashlock0, proof0);
+
+        // secret never revealed -> anyone cancels after expiry, refunding the
+        // swapper and forfeiting the deposit to the canceller.
+        vm.roll(DEADLINE + 1);
+        vm.prank(keeper);
+        EscrowSrc(escrow0).cancel();
+
+        assertTrue(factory.isSlotFilled(orderHash, 0));
+        assertEq(factory.attempt(orderHash, 0), 0);
+
+        factory.reopenSlot(orderHash, 0);
+
+        assertFalse(factory.isSlotFilled(orderHash, 0));
+        assertEq(factory.attempt(orderHash, 0), 1);
+
+        address freshAddr = factory.computeAddress(orderHash, 0);
+        assertTrue(freshAddr != escrow0, "reopened slot should map to a fresh clone address");
+
+        // already cleared -> cannot reopen again
+        vm.expectRevert("slot not filled");
+        factory.reopenSlot(orderHash, 0);
+    }
 }

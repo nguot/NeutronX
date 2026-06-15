@@ -544,6 +544,12 @@ code {
   border-radius: 8px; font-size: 0.82rem; text-align: right;
   font-family: Inter, system-ui, sans-serif;
 }
+.uni-detail-select {
+  padding: 5px 10px; border: 1px solid #e2e8f0;
+  border-radius: 8px; font-size: 0.82rem; text-align: right;
+  font-family: Inter, system-ui, sans-serif; background: #fff;
+  color: #0f172a; cursor: pointer; max-width: 220px;
+}
 
 /* collapsible "Advanced" section */
 .uni-advanced { margin: 6px 4px 0; padding: 0 10px }

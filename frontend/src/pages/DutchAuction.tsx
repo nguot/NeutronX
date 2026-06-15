@@ -30,7 +30,7 @@ interface ActiveOrder {
 type Step = 'idle' | 'checking' | 'erc20' | 'p2' | 'ready' | 'busy'
 
 export default function DutchAuction({ wallet }: { wallet: WalletState }) {
-  const { backendUrl, partialFillReactor, tokens } = useAppConfig()
+  const { backendUrl, partialFillReactor, fallbackExecutor, tokens } = useAppConfig()
 
   const [inKey,  setInKey]  = useState('WETH')
   const [outKey, setOutKey] = useState('USDC')
@@ -41,6 +41,8 @@ export default function DutchAuction({ wallet }: { wallet: WalletState }) {
   const [outAmt, setOutAmt] = useState('')
   const [decay,  setDecay]  = useState('0')        // human output/input per block
   const [minFillBps, setMinFillBps] = useState(1000)
+  const [aggregators,  setAggregators]  = useState<{ key: string; name: string }[]>([])
+  const [preferredAgg, setPreferredAgg] = useState('auto')
   const [sugg,       setSugg]       = useState<any>(null)
   const [suggesting, setSuggesting] = useState(false)
   const [step,   setStep]   = useState<Step>('idle')
@@ -58,6 +60,13 @@ export default function DutchAuction({ wallet }: { wallet: WalletState }) {
   const insufficientBalance = inBalance !== null && inW > inBalance
 
   // ── approvals ──────────────────────────────────────────────────────────────
+  // Spenders that need a Permit2 AllowanceTransfer approval from the swapper.
+  // PartialFillReactor pulls the input on normal fills; FallbackExecutor pulls
+  // the remaining input directly (as msg.sender) when an order falls back near
+  // its deadline — Permit2 allowances are keyed by [owner][token][spender], so
+  // it needs its own approval separate from the reactor's.
+  const p2Spenders = [partialFillReactor, ...(fallbackExecutor ? [fallbackExecutor] : [])]
+
   const checkApproval = useCallback(async () => {
     if (!wallet.provider || !wallet.account || !partialFillReactor || !inT) return
     setStep('checking')
@@ -65,14 +74,17 @@ export default function DutchAuction({ wallet }: { wallet: WalletState }) {
       const erc = new ethers.Contract(inT.address, ERC_ABI, wallet.provider)
       const p2  = new ethers.Contract(PERMIT2, P2_ABI, wallet.provider)
       const ea  = await erc.allowance(wallet.account, PERMIT2)
-      const [pa, pe] = await p2.allowance(wallet.account, inT.address, partialFillReactor)
       const eOk = ea.gte(ethers.utils.parseUnits('1000000', inT.decimals))
-      const pOk = pa.gt(0) && Number(pe) > Date.now() / 1000
+      const pOks = await Promise.all(p2Spenders.map(async spender => {
+        const [pa, pe] = await p2.allowance(wallet.account, inT.address, spender)
+        return pa.gt(0) && Number(pe) > Date.now() / 1000
+      }))
+      const pOk = pOks.every(Boolean)
       setStep(!eOk ? 'erc20' : !pOk ? 'p2' : 'ready')
     } catch { setStep('idle') }
-  }, [wallet.provider, wallet.account, partialFillReactor, inT?.address])
+  }, [wallet.provider, wallet.account, partialFillReactor, fallbackExecutor, inT?.address])
 
-  useEffect(() => { if (wallet.connected && partialFillReactor && !order) checkApproval() }, [wallet.connected, partialFillReactor, inKey, order])
+  useEffect(() => { if (wallet.connected && partialFillReactor && !order) checkApproval() }, [wallet.connected, partialFillReactor, fallbackExecutor, inKey, order])
 
   // ── balances ───────────────────────────────────────────────────────────────
   const fetchBalances = useCallback(async () => {
@@ -87,6 +99,16 @@ export default function DutchAuction({ wallet }: { wallet: WalletState }) {
   }, [wallet.provider, wallet.account, inT?.address, outT?.address])
 
   useEffect(() => { fetchBalances() }, [fetchBalances, order])
+
+  // ── fallback aggregator options ───────────────────────────────────────────
+  // Lets the swapper pin which DEX aggregator the fallback route uses near the
+  // deadline, instead of always letting the watcher auto-pick the best quote.
+  useEffect(() => {
+    fetch(`${backendUrl}/aggregators`)
+      .then(r => r.json())
+      .then(d => setAggregators(d.aggregators ?? []))
+      .catch(() => setAggregators([]))
+  }, [backendUrl])
 
   // ── auto-quote ─────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -129,10 +151,13 @@ export default function DutchAuction({ wallet }: { wallet: WalletState }) {
   }
   async function doApproveP2() {
     if (!wallet.signer || !inT) return
-    setStep('busy'); setMsg('Approving Permit2…')
+    setStep('busy')
     try {
       const p2 = new ethers.Contract(PERMIT2, P2_ABI, wallet.signer)
-      await (await p2.approve(inT.address, partialFillReactor, ethers.BigNumber.from('0xffffffffffffffffffffffffffffffff'), ethers.BigNumber.from('0xffffffffffff'))).wait()
+      for (let i = 0; i < p2Spenders.length; i++) {
+        setMsg(p2Spenders.length > 1 ? `Approving Permit2… (${i + 1}/${p2Spenders.length})` : 'Approving Permit2…')
+        await (await p2.approve(inT.address, p2Spenders[i], ethers.BigNumber.from('0xffffffffffffffffffffffffffffffff'), ethers.BigNumber.from('0xffffffffffff'))).wait()
+      }
       await checkApproval()
     } catch (e: any) { setErr(e.message); setStep('p2') }
     setMsg('')
@@ -212,7 +237,13 @@ export default function DutchAuction({ wallet }: { wallet: WalletState }) {
           deadline: orderBody.deadline, nonce: orderBody.nonce, minFillBps: orderBody.minFillBps }
       )
       setMsg('Submitting…')
-      const res  = await fetch(`${backendUrl}/orders`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ order: orderBody, signature: sig }) })
+      const res  = await fetch(`${backendUrl}/orders`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          order: orderBody, signature: sig,
+          preferredAggregator: preferredAgg === 'auto' ? null : preferredAgg,
+        }),
+      })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
       setOrder({ hash: data.orderHash, startBlock: wallet.blockNumber, deadline, startPriceContract: sp, decayContract: dp, inWei: inW, outWei: floorOut, inToken: inT, outToken: outT, fills: [], status: 'pending', curBlock: wallet.blockNumber })
@@ -418,6 +449,20 @@ export default function DutchAuction({ wallet }: { wallet: WalletState }) {
             </span>
             <input className="uni-detail-input" type="number" min="0" placeholder="0"
               value={decay} onChange={e => setDecay(e.target.value)} />
+          </div>
+        )}
+
+        {/* Fallback route — which DEX aggregator executeFallback uses if the order is still
+            open near the deadline. "Auto" lets the watcher compare quotes and pick the best. */}
+        {inW > 0n && (
+          <div className="uni-detail-row">
+            <span className="uni-detail-label">
+              Fallback route <span className="uni-label-muted">(if unfilled near deadline)</span>
+            </span>
+            <select className="uni-detail-select" value={preferredAgg} onChange={e => setPreferredAgg(e.target.value)}>
+              <option value="auto">Auto (best price)</option>
+              {aggregators.map(a => <option key={a.key} value={a.key}>{a.name}</option>)}
+            </select>
           </div>
         )}
 

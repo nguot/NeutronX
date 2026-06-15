@@ -1,1 +1,0 @@
-làm gì đã ? chạy code và test => (không nghiên cứu thêm gì) => lên mục lục 

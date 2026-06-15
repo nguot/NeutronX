@@ -4,6 +4,7 @@ import { resolve } from 'path'
 import { parse as parseEnv } from 'dotenv'
 import { fillerRegistry } from '../services/fillerRegistry'
 import { login, verifyToken } from '../services/adminAuth'
+import { loadChainRegistry } from '../config/chains'
 
 const router = Router()
 
@@ -59,23 +60,16 @@ router.get('/config', (_req: Request, res: Response) => {
   const get = (key: string, fallback = '') =>
     env[key] ?? process.env[key] ?? fallback
   res.json({
+    chains:             loadChainRegistry(),
     partialFillReactor: get('PARTIAL_FILL_REACTOR'),
-    crossChainReactor:  get('CROSS_CHAIN_REACTOR'),
-    chainBFactory:      get('CHAIN_B_FACTORY'),
-    chainBRpc:          get('CHAIN_B_RPC'),
-    chainARpc:          get('RPC_URL', 'http://127.0.0.1:8545'),
-    chainId:            get('CHAIN_ID', '31337'),
+    fallbackExecutor:   get('FALLBACK_EXECUTOR'),
   })
 })
 
 router.post('/config', requireAdmin, (req: Request, res: Response) => {
   const map: Record<string, string> = {
     partialFillReactor: 'PARTIAL_FILL_REACTOR',
-    crossChainReactor:  'CROSS_CHAIN_REACTOR',
-    chainBFactory:      'CHAIN_B_FACTORY',
-    chainBRpc:          'CHAIN_B_RPC',
-    chainARpc:          'RPC_URL',
-    chainId:            'CHAIN_ID',
+    fallbackExecutor:   'FALLBACK_EXECUTOR',
   }
   const patch: Record<string, string> = {}
   for (const [field, envKey] of Object.entries(map)) {
@@ -90,28 +84,45 @@ router.post('/config', requireAdmin, (req: Request, res: Response) => {
 
 // ── Fillers ────────────────────────────────────────────────────────────────
 router.get('/fillers', async (_req: Request, res: Response) => {
-  const list = fillerRegistry.list()
+  const list = await fillerRegistry.list()
   const pings = await Promise.allSettled(list.map(f => pingFiller(f.url)))
   const fillers = list.map((f, i) => ({
     name:    f.name,
     url:     f.url,
+    address: f.address,
+    chains:  f.chains,
     ...(pings[i].status === 'fulfilled' ? pings[i].value : { alive: false, latencyMs: 0, error: 'unknown' }),
   }))
   res.json({ fillers })
 })
 
-router.post('/fillers', requireAdmin, (req: Request, res: Response) => {
-  const { name, url } = req.body
+router.post('/fillers', requireAdmin, async (req: Request, res: Response) => {
+  const { name, url, address, chains } = req.body
   if (!name || !url) { res.status(400).json({ error: 'name and url required' }); return }
   try {
-    fillerRegistry.add(name, url)
+    await fillerRegistry.add(name, url, address ?? '', Array.isArray(chains) ? chains : [])
     res.status(201).json({ ok: true })
   } catch (e: any) { res.status(400).json({ error: e.message }) }
 })
 
-router.delete('/fillers/:name', requireAdmin, (req: Request, res: Response) => {
+// PATCH /admin/fillers/:name  { url?, address?, chains? }
+// Updates an existing (possibly env-seeded) filler's address/chains/url —
+// used by the Admin Fillers tab to record a filler's on-chain wallet address.
+router.patch('/fillers/:name', requireAdmin, async (req: Request, res: Response) => {
+  const { url, address, chains } = req.body
   try {
-    fillerRegistry.remove(req.params['name'])
+    await fillerRegistry.update(req.params['name'] as string, {
+      ...(url !== undefined ? { url } : {}),
+      ...(address !== undefined ? { address } : {}),
+      ...(chains !== undefined ? { chains: Array.isArray(chains) ? chains : [] } : {}),
+    })
+    res.json({ ok: true })
+  } catch (e: any) { res.status(404).json({ error: e.message }) }
+})
+
+router.delete('/fillers/:name', requireAdmin, async (req: Request, res: Response) => {
+  try {
+    await fillerRegistry.remove(req.params['name'] as string)
     res.json({ ok: true })
   } catch (e: any) { res.status(404).json({ error: e.message }) }
 })
@@ -137,7 +148,7 @@ router.post('/mine', requireAdmin, async (req: Request, res: Response) => {
   } catch (e: any) { res.status(500).json({ error: e.message }) }
 })
 
-// GET current block numbers for both chains
+// GET current block numbers for every registry chain
 router.get('/blocks', async (_req: Request, res: Response) => {
   async function getBlock(rpc: string) {
     const r = await fetch(rpc, {
@@ -149,13 +160,14 @@ router.get('/blocks', async (_req: Request, res: Response) => {
     const d = await r.json() as any
     return parseInt(d.result, 16)
   }
-  const chainARpc = process.env.RPC_URL        || 'http://127.0.0.1:8545'
-  const chainBRpc = process.env.CHAIN_B_RPC    || 'http://127.0.0.1:8546'
-  const [a, b] = await Promise.allSettled([getBlock(chainARpc), getBlock(chainBRpc)])
-  res.json({
-    chainA: a.status === 'fulfilled' ? a.value : null,
-    chainB: b.status === 'fulfilled' ? b.value : null,
+  const chains = loadChainRegistry()
+  const results = await Promise.allSettled(chains.map(c => getBlock(c.rpc)))
+  const blocks: Record<string, number | null> = {}
+  chains.forEach((c, i) => {
+    const r = results[i]
+    blocks[String(c.id)] = r.status === 'fulfilled' ? r.value : null
   })
+  res.json({ blocks })
 })
 
 export default router

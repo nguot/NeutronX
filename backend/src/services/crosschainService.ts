@@ -1,6 +1,7 @@
 import { ethers } from 'ethers'
 import { db } from '../db/client'
-import { listTokens, CHAIN_A_ID, CHAIN_B_ID } from './tokenService'
+import { listTokens } from './tokenService'
+import { chainIds, getChain, otherChain } from '../config/chains'
 
 // ─── Init DB tables (called once at startup) ──────────────────────────────────
 export async function initCrossChainSchema(): Promise<void> {
@@ -72,23 +73,39 @@ export async function initCrossChainSchema(): Promise<void> {
     $$
   `)
 
+  // Migration: add dst_chain_id (chain registry refactor) and backfill existing rows
+  await db.query(`ALTER TABLE cc_orders ADD COLUMN IF NOT EXISTS dst_chain_id INTEGER`)
+  const stale = await db.query('SELECT order_hash, chain_a_id FROM cc_orders WHERE dst_chain_id IS NULL')
+  for (const row of stale.rows) {
+    try {
+      const dst = otherChain(row.chain_a_id).id
+      await db.query('UPDATE cc_orders SET dst_chain_id = $1 WHERE order_hash = $2', [dst, row.order_hash])
+    } catch { /* registry has >2 chains or chain_a_id unknown — leave NULL */ }
+  }
+  const remaining = await db.query('SELECT COUNT(*) FROM cc_orders WHERE dst_chain_id IS NULL')
+  if (remaining.rows[0].count === '0') {
+    await db.query(`
+      DO $$ BEGIN
+        IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='cc_orders' AND column_name='dst_chain_id' AND is_nullable='YES')
+        THEN ALTER TABLE cc_orders ALTER COLUMN dst_chain_id SET NOT NULL; END IF;
+      END $$
+    `)
+  }
 }
 
 // ─── Token directory ───────────────────────────────────────────────────────────
 // Backs the token-pill selectors in the cross-chain swap UI. Reads the unified
-// `tokens` table (seeded by tokenService): input tokens are the Chain A entries
-// (locked by the swapper), output tokens the Chain B entries (claimed by fillers).
+// `tokens` table (seeded by tokenService), one entry per chain in the registry.
 
 export interface CCTokenInfo { symbol: string; address: string; decimals: number; chainId: number; name?: string }
 
-export async function getTokenDirectory(): Promise<{ inputTokens: CCTokenInfo[]; outputTokens: CCTokenInfo[] }> {
-  const [inputTokens, outputTokens] = await Promise.all([
-    listTokens(CHAIN_A_ID),
-    listTokens(CHAIN_B_ID),
-  ])
+export async function getTokenDirectory(): Promise<Record<number, CCTokenInfo[]>> {
   const strip = (t: { symbol: string; address: string; decimals: number; chainId: number; name?: string }): CCTokenInfo =>
     ({ symbol: t.symbol, address: t.address, decimals: t.decimals, chainId: t.chainId, name: t.name })
-  return { inputTokens: inputTokens.map(strip), outputTokens: outputTokens.map(strip) }
+  const entries = await Promise.all(
+    chainIds().map(async id => [id, (await listTokens(id)).map(strip)] as const)
+  )
+  return Object.fromEntries(entries)
 }
 
 // ─── Crypto helpers (mirrors key_distributor/src/crypto/) ─────────────────────
@@ -203,7 +220,7 @@ export interface CreateOrderParams {
   deadline:     number
   nonce:        string
   chainAId:     number
-  reactorAddr:  string
+  dstChainId:   number
   t2Buffer:     number   // blocks before T1 that Chain B locks expire
 }
 
@@ -236,6 +253,12 @@ function computeDomainSeparator(chainId: number, reactorAddr: string): string {
 }
 
 export async function createCrossChainOrder(p: CreateOrderParams): Promise<OrderResult> {
+  const ids = chainIds()
+  if (!ids.includes(p.chainAId))   throw new Error(`Unknown source chain ${p.chainAId}`)
+  if (!ids.includes(p.dstChainId)) throw new Error(`Unknown destination chain ${p.dstChainId}`)
+  if (p.chainAId === p.dstChainId) throw new Error('Source and destination chains must differ')
+  const reactorAddr = getChain(p.chainAId).escrowSrcFactory
+
   const rootSecret = await getRootSecret(p.swapper)
   if (!rootSecret) throw new Error('Session not found — call POST /cc/session first')
 
@@ -269,7 +292,7 @@ export async function createCrossChainOrder(p: CreateOrderParams): Promise<Order
   const digest = ethers.utils.keccak256(
     ethers.utils.solidityPack(
       ['string','bytes32','bytes32'],
-      ['\x19\x01', computeDomainSeparator(p.chainAId, p.reactorAddr), structHash]
+      ['\x19\x01', computeDomainSeparator(p.chainAId, reactorAddr), structHash]
     )
   )
   const cosignerSig = ethers.utils.joinSignature(cosignerWallet._signingKey().signDigest(digest))
@@ -280,11 +303,11 @@ export async function createCrossChainOrder(p: CreateOrderParams): Promise<Order
   await db.query(`
     INSERT INTO cc_orders
       (order_hash, swapper, input_token, input_amount, output_token, min_output,
-       deadline, nonce, num_slots, merkle_root, cosigner_sig, t2_expiry, reactor_addr, chain_a_id)
-    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+       deadline, nonce, num_slots, merkle_root, cosigner_sig, t2_expiry, reactor_addr, chain_a_id, dst_chain_id)
+    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
     ON CONFLICT (order_hash) DO NOTHING
   `, [structHash, p.swapper, p.inputToken, p.inputAmount, p.outputToken, p.minOutput,
-      p.deadline, p.nonce, numSlots, merkleRoot, cosignerSig, t2Expiry, p.reactorAddr, p.chainAId])
+      p.deadline, p.nonce, numSlots, merkleRoot, cosignerSig, t2Expiry, reactorAddr, p.chainAId, p.dstChainId])
 
   // Persist slots
   for (let i = 0; i < numSlots; i++) {
@@ -385,6 +408,9 @@ export async function getCrossChainOrder(orderHash: string) {
     cosignerSig: row.cosigner_sig,
     swapperSig:  row.swapper_sig,
     t2Expiry:    row.t2_expiry,
+    chainAId:    row.chain_a_id,
+    dstChainId:  row.dst_chain_id,
+    reactorAddr: row.reactor_addr,
     slots: slots.rows.map(s => ({
       index:          s.slot_index,
       hashlock:       s.hashlock,
@@ -396,11 +422,11 @@ export async function getCrossChainOrder(orderHash: string) {
   }
 }
 
-// Find which order+slot a given hashlock belongs to (used by Chain B watcher)
+// Find which order+slot a given hashlock belongs to (used by the dst-chain watcher)
 export async function findSlotByHashlock(hashlock: string) {
   const r = await db.query(`
     SELECT s.order_hash, s.slot_index, o.swapper, o.input_token, o.input_amount,
-           o.output_token, o.min_output, o.deadline, o.nonce, o.t2_expiry
+           o.output_token, o.min_output, o.deadline, o.nonce, o.t2_expiry, o.chain_a_id, o.dst_chain_id
     FROM cc_slots s
     JOIN cc_orders o ON o.order_hash = s.order_hash
     WHERE s.hashlock = $1 AND s.status = 'available'
@@ -445,11 +471,36 @@ export async function markSlotDone(orderHash: string, slotIndex: number): Promis
   )
 }
 
+// All slots ever assigned to `address` (any chain, any status) — for the
+// Fillers page's "past fills" table.
+export async function getFillerFills(address: string) {
+  const r = await db.query(`
+    SELECT s.order_hash, s.slot_index, s.status, s.escrow_addr,
+           o.chain_a_id, o.dst_chain_id, o.output_token, o.min_output, o.num_slots, o.created_at
+    FROM cc_slots s
+    JOIN cc_orders o ON o.order_hash = s.order_hash
+    WHERE LOWER(s.assigned_filler) = LOWER($1)
+    ORDER BY o.created_at DESC
+  `, [address])
+  return r.rows.map(row => ({
+    orderHash:   row.order_hash,
+    slotIndex:   row.slot_index,
+    status:      row.status,
+    escrowAddr:  row.escrow_addr,
+    chainAId:    row.chain_a_id,
+    dstChainId:  row.dst_chain_id,
+    outputToken: row.output_token,
+    amount:      (BigInt(row.min_output) / BigInt(row.num_slots)).toString(),
+    createdAt:   row.created_at,
+  }))
+}
+
 // List all CC orders that still have at least one available slot (for filler dev UI)
 export async function listOpenCCOrders() {
   const r = await db.query(`
     SELECT o.order_hash, o.swapper, o.input_token, o.input_amount,
-           o.output_token, o.min_output, o.deadline, o.num_slots, o.t2_expiry
+           o.output_token, o.min_output, o.deadline, o.num_slots, o.t2_expiry,
+           o.chain_a_id, o.dst_chain_id
     FROM cc_orders o
     ORDER BY o.created_at DESC
     LIMIT 20
@@ -470,6 +521,8 @@ export async function listOpenCCOrders() {
       deadline:    row.deadline,
       numSlots:    row.num_slots,
       t2Expiry:    row.t2_expiry,
+      chainAId:    row.chain_a_id,
+      dstChainId:  row.dst_chain_id,
       slots: slots.rows.map(s => ({
         index:          s.slot_index,
         status:         s.status,

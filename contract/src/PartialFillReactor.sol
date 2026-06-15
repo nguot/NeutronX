@@ -128,7 +128,11 @@ contract PartialFillReactor is ReentrancyGuard {
 
         uint256 currentRemaining = RemainingLib.remaining(rawRemaining, order.info.inputAmount);
         require(fillAmount <= currentRemaining, "fill > remaining");
-        require(fillAmount >= _minFill(order),  "fill < minimum");
+        // M-4: minFillBps is sized against the order's original inputAmount, so a
+        // tail smaller than that floor can be left behind by earlier fills. Exempt
+        // a chunk that fills the entire remainder — completing the order is always
+        // allowed, regardless of how small the remainder has shrunk to.
+        require(fillAmount == currentRemaining || fillAmount >= _minFill(order), "fill < minimum");
 
         // ── EFFECTS ──
         uint256 newRemaining = currentRemaining - fillAmount;
@@ -199,6 +203,18 @@ contract PartialFillReactor is ReentrancyGuard {
         require(!_cancelled[orderHash], "cancelled");
         _fallbackInitiated[orderHash] = true;
         _remaining[orderHash] = RemainingLib.fullyFilled();
+    }
+
+    /// C-3: fallback always finalizes the order (newRemaining == 0), so it must
+    /// clear the same absolute-floor invariant as the completing chunk in
+    /// executePartialChunk: cumulative paid (prior partial fills + this fallback
+    /// leg) >= the swapper's signed minOutputAmount. Individually-rounded
+    /// per-chunk floors can sum to less than the absolute minimum on their own.
+    function recordFallbackOutput(bytes32 orderHash, uint256 amountOut, uint256 minOutputAmount) external {
+        require(msg.sender == fallbackExecutor, "not fallbackExecutor");
+        uint256 paid = _paidOutput[orderHash] + amountOut;
+        _paidOutput[orderHash] = paid;
+        require(paid >= minOutputAmount, "min output total");
     }
 
     /// One-time setter — can only be called once (when fallbackExecutor is still zero).

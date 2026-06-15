@@ -8,9 +8,13 @@ export const FILL_AUCTION = process.env.FILL_AUCTION         || ''
 export const REACTOR      = process.env.PARTIAL_FILL_REACTOR || ''
 
 // Cross-chain vars — written by tests/crosschain/setup_cc.sh
+// A→B: EscrowSrcFactory on Chain A, EscrowDstFactory on Chain B
 export const ESCROW_SRC_FACTORY = process.env.ESCROW_SRC_FACTORY || ''
 export const CHAIN_B_RPC        = process.env.CHAIN_B_RPC        || ''
 export const CHAIN_B_FACTORY    = process.env.CHAIN_B_FACTORY    || ''
+// B→A: EscrowSrcFactory on Chain B, EscrowDstFactory on Chain A
+export const CHAIN_B_ESCROW_SRC_FACTORY = process.env.ESCROW_SRC_FACTORY_B  || ''
+export const CHAIN_A_DST_FACTORY        = process.env.CHAIN_A_DST_FACTORY  || ''
 
 // DEV_MODE=true: skip spread/inventory checks, fund wallet via whale impersonation before each fill.
 export const DEV_MODE = process.env.DEV_MODE === 'true'

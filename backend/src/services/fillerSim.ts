@@ -52,7 +52,7 @@ async function fetchQuote(fillerUrl: string, body: SimQuoteRequest): Promise<Fil
 /// to avoid double-counting the same liquidity. This is the single source of
 /// truth for both POST /simulate and the parameter-suggestion coverage search.
 export async function simulateOrder(body: SimQuoteRequest): Promise<SimResult> {
-  const fillers = fillerRegistry.list()
+  const fillers = await fillerRegistry.list()
 
   const results = await Promise.allSettled(fillers.map(f => fetchQuote(f.url, body)))
 

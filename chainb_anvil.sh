@@ -4,6 +4,13 @@
 # Uses the same mainnet fork so USDC and Permit2 exist at their canonical addresses.
 # Port 8546 and chainId 31338 distinguish it from Chain A (port 8545, chainId 31337).
 #
+# Same config shape as chaina_anvil.sh — no fixed --block-time. Both EscrowSrc/Dst
+# factories are deployed on every chain (chains.json), so each chain's anvil only
+# needs to mine when a tx is sent to it; confirmations:0 in chains.json relies on
+# this (the deploy tx's own block already satisfies "current >= deployBlock + 0").
+# This is the template for adding a new chain: copy this file with a new
+# port/chainId, no --block-time, and add a confirmations:0 entry to chains.json.
+#
 # Usage (WSL, separate terminal):
 #   bash tests/crosschain/chainb_anvil.sh
 
@@ -28,5 +35,4 @@ anvil \
   --fork-url  "$ALCHEMY_URL" \
   --fork-block-number "$FORK_BLOCK" \
   --chain-id  31338 \
-  --port      8546 \
-  --block-time 1
+  --port      8546

@@ -15,6 +15,9 @@ export interface OrderInput {
 export interface CreateOrderRequest {
   order:     OrderInput
   signature: string
+  /** Aggregator key (see GET /config/aggregators) to use for the fallback
+   *  route, or omit/null for "auto" — best price across all of them. */
+  preferredAggregator?: string | null
 }
 
 export interface CreateOrderResponse {
@@ -33,6 +36,7 @@ export interface OrderSummary {
   status:      string
   fills:       number
   createdAt:   string
+  preferredAggregator: string | null
 }
 
 export interface FillSummary {

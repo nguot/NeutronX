@@ -1,5 +1,6 @@
 import { ethers } from 'ethers'
 import { db } from '../db/client'
+import { ensureIndexerStateTable, resolveCheckpoint, setCheckpoint } from '../db/checkpoint'
 import * as dotenv from 'dotenv'
 dotenv.config()
 
@@ -10,32 +11,6 @@ const REACTOR_ABI = [
 const FALLBACK_ABI = [
   'event FallbackExecuted(bytes32 indexed orderHash, uint256 amountIn, uint256 amountOut)'
 ]
-
-async function ensureIndexerStateTable() {
-  await db.query(`
-    CREATE TABLE IF NOT EXISTS indexer_state (
-      name       TEXT PRIMARY KEY,
-      last_block BIGINT NOT NULL
-    )
-  `)
-}
-
-// Returns the last block processed for `name`. The first time a watcher is
-// seen, its checkpoint is seeded to the current block — i.e. "start watching
-// from now" rather than replaying chain history.
-async function getCheckpoint(name: string, currentBlock: number): Promise<number> {
-  const { rows } = await db.query('SELECT last_block FROM indexer_state WHERE name = $1', [name])
-  if (rows.length > 0) return Number(rows[0].last_block)
-  await db.query('INSERT INTO indexer_state (name, last_block) VALUES ($1, $2)', [name, currentBlock])
-  return currentBlock
-}
-
-async function setCheckpoint(name: string, block: number) {
-  await db.query(
-    'INSERT INTO indexer_state (name, last_block) VALUES ($1, $2) ON CONFLICT (name) DO UPDATE SET last_block = $2',
-    [name, block]
-  )
-}
 
 async function handlePartialFill(log: ethers.Event) {
   const { orderHash, filler, fillAmount, outputAmount } = log.args!
@@ -116,20 +91,8 @@ export async function startIndexer() {
   await ensureIndexerStateTable()
 
   const currentBlock   = await provider.getBlockNumber()
-  let lastFillBlock     = await getCheckpoint('reactor_partial_fill', currentBlock)
-  let lastFallbackBlock = await getCheckpoint('fallback_executed', currentBlock)
-
-  // Self-heal across chain/fork resets: a persisted checkpoint can be AHEAD of
-  // the current tip when the chain was reset under us (e.g. a fresh Anvil fork
-  // restarting at the same block). Without this, `blockNumber > lastBlock` is
-  // never true and the indexer silently skips every new event. Rewind to now.
-  if (lastFillBlock > currentBlock) {
-    console.warn(`Indexer: checkpoint ${lastFillBlock} > tip ${currentBlock} (chain reset?) — rewinding`)
-    lastFillBlock = currentBlock; await setCheckpoint('reactor_partial_fill', lastFillBlock)
-  }
-  if (lastFallbackBlock > currentBlock) {
-    lastFallbackBlock = currentBlock; await setCheckpoint('fallback_executed', lastFallbackBlock)
-  }
+  let lastFillBlock     = await resolveCheckpoint('reactor_partial_fill', currentBlock, 'Indexer')
+  let lastFallbackBlock = await resolveCheckpoint('fallback_executed', currentBlock, 'Indexer')
 
   console.log('Indexer started')
 

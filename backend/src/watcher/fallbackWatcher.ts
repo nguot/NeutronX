@@ -1,13 +1,13 @@
 import { ethers } from 'ethers'
 import { db } from '../db/client'
-import { getRoute } from '../services/alphaRouter'
+import { availableAggregators, getAggregator, resolveAggregatorChainId, AggregatorQuote, QuoteParams } from '../services/aggregators'
 import * as dotenv from 'dotenv'
 dotenv.config()
 
 const FALLBACK_WINDOW = 10 // blocks — phải khớp với contract
 
 const FALLBACK_ABI = [
-  'function executeFallback(tuple(tuple(address swapper, address inputToken, uint256 inputAmount, address outputToken, uint256 minOutputAmount, uint256 deadline, uint256 nonce, uint16 minFillBps, uint128 startPrice, uint32 decayPerBlock, uint24 feeTier) info, bytes sig) order, bytes routeCalldata, uint256 minAmountOut)'
+  'function executeFallback(tuple(tuple(address swapper, address inputToken, uint256 inputAmount, address outputToken, uint256 minOutputAmount, uint256 deadline, uint256 nonce, uint16 minFillBps, uint128 startPrice, uint32 decayPerBlock, uint24 feeTier) info, bytes sig) order, address router, bytes routeCalldata, uint256 minAmountOut)'
 ]
 
 const REACTOR_ABI = [
@@ -34,13 +34,54 @@ function computeOrderHash(order: any): string {
   )
 }
 
-// token metadata cần cho Alpha Router
+// token metadata cần cho các aggregator adapter
 const TOKEN_META: Record<string, { decimals: number; symbol: string }> = {
   '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2': { decimals: 18, symbol: 'WETH' },
   '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48': { decimals: 6,  symbol: 'USDC' },
   '0xdAC17F958D2ee523a2206206994597C13D831ec7': { decimals: 6,  symbol: 'USDT' },
   '0x6B175474E89094C44Da98b954EedeAC495271d0F': { decimals: 18, symbol: 'DAI'  },
   '0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599': { decimals: 8,  symbol: 'WBTC' },
+  '0x514910771AF9Ca656af840dff83E8264EcF986CA': { decimals: 18, symbol: 'LINK' },
+}
+
+/**
+ * Queries every aggregator available on `chainId` (or just `preferredKey`,
+ * if the swapper pinned one) for `params`, and returns the quote with the
+ * highest `minAmountOut`. This is the only place that needs to change if
+ * "best of N aggregators" logic ever gets more sophisticated — adding a new
+ * aggregator itself requires no change here at all.
+ */
+async function getBestQuote(
+  chainId: number,
+  preferredKey: string | null | undefined,
+  params: QuoteParams
+): Promise<{ aggregator: string; quote: AggregatorQuote }> {
+  let candidates = availableAggregators(chainId)
+
+  if (preferredKey) {
+    const pinned = getAggregator(preferredKey)
+    if (pinned && pinned.isAvailable(chainId)) candidates = [pinned]
+    else console.warn(`preferred_aggregator '${preferredKey}' unavailable on chain ${chainId}, trying all`)
+  }
+
+  if (candidates.length === 0) throw new Error(`No aggregator available for chain ${chainId}`)
+
+  const results = await Promise.all(candidates.map(async (a) => {
+    try {
+      const quote = await a.getQuote(params)
+      return quote ? { aggregator: a.key, quote } : null
+    } catch (e) {
+      console.warn(`Aggregator '${a.key}' quote failed:`, e)
+      return null
+    }
+  }))
+
+  const best = results
+    .filter((r): r is { aggregator: string; quote: AggregatorQuote } => r !== null)
+    .sort((a, b) => (b.quote.minAmountOut > a.quote.minAmountOut ? 1 : a.quote.minAmountOut > b.quote.minAmountOut ? -1 : 0))[0]
+
+  if (!best) throw new Error('No route found from any aggregator')
+  return best
 }
 
 export async function startFallbackWatcher() {
@@ -60,7 +101,9 @@ export async function startFallbackWatcher() {
     provider
   )
 
-  console.log('Fallback watcher started')
+  const { chainId: networkChainId } = await provider.getNetwork()
+  const chainId = resolveAggregatorChainId(networkChainId)
+  console.log(`Fallback watcher started (chainId=${chainId}, aggregators=[${availableAggregators(chainId).map(a => a.key).join(', ')}])`)
 
   setInterval(async () => {
     try {
@@ -99,14 +142,18 @@ export async function startFallbackWatcher() {
             continue
           }
 
-          // 5. route only for the remaining amount, not full inputAmount
-          const { calldata, minAmountOut } = await getRoute(
-            { address: order.input_token,  ...tokenIn  },
-            { address: order.output_token, ...tokenOut },
-            rem,
-            order.swapper,
-            process.env.ALCHEMY_RPC_URL!
-          )
+          // 5. quote across aggregators (or just the swapper's preferred one)
+          // for the remaining amount, not the full inputAmount
+          const { aggregator, quote } = await getBestQuote(chainId, order.preferred_aggregator, {
+            chainId,
+            rpcUrl:    process.env.ALCHEMY_RPC_URL!,
+            tokenIn:   { address: order.input_token,  ...tokenIn  },
+            tokenOut:  { address: order.output_token, ...tokenOut },
+            amountIn:  rem,
+            recipient: order.swapper,
+            sender:    process.env.FALLBACK_EXECUTOR!,
+          })
+          console.log(`Fallback route ${order.hash} via ${aggregator}: minOut=${quote.minAmountOut}`)
 
           // 6. build SignedOrder để truyền vào contract
           const signedOrder = {
@@ -129,8 +176,9 @@ export async function startFallbackWatcher() {
           // 7. gọi FallbackExecutor on-chain
           const tx = await fallbackExecutor.executeFallback(
             signedOrder,
-            calldata,
-            minAmountOut
+            quote.router,
+            quote.calldata,
+            quote.minAmountOut
           )
           await tx.wait()
           console.log(`Fallback executed: ${tx.hash}`)

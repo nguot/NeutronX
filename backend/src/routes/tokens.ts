@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { listTokens, CHAIN_A_ID } from '../services/tokenService'
+import { listTokens, SINGLE_CHAIN_ID } from '../services/tokenService'
 
 const router = Router()
 
@@ -10,7 +10,7 @@ const router = Router()
 router.get('/', async (req, res) => {
   try {
     const raw = req.query.chainId as string | undefined
-    const chainId = raw === 'all' ? undefined : (raw ? parseInt(raw) : CHAIN_A_ID)
+    const chainId = raw === 'all' ? undefined : (raw ? parseInt(raw) : SINGLE_CHAIN_ID)
     const tokens = await listTokens(chainId)
     return res.json({ tokens })
   } catch (e: any) {

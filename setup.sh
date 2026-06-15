@@ -112,6 +112,11 @@ for f in "$ROOT/backend/.env" "$ROOT/filler/CoWFiller/.env" "$ROOT/filler/WhaleF
   else
     warn "${f#$ROOT/} not found — skipping"
   fi
+  if [ "$f" = "$ROOT/backend/.env" ] && [ -f "$f" ]; then
+    # Chain A's fork reports chainId $CHAIN_A_ID but forks real mainnet (1) —
+    # the fallback aggregator routing layer needs mainnet's chainId.
+    update_env_var "$f" "AGGREGATOR_CHAIN_ID" "1"
+  fi
 done
 
 # ── 3b. reset stale orders & indexer checkpoints ────────────────────────────

@@ -57,6 +57,9 @@ update_env_var() {
   if grep -q "^${key}=" "$file"; then
     sed -i "s|^${key}=.*|${key}=${val}|" "$file"
   else
+    # Ensure the file ends with a newline so the new entry doesn't get
+    # concatenated onto the last existing line.
+    [ -s "$file" ] && [ -z "$(tail -c1 "$file")" ] || echo >> "$file"
     echo "${key}=${val}" >> "$file"
   fi
 }
