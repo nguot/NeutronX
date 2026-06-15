@@ -113,6 +113,12 @@ CREATE2-clone + Merkle-proof + signature machinery.
 - Ask: why one clone *per slot* instead of a shared mapping? Why is the Merkle proof checked
   *before* funds move? What guarantees the `T2 < T1` timelock ordering — and what happens if it
   doesn't? (finding `crosschain.md §4` + `test/crosschain/CrossChainTimelock.t.sol`.)
+- Then read the **Trufy cross-chain findings** (`crosschain.md §5`): which are fixed on-chain
+  in `EscrowSrcFactory` (3.7 safety-deposit floor, 3.8 zero-slot guard — tests in
+  `EscrowSrcFactory.t.sol`) and which are **cosigner-enforced in the backend watcher**
+  (`backend/src/chain/escrowDstWatcher.ts`: 3.1 timelock, 3.2 same-filler binding, 3.6
+  last-slot output). Ask: why can the filler-binding and timelock invariants *not* live in one
+  escrow contract, and what trust assumption does the watcher mitigation rely on?
 
 ### Companion docs
 `audit.md` (reactor/auction findings + remediation), `crosschain.md` (cross-chain design +
@@ -159,8 +165,8 @@ Trace this end-to-end with the files open; it ties everything together.
 | `FillAuction` | a stake has 3 terminal states, settles **once** | no double-payout; lost-race ≠ slashable |
 | `PartialFillReactor` | the cosigner signs the price; floors are enforced | swapper never paid below their signed floor (C-1) |
 | `FallbackExecutor` | fallback and partial-fill are mutually exclusive | the same `remaining` can't be spent twice (C-2) |
-| `EscrowSrc/Dst` | reveal one secret on chain B → redeem on chain A | atomic swap *iff* `T2 < T1` holds (see §4 finding) |
-| `*Factory` | one isolated clone per slot, proof-gated funding | a bug in one fill can't drain another |
+| `EscrowSrc/Dst` | reveal one secret on chain B → redeem on chain A | atomic swap *iff* `T2 < T1` holds + both legs share one filler (timelock & binding cosigner-enforced off-chain — Trufy 3.1/3.2) |
+| `*Factory` | one isolated clone per slot, proof-gated funding | a bug in one fill can't drain another; a real safety deposit + nonzero slot size are required (Trufy 3.7/3.8) |
 
 ---
 
@@ -232,8 +238,9 @@ forge coverage --ir-minimum --report summary # see the caveat below
 ```
 
 - **Fork tests** (`TwapCollateral`, `TwapManipulation`, `FallbackExecutor`) need a mainnet RPC.
-  One pre-existing failure (`test_fallback_swapsSuccessfully`) is a live-price artifact, not a
-  regression — see `testcase.md`.
+  They occasionally fail transiently on live pool price (`test_fallback_swapsSuccessfully`) or an
+  Alchemy RPC timeout (`test_manipulatedTwap_*`) — environment artifacts, not regressions. The
+  latest full run passed 143/143; see `testcase.md`.
 - **Coverage `--ir-minimum`** is needed (the instrumented build hits "stack too deep"
   otherwise). Trust line/statement/function %, **not** branch % — forge under-counts `require`
   revert arms (see the coverage note in `audit.md`/`testcase.md`).

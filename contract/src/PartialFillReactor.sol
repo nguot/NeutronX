@@ -179,7 +179,10 @@ contract PartialFillReactor is ReentrancyGuard {
         permit2.transferFrom(order.info.swapper, msg.sender, uint160(fillAmount), order.info.inputToken);
         IERC20(order.info.outputToken).safeTransferFrom(msg.sender, order.info.swapper, outputAmount);
 
-        fillAuction.onFillSuccess(orderHash, msg.sender, fillAmount);
+        // 3.5: pass the live remainder *before* this fill so the auction can cap
+        // the refund denominator — a registrant that consumes the entire shrunk
+        // remainder is not penalised as if they under-delivered their commitment.
+        fillAuction.onFillSuccess(orderHash, msg.sender, fillAmount, currentRemaining);
         emit PartialFillExecuted(orderHash, msg.sender, fillAmount, outputAmount);
     }
 

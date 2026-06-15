@@ -7,24 +7,33 @@ suite maps onto the security findings in `audit.md`.
 
 | | Count | Result |
 |---|---|---|
-| Total tests | **128** | 127 pass · 1 pre-existing failure |
-| Non-fork tests | **122** | all pass |
-| Fork tests (mainnet, need `ALCHEMY_RPC_URL`) | **6** | 5 pass · 1 pre-existing failure |
+| Total tests | **145** | all pass (latest full run) |
+| Non-fork tests | **133** | all pass, deterministic |
+| Fork tests (mainnet, need `ALCHEMY_RPC_URL`) | **12** | pass; occasionally flaky on live pool price / RPC |
 
 Beyond the Foundry tests above, **2 live filler-race E2E scenarios** (`tests/race/`,
 shell-orchestrated, both passing) drive the real bots end-to-end — see §8.
 
-> **Second-pass additions (this audit round):** 32 new tests across 5 files —
+> **Second-pass additions (prior audit round):** 32 new tests across 5 files —
 > double-settlement matrix (`FillAuctionTerminalState`, §2), completion-floor
 > backstop (`CompletionFloor`, §2), the protective-shell guard batch
 > (`CoreGuards`, §2), the cross-chain timelock PoC (`CrossChainTimelock`, §6),
 > and the TWAP-manipulation PoC (`TwapManipulation`, §7). See the **Test coverage**
 > note before the finding matrix.
 
-The single failure — `test_fallback_swapsSuccessfully` — is **pre-existing and unrelated to
-this work**: it forks live mainnet and hard-codes `amountOutMinimum: 2000e6` for a 1 WETH→USDC
-swap, which the live pool price no longer satisfies, so Uniswap reverts at the router call
-(before any NeutronX logic). It is not a regression.
+> **Third-pass additions (Trufy cross-chain audit):** 4 new contract regression
+> tests across 2 files — nonce-invalidation terminality + fallback-executor owner
+> gate (`AuditFixes`, §4: 3.3 / 3.4) and the source-escrow griefing-floor +
+> zero-slot guards (`EscrowSrcFactory`, §6: 3.7 / 3.8). The three remaining Trufy
+> fixes (3.1 timelock ordering, 3.2 filler binding, 3.6 last-slot output) are
+> **cosigner-enforced in the backend watcher** (`escrowDstWatcher.ts`) and so have
+> no Foundry coverage — see the Trufy rows in the finding matrix.
+
+Fork tests occasionally fail transiently — `test_fallback_swapsSuccessfully` forks live
+mainnet and hard-codes `amountOutMinimum: 2000e6` for a 1 WETH→USDC swap (can revert at the
+router when the live pool price drifts below it), and `test_manipulatedTwap_*` can hit an
+Alchemy RPC timeout. Both are environment artifacts, **not regressions**; the latest full run
+passed 143/143.
 
 ## How to run
 
@@ -82,10 +91,14 @@ fully-filled sentinels, pack/unpack round-trip).
 
 ## 2. Core contract tests
 
-**`FillAuction.t.sol`** (16) — staking lifecycle: `register` (success, excess refund, and
+**`FillAuction.t.sol`** (18) — staking lifecycle: `register` (success, excess refund, and
 reverts for deadline/duplicate/insufficient-stake/only-reactor), `slash`
 (success / too-early / already-filled), `withdraw`, `onFillSuccess` refund tiers
 (D-2: full-commitment 100% / 40%-of-commitment 50% / 2.5%-of-commitment 10%), and `hasValidRegistration` ceiling semantics.
+Plus the **Trufy R2 §3.5** shrunk-remainder relief: `test_onFillSuccess_shrunkRemainder_fullRefund`
+(consuming the entire live remainder → full stake, even at a 2.5% raw fill) and
+`test_onFillSuccess_underDelivery_withFullRemainder_stillPenalised` (when volume *was*
+available, under-delivery is still penalised — no sniping loophole).
 
 **`PartialFillReactor.t.sol`** (6) — fill flow: first fill success, multi-fill remaining
 decrement, and reverts for not-registered / expired / fill-exceeds-remaining; `onFillSuccess`
@@ -95,8 +108,11 @@ is invoked.
 `register` is `onlyReactor`; orderTotal/deadline are derived from the real hashed order;
 a forged `OrderInfo` decouples into a different hash and is unusable against the real order.
 
-**`FrontRunGriefing.t.sol`** (2, incl. fuzz) — a front-running filler's refund matches its
-*actual* fill ratio, so front-running cannot extract an undue refund.
+**`FrontRunGriefing.t.sol`** (2, incl. fuzz) — an honest filler (registered for 100%) whose
+remainder is shrunk by a front-runner can still complete what's left and, post-**Trufy R2 §3.5**,
+keeps its **full** stake regardless of the front-run size — a competitor can no longer grief it
+into forfeiture. (Pre-3.5 the fuzz asserted a *shrinking* refund; that residual forfeiture is
+exactly what 3.5 removed.)
 
 **`FillAuctionTerminalState.t.sol`** (3) — **double-settlement matrix.** A registration has
 three mutually-exclusive terminal states (`filled` / `slashed` / `released`), each crediting
@@ -139,7 +155,7 @@ register / fill / slash / withdraw / roll, the contract balance always equals
 
 ## 4. Security-fix regression (`test/AuditFixes.t.sol`)
 
-Proves each audit fix holds, wired against the real contracts (6 tests).
+Proves each audit fix holds, wired against the real contracts (8 tests).
 
 | Test | Finding |
 |---|---|
@@ -149,6 +165,8 @@ Proves each audit fix holds, wired against the real contracts (6 tests).
 | `test_H1_loserReclaimsStake_andCannotBeSlashed` | **H-1** race loser reclaims full stake; not slashable |
 | `test_H2_cancelledOrder_notSlashable_reclaimable` | **H-2** cancelled-order stake is reclaimable, not slashable |
 | `test_L3_invalidateNonce_blocksFill` | **L-3** nonce invalidation stops fills |
+| `test_33_invalidatedNonce_notSlashable_butReleasable` | **Trufy 3.3** nonce invalidation is terminal: a stranded registration can't be slashed (`"nonce invalidated"`) and reclaims its full stake via `releaseRegistration` |
+| `test_34_setFallbackExecutor_onlyOwner` | **Trufy 3.4** `setFallbackExecutor` is owner-gated — a non-owner caller reverts `"not owner"`; the deployer still wires it once |
 
 ---
 
@@ -185,9 +203,17 @@ theft/grief vector reverts or leaves the attacker worse off.
 
 ## 6. Cross-chain escrow (`test/crosschain/`)
 
-**`EscrowSrcFactory.t.sol`** (5) — multi-slot source escrow: fill→withdraw pays the filler,
-cancel-after-expiry refunds the swapper and pays the canceller, and reverts on invalid
-Merkle proof / invalid swapper signature / double-fill.
+**`EscrowSrcFactory.t.sol`** (10) — multi-slot source escrow: fill→withdraw pays the filler,
+cancel-after-expiry refunds the swapper **and pays the safety deposit to the swapper** (not the
+caller — so a griefer cannot self-cancel to reclaim it), reverts on invalid Merkle
+proof / invalid swapper signature / double-fill, and the M-3 `reopenSlot` lifecycle (reopen
+after cancel clears the bitmap + bumps the attempt; reopen before cancel reverts). Plus the
+Trufy source-side guards:
+| Test | Finding |
+|---|---|
+| `test_fillSlot_zeroSafetyDeposit_reverts` | **Trufy 3.7** a zero safety deposit reverts `"deposit below floor"` |
+| `test_fillSlot_dustSafetyDeposit_reverts` | **Trufy 3.7** `MIN_SAFETY_DEPOSIT − 1` (positive but below floor) also reverts |
+| `test_fillSlot_zeroSlotAmount_reverts` | **Trufy 3.8** an order with `inputAmount < numSlots` reverts `"slot amount zero"` at creation, before any funds move |
 
 **`CrossChainTimelock.t.sol`** (1) — **PoC for `crosschain.md §4` (timelock ordering).**
 `test_T2geqT1_swapperTakesBothLegs`: the `T2 < T1` invariant (destination expires before
@@ -195,8 +221,12 @@ source) is asserted only in a comment and never enforced on-chain, and is expres
 cross-chain-incomparable `block.number`. With `T2 ≥ T1` (which both factories accept), the
 swapper reclaims the source leg via `EscrowSrc.cancel()` **and** is paid the destination leg
 via `EscrowDst.claim()` — collecting both while the filler, who funded the destination,
-recovers nothing. Demonstrates the atomicity break; fix is timestamp-based expiries + an
-enforced gap.
+recovers nothing. Demonstrates the atomicity break. **This PoC still passes** — the on-chain
+contracts are intentionally left as-is; **Trufy 3.1** is mitigated off-chain instead: the
+backend `escrowDstWatcher` refuses to reveal the secret (never calls `EscrowDst.claim`) for
+any destination escrow whose on-chain expiry exceeds the cosigner-sanctioned
+`t2_expiry = deadline − t2Buffer`. The full trustless fix remains timestamp-based expiries +
+an enforced gap (future work).
 
 ---
 
@@ -283,7 +313,16 @@ are fallback / `verifyOrderSignature` paths exercised only by the excluded fork 
 | L-3 nonce invalidation | `AuditFixes::test_L3_invalidateNonce_blocksFill` |
 | D-1 ETH-denominated collateral | `TwapCollateral` (fork), `DynamicStakeLibStake` |
 | N-3 TWAP collateral manipulation | **`TwapManipulation::test_manipulatedTwap_collapsesRequiredCollateral`** (fork PoC) |
-| Cross-chain timelock (`crosschain.md §4`) | **`CrossChainTimelock::test_T2geqT1_swapperTakesBothLegs`** |
+| Cross-chain timelock (`crosschain.md §4`) | **`CrossChainTimelock::test_T2geqT1_swapperTakesBothLegs`** (PoC); Trufy 3.1 mitigated in `escrowDstWatcher` (off-chain) |
+| Trufy 3.1 cross-chain timelock ordering | `escrowDstWatcher` expiry guard (off-chain, no Foundry test); PoC `CrossChainTimelock::*` |
+| Trufy 3.2 src/dst filler binding | `escrowDstWatcher` filler-match guard (off-chain, no Foundry test) |
+| Trufy 3.3 nonce-invalidation stranding | **`AuditFixes::test_33_invalidatedNonce_notSlashable_butReleasable`** |
+| Trufy 3.4 `setFallbackExecutor` takeover | **`AuditFixes::test_34_setFallbackExecutor_onlyOwner`** |
+| Trufy 3.6 last-slot output underfunding | `escrowDstWatcher` + `ccFill` per-slot output sizing (off-chain, no Foundry test) |
+| Trufy 3.7 1-wei safety deposit | **`EscrowSrcFactory::test_fillSlot_{zeroSafetyDeposit,dustSafetyDeposit}_reverts`** |
+| Trufy 3.8 zero-amount non-final slots | **`EscrowSrcFactory::test_fillSlot_zeroSlotAmount_reverts`** |
+| Trufy R2 §3.5 honest-filler forfeiture griefing | **`FillAuction::test_onFillSuccess_shrunkRemainder_fullRefund`**, **`..._underDelivery_withFullRemainder_stillPenalised`**, **`FrontRunGriefing::testFuzz_frontRun_honestFillerKeepsFullStake`** |
+| Grief-fill safety-deposit reclaim (cancel → swapper, hardening) | **`EscrowSrcFactory::test_cancel_afterExpiry_refundsSwapper_andPaysSwapperDeposit`** |
 | Double-settlement / terminal state | **`FillAuctionTerminalState::*`** |
 | D-2 refund keyed to committed (not order) | `MevFiller::test_snipeSmallChunk_fullyRefunded` / `test_minFillBps_blocksDustFill`, `FillAuction::test_onFillSuccess_*`, `FrontRunGriefing`, `FillAuctionTerminalState` |
 | Solvency / conservation | `FillAuctionInvariant::invariant_solvency`, `MultiOrderScenario` |

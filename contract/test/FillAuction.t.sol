@@ -27,7 +27,19 @@ contract MockReactor {
         address filler,
         uint256 fillAmount
     ) external {
-        auction.onFillSuccess(orderHash, filler, fillAmount);
+        // remainingAtFill = max ⇒ refund denominator stays the full commitment
+        // (the pre-3.5 behaviour these existing tests assert).
+        auction.onFillSuccess(orderHash, filler, fillAmount, type(uint256).max);
+    }
+
+    // 3.5: lets a test model a live remainder that shrank below the commitment.
+    function callOnFillSuccessWithRemaining(
+        bytes32 orderHash,
+        address filler,
+        uint256 fillAmount,
+        uint256 remainingAtFill
+    ) external {
+        auction.onFillSuccess(orderHash, filler, fillAmount, remainingAtFill);
     }
 
     // IReactorView surface used by FillAuction.slash / releaseRegistration.
@@ -214,6 +226,37 @@ contract FillAuctionTest is Test {
         uint256 forfeited = STAKE - refund;
         assertEq(auction.pendingReturns(filler), refund);
         assertEq(auction.pendingReturns(treasury), forfeited);
+    }
+
+    // ── 3.5: shrunk-remainder relief ──
+    // Same tiny fill as test_onFillSuccess_tinyDelivery, but here the live
+    // remainder had already been shrunk (by competing fillers) to exactly that
+    // tiny amount. The honest registrant filled 100% of what was available, so
+    // they must get the FULL stake back — not be punished as an under-deliverer.
+    // The contrast with the test above is the whole point: identical fill size,
+    // opposite outcome, decided solely by whether volume was actually available.
+    function test_onFillSuccess_shrunkRemainder_fullRefund() public {
+        _register();
+        uint256 tinyFill = FILL_AMOUNT * 25 / 1000; // 2.5% of commitment
+        // remainingAtFill == the fill: the registrant consumed the entire remainder.
+        reactor.callOnFillSuccessWithRemaining(ORDER_HASH, filler, tinyFill, tinyFill);
+
+        assertEq(auction.pendingReturns(filler), STAKE);
+        assertEq(auction.pendingReturns(treasury), 0);
+    }
+
+    // 3.5 guard: relief only applies when the remainder genuinely shrank below
+    // the commitment. If full volume was available and the filler still under-
+    // delivered, the original penalty stands (no sniping loophole).
+    function test_onFillSuccess_underDelivery_withFullRemainder_stillPenalised() public {
+        _register();
+        uint256 tinyFill = FILL_AMOUNT * 25 / 1000;
+        // remainingAtFill >= commitment ⇒ denominator stays FILL_AMOUNT.
+        reactor.callOnFillSuccessWithRemaining(ORDER_HASH, filler, tinyFill, FILL_AMOUNT);
+
+        uint256 refund = STAKE * 1000 / 10000; // same 10% as the tinyDelivery case
+        assertEq(auction.pendingReturns(filler), refund);
+        assertEq(auction.pendingReturns(treasury), STAKE - refund);
     }
 
     // ── hasValidRegistration() ──

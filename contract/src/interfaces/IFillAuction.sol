@@ -12,5 +12,5 @@ interface IFillAuction {
         uint24  feeTier
     ) external payable;
     function hasValidRegistration(bytes32 orderHash, address filler, uint256 fillAmount) external view returns (bool);
-    function onFillSuccess(bytes32 orderHash, address filler, uint256 actualFillAmount) external;
+    function onFillSuccess(bytes32 orderHash, address filler, uint256 actualFillAmount, uint256 remainingAtFill) external;
 }

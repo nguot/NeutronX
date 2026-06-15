@@ -254,7 +254,8 @@ contract FillAuction is IFillAuction, ReentrancyGuard {
     function onFillSuccess(
         bytes32 orderHash,
         address filler,
-        uint256 actualFillAmount
+        uint256 actualFillAmount,
+        uint256 remainingAtFill
     ) external onlyReactor {
         Registration storage reg = _registrations[orderHash][filler];
         require(!reg.filled && !reg.slashed && !reg.released, "invalid state");
@@ -266,7 +267,17 @@ contract FillAuction is IFillAuction, ReentrancyGuard {
         // the whole order — so honouring your commitment (any size) returns the full
         // stake, and only under-delivering vs. what you promised is penalised.
         // Fragmentation is controlled separately by the order's minFillBps.
-        uint256 refund    = DynamicStakeLib.computeRefund(stake, actualFillAmount, reg.fillAmount, reg.refundRow);
+        //
+        // 3.5: a competing filler can shrink the live remainder BELOW this
+        // registrant's commitment, so the most they could possibly have filled is
+        // `remainingAtFill`, not `reg.fillAmount`. Penalising against the full
+        // commitment would then forfeit stake for volume that was never available
+        // to them. Cap the refund denominator at what was actually fillable —
+        // min(commitment, remaining-at-fill) — so consuming the entire live
+        // remainder always returns the full stake, while genuine under-delivery
+        // (remainder >= commitment) is still penalised exactly as before.
+        uint256 deliverable = remainingAtFill < reg.fillAmount ? remainingAtFill : reg.fillAmount;
+        uint256 refund    = DynamicStakeLib.computeRefund(stake, actualFillAmount, deliverable, reg.refundRow);
         uint256 forfeited = stake - refund;
 
         pendingReturns[filler] += refund;

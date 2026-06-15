@@ -522,6 +522,31 @@ A reproduction is in `test/crosschain/CrossChainTimelock.t.sol`
 the source escrow *and* paid on the destination escrow in the same scenario,
 while the filler loses the leg they funded.
 
+### Status — mitigated off-chain (Trufy 3.1)
+
+The on-chain contracts are intentionally **left as-is** (the PoC above still
+passes). The finding is instead mitigated at the one chokepoint that actually
+matters: the backend cosigner is the only party that can reveal a secret, and it
+now refuses to do so on a violating order. In `backend/src/chain/escrowDstWatcher.ts`,
+before calling `EscrowDst.claim(S_i)`, the watcher compares the destination
+escrow's on-chain `expiry` against the cosigner-sanctioned
+`t2_expiry = deadline − t2Buffer` (chosen strictly below `T1` at order creation in
+`crosschainService.ts`) and **returns without revealing the secret** if the
+deployed `T2` exceeds it:
+
+```ts
+if (BigInt(dstExpiry.toString()) > BigInt(match.t2_expiry)) {
+  // refuse to reveal — a too-late T2 would let the swapper collect both legs
+  return
+}
+```
+
+Because `S_i` never becomes public for a mis-timed escrow, the "swapper takes both
+legs" path is closed. This is a **cosigner-enforced** mitigation, not a trustless
+on-chain guarantee — the trust assumption is the same one the design already makes
+(the cosigner holds every secret). The full on-chain fix (timestamp expiries +
+signed `T1`/`T2` in the order, enforced on both factories) remains future work.
+
 ### Bottom line
 
 The single most load-bearing assumption in the cross-chain design (`T2 < T1`)
@@ -529,3 +554,72 @@ lives only in a code comment and in the off-chain server's parameter choices,
 and is expressed in a unit (`block.number`) that isn't even meaningful across
 two chains. Move the timelocks to timestamps and enforce the gap explicitly
 before any real-value deployment.
+
+## 5. Other cross-chain findings (Trufy audit) and their fixes
+
+Four further cross-chain findings from the Trufy report, and where each is now
+handled. Two are **on-chain** (factory `require`s, with Foundry regression tests
+in `test/crosschain/EscrowSrcFactory.t.sol`); two are **cosigner-enforced** in the
+backend watcher, same trust model as §4's 3.1 mitigation.
+
+### 3.2 — Source/destination legs not bound to the same filler 🟠 (cosigner-enforced)
+
+`EscrowSrc.filler` is whoever called `fillSlot()` on Chain A; `EscrowDst.filler`
+is whoever called `EscrowDstFactory.deploy()` on Chain B — two transactions on two
+chains, with nothing binding them. An attacker who front-runs the *source* fill
+becomes `EscrowSrc.filler`; once an honest party funds the destination and the
+backend reveals `S_i`, the attacker withdraws the source leg out from under them.
+
+**Fix (off-chain).** The source watcher (`escrowSrcWatcher.ts`) already records the
+*actual* on-chain source filler into `cc_slots.assigned_filler`. Before revealing
+the secret, `escrowDstWatcher.ts` re-reads it and refuses to `claim()` unless the
+destination escrow's `filler` (from the `EscrowCreated` event) matches:
+
+```ts
+if (!srcFiller || dstFiller.toLowerCase() !== srcFiller.toLowerCase()) {
+  return // never reveal the secret to a mismatched destination funder
+}
+```
+
+A trustless on-chain version would carry an authorized filler in signed slot
+metadata and enforce it on both factories — future work.
+
+### 3.6 — Last-slot output underfunding 🟡 (fixed, off-chain validation)
+
+The source factory makes the final slot absorb the integer-division remainder
+(`lastSlotAmount`), so it locks *more* than `inputAmount / numSlots`. Destination
+validation used a flat `minOutput / numSlots` for every slot, so the last filler
+could fund only that flat minimum yet pull the larger source amount.
+
+**Fix.** Both `escrowDstWatcher.ts` (validation) and the filler tooling
+(`ccFill.ts`) now mirror the source sizing exactly — the final slot requires
+`minOutput − ⌊minOutput/numSlots⌋·(numSlots−1)` instead of the flat share.
+
+### 3.7 — 1-wei safety deposit 🟢 (fixed on-chain)
+
+`EscrowSrc.initialize` only required `msg.value > 0`, so locking a large slot into
+an unclaimable escrow cost a griefer ~1 wei + gas. `EscrowSrcFactory` now enforces
+a floor before any state change or fund pull:
+
+```solidity
+uint256 public constant MIN_SAFETY_DEPOSIT = 0.001 ether;
+// in fillSlot():
+require(msg.value >= MIN_SAFETY_DEPOSIT, "deposit below floor");
+```
+
+Flat rather than slot-proportional for simplicity (could be made a configurable /
+value-scaled parameter). Tests: `test_fillSlot_{zeroSafetyDeposit,dustSafetyDeposit}_reverts`.
+
+### 3.8 — Zero-amount non-final slots 🟢 (fixed on-chain)
+
+When `inputAmount < numSlots`, `slotAmount = inputAmount / numSlots` rounds to 0 and
+every non-final slot later reverts in `EscrowSrc.initialize` ("zero amount"), leaving
+only the final remainder slot fillable. `EscrowSrcFactory.fillSlot` now rejects such
+orders at registration:
+
+```solidity
+uint256 slotAmount = info.inputAmount / info.numSlots;
+require(slotAmount > 0, "slot amount zero");
+```
+
+Test: `test_fillSlot_zeroSlotAmount_reverts`.

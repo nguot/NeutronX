@@ -17,7 +17,7 @@ contract MockFillAuction {
         return validRegistration;
     }
 
-    function onFillSuccess(bytes32, address, uint256) external {
+    function onFillSuccess(bytes32, address, uint256, uint256) external {
         onFillSuccessCalled = true;
     }
 }

@@ -186,12 +186,19 @@ contract FrontRunGriefingTest is Test {
     }
 
     /// Fuzz: for ANY front-run size between 1% and 99% of the order, A
-    /// (registered for 100%) can still complete for whatever remains -
-    /// pre-fix, hasValidRegistration's exact `==` match reverted "not
-    /// registered" for *every* value here. A's refund now tracks its actual
-    /// fill ratio: a >=70% remainder (frontRunBps <= 3000) returns A's full
-    /// stake, anything smaller returns only the matching refundTable share.
-    function testFuzz_frontRun_fillerRefundMatchesActualFillRatio(uint256 frontRunBps) public {
+    /// (registered for 100%) completes whatever remains and recovers its FULL
+    /// stake — finding 3.5. A consumed the entire live remainder, so it
+    /// honoured all the volume actually available to it; the refund denominator
+    /// is capped at that remainder (not A's original 100% commitment), so the
+    /// ratio is always 100%. Nothing is forfeited regardless of how much the
+    /// bot front-ran.
+    ///
+    /// Pre-3.5 this same fuzz asserted a *shrinking* refund for large
+    /// front-runs (`refund(stakeA, remainingAmount, INPUT_AMOUNT)`): a competing
+    /// filler could grief an honest registrant into heavy forfeiture by shrinking
+    /// the remainder below its commitment. That forfeiture is exactly what 3.5
+    /// removes — so the assertion below is now "full stake, always".
+    function testFuzz_frontRun_honestFillerKeepsFullStake(uint256 frontRunBps) public {
         frontRunBps = bound(frontRunBps, 100, 9900); // 1%..99% of the order
 
         PartialFillReactor.SignedOrder memory order = _makeOrder();
@@ -199,8 +206,6 @@ contract FrontRunGriefingTest is Test {
 
         uint256 frontRunAmount  = INPUT_AMOUNT * frontRunBps / 10000;
         uint256 remainingAmount = INPUT_AMOUNT - frontRunAmount;
-
-        uint256 stakeA = _collateral(INPUT_AMOUNT, INPUT_AMOUNT, DEADLINE);
 
         vm.prank(fillerA);
         reactor.register{value: 1 ether}(order, INPUT_AMOUNT);
@@ -210,11 +215,12 @@ contract FrontRunGriefingTest is Test {
         vm.prank(bot);
         reactor.executePartialChunk(order, frontRunAmount);
 
+        // A completes the entire remainder.
         vm.prank(fillerA);
         reactor.executePartialChunk(order, remainingAmount);
 
-        uint256 refundA = _refund(stakeA, remainingAmount, INPUT_AMOUNT);
-        assertEq(auction.pendingReturns(fillerA), 1 ether - stakeA + refundA);
+        // 3.5: A is made whole — full deposit back, nothing forfeited to treasury.
+        assertEq(auction.pendingReturns(fillerA), 1 ether);
 
         vm.roll(DEADLINE + auction.SLASH_WINDOW() + 1);
         vm.expectRevert("invalid state");

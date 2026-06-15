@@ -15,9 +15,9 @@ pragma solidity ^0.8.20;
 //     to the factory.
 //  2. Safety deposit: the filler posts a native-ETH deposit at initialize()
 //     time (msg.value, forwarded by the factory). withdraw() returns it to
-//     the filler alongside their payout. cancel() pays it to whoever calls
-//     cancel() after expiry — a keeper incentive that doubles as a penalty
-//     on the filler for not completing the swap.
+//     the filler alongside their payout. cancel() pays it to the SWAPPER after
+//     expiry — compensation for the lock-up and a penalty on the filler, who
+//     (unlike a msg.sender payout) cannot reclaim it by self-cancelling.
 //
 //  LIFECYCLE
 //  ─────────
@@ -31,8 +31,8 @@ pragma solidity ^0.8.20;
 //  3. Anyone (typically the filler or the backend) calls withdraw(S_i) here:
 //     the input token amount AND the safety deposit go to the filler.
 //  4. If S_i is never revealed before `expiry`, anyone can call cancel():
-//     the input token amount is refunded to the swapper, and the safety
-//     deposit goes to the caller as a reward for cleaning up the stuck slot.
+//     the input token amount AND the safety deposit are sent to the swapper —
+//     refunding the stuck slot and compensating them for the lock-up.
 //
 //  NO MERKLE PROOF HERE
 //  ────────────────────
@@ -142,9 +142,9 @@ contract EscrowSrc {
     // ── cancel ─────────────────────────────────────────────────────────────────
     /**
      * Safety valve: if S_i is never revealed before `expiry`, anyone can call
-     * this to refund the swapper's input token and claim the filler's safety
-     * deposit as a cleanup reward — a penalty on the filler for not delivering
-     * on Chain B.
+     * this. The swapper's input token is refunded AND the filler's safety
+     * deposit is paid to the swapper — a penalty on the filler for not
+     * delivering on Chain B that the filler cannot dodge by self-cancelling.
      */
     function cancel() external nonReentrant {
         require(_initialized,           "not init");
@@ -154,7 +154,12 @@ contract EscrowSrc {
         cancelled = true;
         IERC20(token).safeTransfer(swapper, amount);
         if (safetyDeposit > 0) {
-            (bool ok, ) = msg.sender.call{value: safetyDeposit}("");
+            // The safety deposit goes to the SWAPPER (the griefed party), not the
+            // caller. Paying msg.sender let a griefer self-cancel their own stuck
+            // escrow and reclaim the deposit — making slot grief-jamming cost only
+            // gas. Routing it to the swapper removes that reclaim loophole and
+            // compensates the swapper for the capital lock-up.
+            (bool ok, ) = swapper.call{value: safetyDeposit}("");
             require(ok, "deposit transfer failed");
         }
         emit Cancelled(swapper, amount, msg.sender, safetyDeposit);

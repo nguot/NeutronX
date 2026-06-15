@@ -56,9 +56,30 @@ After the fix, a filler whose registration's ceiling no longer matches
 `remaining` (because someone else front-ran part of the order) can still
 resolve their registration instead of being stuck and eventually slashed.
 Slashing now applies to fillers who register and then **never attempt a fill
-at all** before `deadline + SLASH_WINDOW` (fake-liquidity signaling) *or* who
-only manage a small actual fill (most of their collateral is forfeited as a
-"sniping fee" rather than slashed outright).
+at all** before `deadline + SLASH_WINDOW` (fake-liquidity signaling).
+
+## Follow-up — finding 3.5 (full relief, not just a partial refund)
+
+The fix above let A *complete* the remainder, but A's refund was still computed
+against its **original 100% commitment** (`computeRefund(stake, actualFill,
+reg.fillAmount, ...)`). So when the bot front-ran a large share, A delivered all
+that was left yet still **forfeited** part of its stake — a residual griefing
+vector (a competitor shrinks the live remainder below your commitment and you
+eat a "sniping fee" for volume that was never available to you).
+
+Finding **3.5** removes that residue. `onFillSuccess` now caps the refund
+denominator at what was actually fillable:
+
+```solidity
+uint256 deliverable = remainingAtFill < reg.fillAmount ? remainingAtFill : reg.fillAmount;
+uint256 refund      = DynamicStakeLib.computeRefund(stake, actualFillAmount, deliverable, reg.refundRow);
+```
+
+`remainingAtFill` is the live remainder passed in by `executePartialChunk`. So a
+filler that consumes the **entire** remaining always sees ratio = 100% → full
+stake back, regardless of how much was front-run. The sniping penalty still
+applies in full when the volume *was* available and the filler under-delivered
+(`remainingAtFill >= reg.fillAmount` ⇒ denominator stays the commitment).
 
 ## The test — `FrontRunGriefing.t.sol`
 
@@ -68,13 +89,12 @@ only manage a small actual fill (most of their collateral is forfeited as a
   entire `1 ether` deposit. The bot's 11% actual fill lands in the 10-30%
   refund bucket -> only a partial refund, with the rest forfeited to the
   treasury. Also asserts `slash(A)` now reverts with `"invalid state"`.
-- **`testFuzz_frontRun_fillerRefundMatchesActualFillRatio`**: same scenario,
-  fuzzing the bot's front-run size across 1%-99% of the order. For every
-  size, A completes for whatever remains (no "not registered" /
-  "filled too little" revert) and A's `pendingReturns` matches
-  `(1 ether - stakeA) + refund(stakeA, remainingAmount, INPUT_AMOUNT)` — a
-  full refund when the remainder is >=70% of the order, a partial one
-  otherwise.
+- **`testFuzz_frontRun_honestFillerKeepsFullStake`**: same scenario, fuzzing
+  the bot's front-run size across 1%-99% of the order. For every size, A
+  completes the entire remainder and recovers its **full** stake
+  (`pendingReturns == 1 ether`), nothing forfeited — the 3.5 behaviour. (Before
+  3.5 this asserted a *shrinking* refund for large front-runs, i.e. the residual
+  forfeiture that finding removed.)
 
 ### Proving it actually catches the bug
 

@@ -100,7 +100,8 @@ contract FillAuctionHandler is Test {
 
         uint256 actualFill = bound(amountSeed, 1, regFillAmount[orderHash][actor]);
 
-        auction.onFillSuccess(orderHash, actor, actualFill);
+        // remainingAtFill = max ⇒ denominator stays the commitment (pre-3.5 behaviour).
+        auction.onFillSuccess(orderHash, actor, actualFill, type(uint256).max);
 
         resolved[orderHash][actor] = true;
         ghost_activeStake -= regStake[orderHash][actor];

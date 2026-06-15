@@ -169,7 +169,7 @@ contract EscrowSrcFactoryTest is Test {
 
     // ── if the secret is never revealed, anyone can cancel after expiry ──────
 
-    function test_cancel_afterExpiry_refundsSwapper_andPaysCanceller() public {
+    function test_cancel_afterExpiry_refundsSwapper_andPaysSwapperDeposit() public {
         EscrowSrcFactory.OrderInfo memory info = _info();
         bytes32 orderHash = factory.hashOrder(info);
         bytes memory swapperSig  = _sign(swapperKey, orderHash);
@@ -185,13 +185,17 @@ contract EscrowSrcFactoryTest is Test {
         vm.roll(DEADLINE + 1);
 
         uint256 swapperWethBefore = weth.balanceOf(swapper);
+        uint256 swapperEthBefore  = swapper.balance;
         uint256 keeperEthBefore   = keeper.balance;
 
+        // A keeper triggers cleanup, but the safety deposit now compensates the
+        // SWAPPER, not the caller — so a griefer cannot self-cancel to reclaim it.
         vm.prank(keeper);
         EscrowSrc(escrow).cancel();
 
         assertEq(weth.balanceOf(swapper), swapperWethBefore + 1 ether); // lastSlotAmount for slot 1
-        assertEq(keeper.balance, keeperEthBefore + DEPOSIT);
+        assertEq(swapper.balance, swapperEthBefore + DEPOSIT);          // deposit → swapper
+        assertEq(keeper.balance, keeperEthBefore);                      // caller gets nothing
         assertEq(EscrowSrc(escrow).status(), "cancelled");
     }
 

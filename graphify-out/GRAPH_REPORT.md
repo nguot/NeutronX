@@ -1,16 +1,16 @@
 # Graph Report - dex-aggregator  (2026-06-15)
 
 ## Corpus Check
-- 121 files · ~119,673 words
+- 121 files · ~121,249 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 938 nodes · 1262 edges · 73 communities (59 shown, 14 thin omitted)
+- 945 nodes · 1269 edges · 73 communities (59 shown, 14 thin omitted)
 - Extraction: 100% EXTRACTED · 0% INFERRED · 0% AMBIGUOUS · INFERRED: 4 edges (avg confidence: 0.8)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `24121634`
+- Built from commit: `66a3d9d0`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -126,8 +126,8 @@ Cohesion: 0.11
 Nodes (19): router, router, coverageAt(), MIN_FILL_CANDIDATES, router, fillerRegistry, FillerQuote, SimQuoteRequest (+11 more)
 
 ### Community 2 - "Community 2"
-Cohesion: 0.06
-Nodes (30): 1. Signature standard (EIP-712), 2. Merkle tree — build off-chain, verify on-chain, 3. Nonce, 4. Cross-chain timelock ordering (`T2 < T1`) — 🟠 High, not enforced on-chain, Anvil, Bottom line, Bottom line, Build (+22 more)
+Cohesion: 0.05
+Nodes (36): 1. Signature standard (EIP-712), 2. Merkle tree — build off-chain, verify on-chain, 3.2 — Source/destination legs not bound to the same filler 🟠 (cosigner-enforced), 3.6 — Last-slot output underfunding 🟡 (fixed, off-chain validation), 3.7 — 1-wei safety deposit 🟢 (fixed on-chain), 3.8 — Zero-amount non-final slots 🟢 (fixed on-chain), 3. Nonce, 4. Cross-chain timelock ordering (`T2 < T1`) — 🟠 High, not enforced on-chain (+28 more)
 
 ### Community 3 - "Community 3"
 Cohesion: 0.07
@@ -290,8 +290,8 @@ Cohesion: 0.32
 Nodes (4): computeOrderHash(), devFill(), getContracts(), ORDER_TYPE_HASH
 
 ### Community 43 - "Community 43"
-Cohesion: 0.25
-Nodes (7): Attack, Front-Running Griefing Fix — `FillAuction`, Proving it actually catches the bug, Running it, The fix, The test — `FrontRunGriefing.t.sol`, The vulnerability
+Cohesion: 0.22
+Nodes (8): Attack, Follow-up — finding 3.5 (full relief, not just a partial refund), Front-Running Griefing Fix — `FillAuction`, Proving it actually catches the bug, Running it, The fix, The test — `FrontRunGriefing.t.sol`, The vulnerability
 
 ### Community 44 - "Community 44"
 Cohesion: 0.33
@@ -350,7 +350,7 @@ Cohesion: 0.10
 Nodes (28): AGGREGATORS, availableAggregators(), resolveAggregatorChainId(), CHAIN_NAMES, KyberBuildResponse, KyberRouteResponse, kyberswapAdapter, oneInchAdapter (+20 more)
 
 ## Knowledge Gaps
-- **455 isolated node(s):** `name`, `version`, `description`, `main`, `start` (+450 more)
+- **461 isolated node(s):** `name`, `version`, `description`, `main`, `start` (+456 more)
   These have ≤1 connection - possible missing edges or undocumented components.
 - **14 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
@@ -362,12 +362,12 @@ _Questions this graph is uniquely positioned to answer:_
 - **Why does `db` connect `Community 0` to `Community 4`, `Community 77`?**
   _High betweenness centrality (0.003) - this node is a cross-community bridge._
 - **What connects `name`, `version`, `description` to the rest of the system?**
-  _455 weakly-connected nodes found - possible documentation gaps or missing edges._
+  _461 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `Community 0` be split into smaller, more focused modules?**
   _Cohesion score 0.05158324821246169 - nodes in this community are weakly interconnected._
 - **Should `Community 1` be split into smaller, more focused modules?**
   _Cohesion score 0.10826210826210826 - nodes in this community are weakly interconnected._
 - **Should `Community 2` be split into smaller, more focused modules?**
-  _Cohesion score 0.06451612903225806 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.05405405405405406 - nodes in this community are weakly interconnected._
 - **Should `Community 3` be split into smaller, more focused modules?**
   _Cohesion score 0.07407407407407407 - nodes in this community are weakly interconnected._
