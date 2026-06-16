@@ -1,71 +1,224 @@
 \documentclass[../DoAn.tex]{subfiles}
 \begin{document}
 
-\section{Thiết kế kiến trúc}
-\subsection{Lựa chọn kiến trúc phần mềm}
-Mục này có độ dài từ một đến ba trang. Sinh viên cần lựa chọn kiến trúc phần mềm cho ứng dụng của mình như: kiến trúc ba lớp MVC, MVP, SOA, Microservice, v.v. rồi giải thích sơ bộ về kiến trúc đó (không giải thích chi tiết/dài dòng).
-Sử dụng kiến trúc phần mềm đã chọn ở trên, sinh viên mô tả kiến trúc cụ thể cho ứng dụng của mình. Gợi ý: sinh viên áp dụng lý thuyết chung vào hệ thống/sản phẩm của mình như thế nào, có thay đổi, bổ sung hoặc cải tiến gì không. Ví dụ, thành phần M trong kiến trúc lý thuyết MVC sẽ là những thành phần cụ thể nào (ví dụ: là interface I + class C1 + class C2, v.v.) trong kiến trúc phần mềm của sinh viên.
+Chương này trình bày phần lõi của đồ án: thiết kế và cài đặt các hợp đồng thông minh. Mở đầu là kiến trúc tổng thể và luồng đi của một giao dịch, sau đó đi vào từng hợp đồng theo đúng bốn cơ chế đã nêu ở Chương~\ref{chapter:Related_works}. Phần backend và frontend được nói ngắn gọn ở cuối chương vì chỉ đóng vai hỗ trợ.
 
-\subsection{Thiết kế tổng quan}
-Sinh viên vẽ biểu đồ gói UML (UML package diagram), nêu rõ sự phụ thuộc giữa các gói (package). SV cần vẽ các gói sao cho chúng được phân theo các tầng rõ ràng, không được sắp đặt package lộn xộn trong hình vẽ. Sinh viên chú ý các quy tắc thiết kế (Các gói không phụ thuộc lẫn nhau, gói tầng dưới không phụ thuộc gói tầng trên, không phụ thuộc bỏ qua tầng, v.v.) và cần giải thích sơ lược về mục đích/nhiệm vụ của từng package. SV tham khảo ví dụ minh họa trong Hình \ref{fig:Fig1}
+\section{Kiến trúc tổng thể và luồng giao dịch}
+\label{sec:arch}
+
+Hệ thống NeutronX gồm bốn tầng. Tầng \textbf{hợp đồng thông minh} chạy trên chuỗi, chứa toàn bộ logic kiểm tra và thực hiện lệnh; đây là phần quan trọng nhất. Tầng \textbf{backend} chạy ngoài chuỗi, lo việc đồng ký lệnh, lưu trữ và theo dõi trạng thái. Tầng \textbf{filler} là các chương trình đi khớp lệnh. Cuối cùng là \textbf{giao diện người dùng} để tạo và theo dõi lệnh. Hình~\ref{fig:arch} mô tả cách bốn tầng này nối với nhau.
+
+% ─────────────────────────────────────────────────────────────────────────────
+% HÌNH 3.1 — KIẾN TRÚC TỔNG THỂ
+% HƯỚNG DẪN VẼ (draw.io): chia hình thành 2 vùng "Ngoài chuỗi" và "Trên chuỗi".
+%   Vùng ngoài chuỗi: 3 khối Frontend, Backend (ghi rõ: REST API, Cosigner,
+%   Watcher, PostgreSQL), Filler. Vùng trên chuỗi: các hộp hợp đồng
+%   PartialFillReactor, FillAuction, FallbackExecutor, EscrowSrcFactory (Chain A),
+%   EscrowDstFactory (Chain B). Vẽ mũi tên: Frontend--ký lệnh-->Backend;
+%   Backend--công bố lệnh-->Filler; Filler--đăng ký+khớp-->các hợp đồng;
+%   Backend(watcher)--theo dõi/kích hoạt-->các hợp đồng.
+% PASTE ẢNH: lưu vào  baocao/Hinhve/arch.png  rồi bỏ % dòng \includegraphics.
+% ─────────────────────────────────────────────────────────────────────────────
 \begin{figure}[H]
     \centering
-    \includegraphics{Hinhve/Picture1.png}
-    \caption{Ví dụ biểu đồ phụ thuộc gói}
-    \label{fig:Fig1}
+    \includegraphics[width=0.95\textwidth]{Hinhve/arch.png}
+    \caption{Kiến trúc tổng thể của hệ thống NeutronX gồm bốn tầng.}
+    \label{fig:arch}
 \end{figure}
-\subsection{Thiết kế chi tiết gói}
-Sinh viên thiết kế và lần lượt vẽ biểu đồ thiết kế cho từng package, hoặc một nhóm các package liên quan để giải quyết một vấn đề gì đó. Khi vẽ thiết kế gói, sinh viên chỉ cần đưa tên lớp, không cần chỉ ra các thành viên phương thức và thuộc tính. SV tham khảo ví dụ minh họa trong Hình \ref{fig:Fig2}.
 
-Sinh viên cần vẽ rõ ràng quan hệ giữa các lớp trong biểu đồ. Các quan hệ bao gồm: phụ thuộc (dependency), kết hợp (association), kết tập (aggregation), hợp thành (composition), kế thừa (inheritance), và thực thi (implementation). Các quan hệ này đều đã được minh họa trong \ref{fig:Fig2}.
+Để dễ hình dung, có thể theo dõi vòng đời của một lệnh giao dịch trong cùng một chuỗi qua các bước sau:
 
-Sau khi vẽ hình minh họa, sinh viên cần giải thích ngắn gọn về thiết kế của mình. 
+\begin{enumerate}
+    \item Người dùng tạo lệnh trên giao diện và ký bằng ví theo chuẩn EIP-712. Việc ký này diễn ra ngoài chuỗi nên không tốn phí gas.
+    \item Backend nhận lệnh, đồng ký (cosign) để xác nhận các tham số giá, rồi lưu vào cơ sở dữ liệu và công bố cho các filler.
+    \item Một filler thấy lệnh có lợi thì đăng ký nhận một phần khối lượng, kèm theo một khoản cọc, thông qua hợp đồng \texttt{FillAuction}.
+    \item Filler gọi hàm khớp lệnh trên \texttt{PartialFillReactor}. Hợp đồng dùng Permit2 để chuyển tài sản vào của người dùng cho filler, đồng thời filler trả tài sản ra cho người dùng.
+    \item Sau mỗi lần khớp, \texttt{FillAuction} hoàn cọc cho filler theo mức họ đã giao đúng cam kết. Quá trình lặp lại cho tới khi lệnh được khớp hết.
+    \item Nếu gần tới hạn mà lệnh vẫn còn dư, \texttt{FallbackExecutor} sẽ khớp nốt phần còn lại.
+\end{enumerate}
 
+Hình~\ref{fig:sequence} biểu diễn luồng này dưới dạng sơ đồ trình tự.
+
+% ─────────────────────────────────────────────────────────────────────────────
+% HÌNH 3.2 — SƠ ĐỒ TRÌNH TỰ VÒNG ĐỜI LỆNH (CÙNG CHUỖI)
+% HƯỚNG DẪN VẼ (mermaid sequenceDiagram — xem code mẫu trong phần trả lời của trợ lý):
+%   các lifeline: Swapper, Frontend, Backend, FillAuction, Reactor, Filler.
+%   Thể hiện: ký lệnh -> cosign+lưu -> đăng ký+cọc -> executePartialChunk
+%   (Permit2 chuyển input, filler trả output) -> onFillSuccess hoàn cọc -> lặp.
+% PASTE ẢNH: lưu vào  baocao/Hinhve/sequence_samechain.png  rồi bỏ % includegraphics.
+% ─────────────────────────────────────────────────────────────────────────────
 \begin{figure}[H]
     \centering
-    \includegraphics{Hinhve/Picture2.png}
-    \caption{Ví dụ thiết kế gói}
-    \label{fig:Fig2}
+    \includegraphics[width=0.95\textwidth]{Hinhve/sequence_samechain.png}
+    \caption{Sơ đồ trình tự vòng đời một lệnh được khớp từng phần trong cùng một chuỗi.}
+    \label{fig:sequence}
 \end{figure}
 
-\section{Thiết kế chi tiết}
-\subsection{Thiết kế giao diện}
-Phần này có độ dài từ hai đến ba trang. Sinh viên đặc tả thông tin về màn hình mà ứng dụng của mình hướng tới, bao gồm độ phân giải màn hình, kích thước màn hình, số lượng màu sắc hỗ trợ, v.v. Tiếp đến, sinh viên đưa ra các thống nhất/chuẩn hóa của mình khi thiết kế giao diện như thiết kế nút, điều khiển, vị trí hiển thị thông điệp phản hồi, phối màu, v.v. Sau cùng sinh viên đưa ra một số hình ảnh minh họa thiết kế giao diện cho các chức năng quan trọng nhất. Lưu ý, sinh viên không nhầm lẫn giao diện thiết kế với giao diện của sản phẩm sau cùng.
-\subsection{Thiết kế lớp}
-Phần này có độ dài từ ba đến bốn trang. Sinh viên trình bày thiết kế chi tiết các thuộc tính và phương thức cho một số lớp chủ đạo/quan trọng nhất của ứng dụng (từ 2-4 lớp). Thiết kế chi tiết cho các lớp khác, nếu muốn trình bày, sinh viên đưa vào phần phụ lục.
+\section{Mô hình dữ liệu lệnh}
+\label{sec:order-model}
 
-Để minh họa thiết kế lớp, sinh viên thiết kế luồng truyền thông điệp giữa các đối tượng tham gia cho 2 đến 3 use case quan trọng nào đó bằng biểu đồ trình tự (hoặc biểu đồ giao tiếp).
-\subsection{Thiết kế cơ sở dữ liệu}
-Phần này có độ dài từ hai đến bốn trang. Sinh viên thiết kế, vẽ và giải thích biểu đồ thực thể liên kết (E-R diagram). Từ đó, sinh viên thiết kế cơ sở dữ liệu tùy theo hệ quản trị cơ sở dữ liệu mà mình sử dụng (SQL, NoSQL, Firebase, v.v.)
-
-\section{Xây dựng ứng dụng}
-\subsection{Thư viện và công cụ sử dụng}
-Sinh viên liệt kê các công cụ, ngôn ngữ lập trình, API, thư viện, IDE, công cụ kiểm thử, v.v. mà mình sử dụng để phát triển ứng dụng. Mỗi công cụ phải được chỉ rõ phiên bản sử dụng. SV nên kẻ bảng mô tả tương tự như Bảng \ref{table:my_label}. Nếu có nhiều nội dung trình bày, sinh viên cần xoay ngang bảng.
+Mọi thông tin của một lệnh được gói trong một cấu trúc gọi là \texttt{PartialFillOrder}, gồm 11 trường như ở Bảng~\ref{table:order_fields}. Toàn bộ 11 trường này đều nằm trong phần dữ liệu được ký, nên không bên nào có thể tự ý thay đổi mà không bị phát hiện.
 
 \begin{table}[H]
-\centering{}
-    \begin{tabular}{lll}
+    \centering
+    \caption{Các trường của một lệnh \texttt{PartialFillOrder}.}
+    \label{table:order_fields}
+    \begin{tabular}{|l|l|}
         \hline
-        \textbf{Mục đích} & \textbf{Công cụ}       & \textbf{Địa chỉ URL}    \\ \hline
-        IDE lập trình     & Eclipse Oxygen a64 bit & http://www.eclipse.org/ \\ \hline
-        v.v.              & v.v.                   & v.v.                    \\ \hline
-        \end{tabular}
-    \caption{Danh sách thư viện và công cụ sử dụng}
-    \label{fig:my_label}
+        \textbf{Trường} & \textbf{Ý nghĩa} \\
+        \hline
+        \texttt{swapper}        & Địa chỉ người tạo lệnh. \\
+        \hline
+        \texttt{inputToken}     & Token người dùng bán ra. \\
+        \hline
+        \texttt{inputAmount}    & Tổng khối lượng token bán. \\
+        \hline
+        \texttt{outputToken}    & Token người dùng muốn nhận. \\
+        \hline
+        \texttt{minOutputAmount}& Mức nhận tối thiểu chấp nhận được (chống trượt giá). \\
+        \hline
+        \texttt{deadline}       & Số block hạn chót của lệnh. \\
+        \hline
+        \texttt{nonce}          & Số chống lặp lại lệnh. \\
+        \hline
+        \texttt{minFillBps}     & Tỉ lệ tối thiểu cho mỗi lần khớp (tránh khớp quá vụn). \\
+        \hline
+        \texttt{startPrice}     & Giá khởi điểm của đường cong đấu giá Hà Lan. \\
+        \hline
+        \texttt{decayPerBlock}  & Mức giảm giá sau mỗi block. \\
+        \hline
+        \texttt{feeTier}        & Mức phí pool dùng để tham chiếu giá. \\
+        \hline
+    \end{tabular}
 \end{table}
 
-\subsection{Kết quả đạt được}
-Sinh viên trước tiên mô tả kết quả đạt được của mình là gì, ví dụ như các sản phẩm được đóng gói là gì, bao gồm những thành phần nào, ý nghĩa, vai trò?
+Ba trường cuối (\texttt{startPrice}, \texttt{decayPerBlock}, \texttt{feeTier}) mô tả đường cong giá. Một điểm quan trọng trong thiết kế là ba trường này được đưa vào phần dữ liệu ký, nên đường cong giá mà filler thực hiện cũng được cosigner xác thực, filler không thể tự đặt giá có lợi cho mình.
 
-Sinh viên cần thống kê các thông tin về ứng dụng của mình như: số dòng code, số lớp, số gói, dung lượng toàn bộ mã nguồn, dung lượng của từng sản phẩm đóng gói, v.v. Tương tự như phần liệt kê về công cụ sử dụng, sinh viên cũng nên dùng bảng để mô tả phần thông tin thống kê này.
+\section{Hợp đồng PartialFillReactor}
+\label{subsec:reactor}
 
-\subsection{Minh họa các chức năng chính}
-Sinh viên lựa chọn và đưa ra màn hình cho các chức năng chính, quan trọng, và thú vị nhất. Mỗi giao diện cần phải có lời giải thích ngắn gọn. Khi giải thích, sinh viên có thể kết hợp với các chú thích ở trong hình ảnh giao diện.
+\texttt{PartialFillReactor} là hợp đồng lo việc khớp lệnh từng phần. Nó có hai hàm chính. Hàm \texttt{register} cho phép một filler đăng ký nhận một phần lệnh; hàm này chuyển tiếp yêu cầu đặt cọc sang \texttt{FillAuction} và đồng thời kiểm tra chữ ký của lệnh. Hàm \texttt{executePartialChunk} thực hiện một lần khớp.
 
-\section{Kiểm thử}
-Phần này có độ dài từ hai đến ba trang. Sinh viên thiết kế các trường hợp kiểm thử cho hai đến ba chức năng quan trọng nhất. Sinh viên cần chỉ rõ các kỹ thuật kiểm thử đã sử dụng. Chi tiết các trường hợp kiểm thử khác, nếu muốn trình bày, sinh viên đưa vào phần phụ lục.
-Sinh viên sau cùng tổng kết về số lượng các trường hợp kiểm thử và kết quả kiểm thử. Sinh viên cần phân tích lý do nếu kết quả kiểm thử không đạt.
-\section{Triển khai}
-Sinh viên trình bày mô hình và/hoặc cách thức triển khai thử nghiệm/thực tế. Ứng dụng của sinh viên được triển khai trên server/thiết bị gì, cấu hình như thế nào. Kết quả triển khai thử nghiệm nếu có (số lượng người dùng, số lượng truy cập, thời gian phản hồi, phản hồi người dùng, khả năng chịu tải, các thống kê, v.v.)
+Hàm khớp lệnh được viết theo trình tự ``kiểm tra - thay đổi trạng thái - tương tác'' (Checks-Effects-Interactions), một quy ước phổ biến để tránh lỗi gọi lại (reentrancy). Cụ thể, trước khi chuyển tài sản, hợp đồng kiểm tra: lệnh chưa bị hủy, chưa bị chuyển sang chế độ dự phòng, nonce chưa bị vô hiệu, filler có đăng ký hợp lệ, và lượng khớp không vượt phần còn lại. Sau khi qua hết các kiểm tra, hợp đồng mới cập nhật phần còn lại rồi mới chuyển tài sản.
+
+Về cách tính giá, mỗi lần khớp được tính độc lập ở đúng mức giá đang có tại block đó, theo công thức đơn giản: số tiền ra bằng lượng khớp nhân với giá hiện tại. Cách tính độc lập như vậy tránh được một lỗi mà thiết kế ban đầu gặp phải, đó là khi tính dồn cả lệnh thì lần khớp cuối có thể bị tràn số và làm kẹt lệnh. Ngoài ra, để bảo vệ người dùng, mỗi lần khớp đều phải đạt một mức ra tối thiểu tính theo tỉ lệ, và khi lệnh khớp xong thì tổng số tiền ra phải đạt \texttt{minOutputAmount} mà người dùng đã ký.
+
+Một lệnh trong hợp đồng có thể ở các trạng thái như ở Hình~\ref{fig:reactor_state}: mới tạo, đang khớp dở, đã khớp xong, hoặc bị hủy / chuyển sang dự phòng. Người dùng cũng có thể chủ động hủy lệnh hoặc vô hiệu một nonce để dừng các lần khớp tiếp theo.
+
+% ─────────────────────────────────────────────────────────────────────────────
+% HÌNH 3.3 — MÁY TRẠNG THÁI CỦA MỘT LỆNH
+% HƯỚNG DẪN VẼ (mermaid stateDiagram-v2 — xem code mẫu trong phần trả lời):
+%   NEW --(khớp lần đầu)--> PARTIALLY_FILLED --(khớp nốt)--> FILLED.
+%   PARTIALLY_FILLED --(dự phòng)--> FALLBACK_INITIATED.
+%   NEW/PARTIALLY_FILLED --(hủy/vô hiệu nonce)--> CANCELLED.
+% PASTE ẢNH: lưu vào  baocao/Hinhve/reactor_state.png  rồi bỏ % includegraphics.
+% ─────────────────────────────────────────────────────────────────────────────
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.8\textwidth]{Hinhve/reactor_state.png}
+    \caption{Các trạng thái của một lệnh trong hợp đồng PartialFillReactor.}
+    \label{fig:reactor_state}
+\end{figure}
+
+\section{Hợp đồng FillAuction}
+\label{subsec:auction}
+
+\texttt{FillAuction} lo phần đặt cọc và phạt. Khi một filler đăng ký, hợp đồng tính ra số cọc cần nộp và ghi lại đăng ký đó. Số cọc được tính bằng cách quy giá trị phần lệnh về ETH, rồi nhân với một tỉ lệ theo cỡ lệnh và một hệ số theo thời gian còn lại tới hạn (đăng ký càng sát hạn thì hệ số càng cao). Giá trị quy về ETH được lấy từ giá trung bình theo thời gian (TWAP) của pool Uniswap tương ứng.
+
+Khi filler khớp xong, hàm \texttt{onFillSuccess} hoàn cọc theo bảng hoàn cọc ở Bảng~\ref{table:refund}. Điểm cần nhấn mạnh là mức hoàn được tính theo tỉ lệ giữa lượng filler đã giao và lượng họ đã \emph{cam kết} của riêng mình, chứ không phải so với cả lệnh. Nhờ vậy, một filler làm đúng phần đã nhận (dù phần đó lớn hay nhỏ) đều được hoàn lại toàn bộ cọc; chỉ khi giao thiếu so với cam kết thì phần thiếu mới bị giữ lại.
+
+\begin{table}[H]
+    \centering
+    \caption{Bảng hoàn cọc mặc định (đơn vị: phần vạn của số cọc), theo cỡ lệnh và tỉ lệ giao so với cam kết.}
+    \label{table:refund}
+    \begin{tabular}{|l|c|c|c|c|c|}
+        \hline
+        \textbf{Cỡ lệnh \textbackslash{} Tỉ lệ giao} & \textbf{0--2\%} & \textbf{2--10\%} & \textbf{10--30\%} & \textbf{30--70\%} & \textbf{$\geq$70\%} \\
+        \hline
+        Nhỏ ($<1$ ETH)     & 500 & 1000 & 2500 & 5000 & 10000 \\
+        \hline
+        Vừa ($1$--$10$)    & 333 & 1000 & 2000 & 5000 & 10000 \\
+        \hline
+        Lớn ($10$--$100$)  & 100 & 333  & 1000 & 3333 & 10000 \\
+        \hline
+        Rất lớn ($>100$)   & 100 & 200  & 667  & 2000 & 10000 \\
+        \hline
+    \end{tabular}
+\end{table}
+
+Phần xử lý sau khi hết hạn được thiết kế để công bằng với filler. Sau thời hạn cộng thêm một khoảng chờ (50 block), nếu một đăng ký vẫn chưa tất toán thì có hai khả năng. Nếu lệnh đã được khớp xong, đã bị hủy, hoặc nonce đã bị vô hiệu, thì filler không có lỗi và được hoàn lại toàn bộ cọc qua hàm \texttt{releaseRegistration}. Ngược lại, nếu lệnh vẫn còn phần khớp được mà filler bỏ dở, thì filler bị phạt qua hàm \texttt{slash}: phần lớn cọc (90\%) vào quỹ chung, phần còn lại (10\%) cho người gọi hàm. Cách phân biệt này đã được minh họa ở Hình~\ref{fig:slash_decision} của Chương~\ref{chapter:Related_works}. Toàn bộ việc rút tiền dùng cơ chế ``kéo'' (pull payment): tiền được ghi nợ trước, người nhận tự gọi rút sau, để tránh lỗi khi chuyển tiền.
+
+Có hai chi tiết thiết kế đáng chú ý. Thứ nhất, bảng hoàn cọc được chụp lại tại thời điểm đăng ký, nên dù chủ hợp đồng có sửa bảng sau đó cũng không ảnh hưởng tới các filler đã đăng ký trước. Thứ hai, số cọc tỉ lệ thẳng với cỡ phần đã nhận, nên không có chuyện đăng ký phần lớn lại rẻ hơn phần nhỏ.
+
+\section{Hợp đồng FallbackExecutor}
+\label{subsec:fallback}
+
+\texttt{FallbackExecutor} lo cơ chế dự phòng. Nó chỉ được phép chạy trong khoảng 10 block trước hạn của lệnh. Khi chạy, hợp đồng kiểm tra chữ ký của lệnh, rồi đánh dấu lệnh sang chế độ dự phòng và đưa phần còn lại về 0 trong cùng một bước. Việc này khiến luồng dự phòng và luồng khớp thường loại trừ lẫn nhau, nên không có chuyện cùng một phần khối lượng bị tiêu hai lần.
+
+Sau đó, hợp đồng dùng Permit2 lấy phần còn lại của người dùng, rồi gọi tới một sàn giao dịch để hoán đổi. Kết quả nhận được phải đạt cả mức tối thiểu mà người dùng đã ký lẫn mức mà bên giải route tính sẵn; nếu thiếu thì cả giao dịch bị hủy. Nếu route chỉ dùng hết một phần tài sản vào thì phần thừa được trả lại cho người dùng.
+
+Về các sàn được hỗ trợ, hợp đồng giữ một danh sách trắng các địa chỉ sàn được phép gọi tới. Trong đồ án đã cài đặt bộ chuyển đổi cho \textbf{Uniswap} và \textbf{KyberSwap}: bộ chuyển đổi này nằm ở backend, lo việc gọi API của từng sàn để lấy đường đi tốt nhất rồi mã hóa dữ liệu giao dịch đúng định dạng của sàn đó. Muốn thêm một sàn mới chỉ cần viết thêm một bộ chuyển đổi tương tự và thêm địa chỉ sàn vào danh sách trắng, không phải sửa lại hợp đồng.
+
+\section{Các hợp đồng cho giao dịch xuyên chuỗi}
+\label{subsec:cc-contract}
+
+Phần xuyên chuỗi dùng một mô hình khác với hợp đồng khóa thời gian dùng chung thường thấy: mỗi phần (slot) của lệnh có một hợp đồng ký quỹ riêng trên cả hai chuỗi, được tạo ra bằng kỹ thuật CREATE2. Trên chuỗi nguồn (ví dụ chuỗi giữ WETH), một hợp đồng nhà máy tên \texttt{EscrowSrcFactory} lo việc tạo các hợp đồng ký quỹ \texttt{EscrowSrc}; trên chuỗi đích (ví dụ chuỗi giữ USDC) là \texttt{EscrowDstFactory} tạo ra các \texttt{EscrowDst}.
+
+Khi một filler nhận một slot, hợp đồng nhà máy kiểm tra hai chữ ký (của người dùng và của cosigner) cùng với bằng chứng Merkle cho slot đó, rồi mới tạo hợp đồng ký quỹ và dùng Permit2 chuyển đúng phần tài sản của slot vào hợp đồng vừa tạo. Filler cũng phải nộp một khoản đặt cọc an toàn nhỏ kèm theo, để việc cố tình chiếm chỗ một slot rồi bỏ đó trở nên tốn kém. Cây Merkle các bí mật (đã trình bày ở mục~\ref{section:2.6}) cho phép cấp quyền khớp từng slot một cách độc lập trong khi cả lệnh chỉ cần ký một lần.
+
+Bảng~\ref{table:cc_compare} so sánh mô hình này với cách dùng một hợp đồng khóa thời gian dùng chung.
+
+\begin{table}[H]
+    \centering
+    \caption{So sánh hai cách làm xuyên chuỗi.}
+    \label{table:cc_compare}
+    \begin{tabular}{|p{4.2cm}|p{4cm}|p{4cm}|}
+        \hline
+        \textbf{Tiêu chí} & \textbf{Hợp đồng dùng chung} & \textbf{Hợp đồng riêng mỗi slot} \\
+        \hline
+        Cô lập sự cố & Một lỗi ảnh hưởng mọi filler & Một hợp đồng hỏng không ảnh hưởng slot khác \\
+        \hline
+        Tài sản của slot chưa khớp & Đã bị kéo vào hợp đồng & Vẫn nằm trong ví người dùng \\
+        \hline
+        Đặt cọc an toàn của filler & Không có & Có, mỗi slot một khoản \\
+        \hline
+        Dễ kiểm tra trạng thái & Khó & Mỗi hợp đồng tự báo trạng thái riêng \\
+        \hline
+    \end{tabular}
+\end{table}
+
+Một điều kiện thời gian luôn được giữ để bảo vệ filler: hạn trên chuỗi đích (T2) luôn sớm hơn hạn trên chuỗi nguồn (T1). Nhờ vậy, một filler đã bỏ tiền ra trên chuỗi đích nhưng vì lý do nào đó không hoàn tất được thì vẫn lấy lại được tiền của mình trước khi phần tài sản trên chuỗi nguồn bị hoàn cho người dùng.
+
+\section{Backend và Frontend}
+\label{sec:offchain}
+
+Ngoài tầng hợp đồng, hệ thống còn có backend và frontend để kết nối người dùng với các hợp đồng. \textbf{Backend} viết bằng Node.js và TypeScript, dùng cơ sở dữ liệu PostgreSQL. Nó cung cấp các API để tạo và đọc lệnh, giữ vai trò \emph{cosigner} (đồng ký để xác nhận đường cong giá và gốc cây Merkle), và chạy các thành phần theo dõi (watcher) để tự động kích hoạt cơ chế dự phòng cũng như hoàn tất giao dịch xuyên chuỗi. Một điều đáng chú ý là backend không hề giữ tài sản của người dùng: tài sản luôn nằm trong các hợp đồng trên chuỗi, nên kể cả khi backend gặp sự cố thì tiền của người dùng vẫn an toàn. \textbf{Frontend} là giao diện web để người dùng tạo lệnh (ký bằng ví), theo dõi tiến độ khớp và xem đường cong giá; một vài màn hình của nó được đưa ở Hình~\ref{fig:frontend}.
+
+% ─────────────────────────────────────────────────────────────────────────────
+% HÌNH 3.4 — ẢNH CHỤP MÀN HÌNH FRONTEND
+% HƯỚNG DẪN: chụp 2-3 màn hình thật: (1) trang tạo lệnh, (2) trang theo dõi lệnh,
+%   (3) đồ thị đường cong giá (AuctionChart). Ghép lại hoặc để mỗi ảnh một subfigure.
+% PASTE ẢNH: lưu vào  baocao/Hinhve/frontend.png  rồi bỏ % dòng \includegraphics.
+% ─────────────────────────────────────────────────────────────────────────────
+\begin{figure}[H]
+    \centering
+    \begin{subfigure}{0.48\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{Hinhve/frontend_1.png}
+        \caption{Màn hình tạo lệnh.}
+        \label{fig:frontend_create}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}{0.48\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{Hinhve/frontend_2.png}
+        \caption{Màn hình theo dõi lệnh và đồ thị đấu giá.}
+        \label{fig:frontend_track}
+    \end{subfigure}
+    \caption{Một số màn hình của giao diện người dùng.}
+    \label{fig:frontend}
+\end{figure}
+
+Việc các hợp đồng và cơ chế vừa trình bày có hoạt động đúng như thiết kế hay không sẽ được kiểm chứng qua các thử nghiệm ở chương tiếp theo.
 
 \end{document}

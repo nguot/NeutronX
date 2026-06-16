@@ -55,7 +55,7 @@ contract FallbackExecutorTest is Test {
         vm.createSelectFork(vm.envString("ALCHEMY_RPC_URL"));
 
         // deploy contracts
-        fillAuction = new FillAuction(treasury, WETH, address(0), 0); // input is WETH → oracle short-circuits 1:1
+        fillAuction = new FillAuction(treasury, WETH, address(0), 0, true); // input is WETH → oracle short-circuits 1:1
         reactor = new PartialFillReactor(
             PERMIT2,
             address(fillAuction),

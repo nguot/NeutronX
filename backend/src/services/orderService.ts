@@ -36,6 +36,38 @@ const ORDER_TYPE_HASH = ethers.utils.keccak256(
   )
 )
 
+// Trufy 3.4: the 8-field PartialFillOrder the SWAPPER's wallet signs in the
+// frontend (DutchAuction.tsx). We verify this signature recovers to
+// order.swapper before cosigning, so the backend never cosigns an order for a
+// victim address the caller doesn't control. (The price-curve fields are
+// cosigner-set and bounded on-chain by the swapper-signed minOutput floor.)
+const SWAPPER_ORDER_TYPE_HASH = ethers.utils.keccak256(
+  ethers.utils.toUtf8Bytes(
+    'PartialFillOrder(' +
+    'address swapper,address inputToken,uint256 inputAmount,' +
+    'address outputToken,uint256 minOutputAmount,' +
+    'uint256 deadline,uint256 nonce,uint16 minFillBps' +
+    ')'
+  )
+)
+
+function swapperDigest(order: CreateOrderRequest['order']): string {
+  const structHash = ethers.utils.keccak256(
+    ethers.utils.defaultAbiCoder.encode(
+      ['bytes32', 'address', 'address', 'uint256', 'address', 'uint256', 'uint256', 'uint256', 'uint16'],
+      [
+        SWAPPER_ORDER_TYPE_HASH,
+        order.swapper, order.inputToken, order.inputAmount,
+        order.outputToken, order.minOutputAmount, order.deadline,
+        order.nonce, order.minFillBps,
+      ]
+    )
+  )
+  return ethers.utils.keccak256(
+    ethers.utils.solidityPack(['string', 'bytes32', 'bytes32'], ['\x19\x01', getDomainSeparator(), structHash])
+  )
+}
+
 // Re-read .env on every call so setup.sh can redeploy contracts without restarting the backend.
 // The contract bakes address(this) into its DOMAIN_SEPARATOR at deploy time — we must match it.
 function getReactorAddress(): string {
@@ -106,6 +138,22 @@ export async function createOrder(dto: CreateOrderRequest): Promise<CreateOrderR
   const preferredAggregator = dto.preferredAggregator || null
   if (preferredAggregator && !getAggregator(preferredAggregator)) {
     throw new Error(`Unknown preferredAggregator '${preferredAggregator}'`)
+  }
+
+  // Trufy 3.4: authenticate the swapper BEFORE cosigning. The order is signed by
+  // the swapper's own wallet in the frontend; require that signature to recover
+  // to order.swapper. Otherwise anyone could POST an order for an arbitrary
+  // victim that has a standing Permit2 allowance and have the backend cosign it
+  // (on-chain only the cosigner sig is checked), forcing an unfavourable swap.
+  if (!dto.signature) throw new Error('Missing swapper signature')
+  let recovered: string
+  try {
+    recovered = ethers.utils.recoverAddress(swapperDigest(order), dto.signature)
+  } catch {
+    throw new Error('Invalid swapper signature')
+  }
+  if (recovered.toLowerCase() !== order.swapper.toLowerCase()) {
+    throw new Error('Order signature does not match swapper')
   }
 
   // Reject orders the swapper can't fulfill — a valid Permit2 approval with zero
@@ -285,10 +333,13 @@ export async function getFillerSwapFills(filler: string) {
   }))
 }
 
-export async function cancelOrder(hash: string, swapper: string): Promise<CancelOrderResponse> {
+// Trufy 3.7: `swapper` is optional. When the caller is already authorized (admin
+// route), it is omitted and no address match is enforced; if provided, the order
+// must belong to that swapper. Either way this only updates backend state.
+export async function cancelOrder(hash: string, swapper?: string): Promise<CancelOrderResponse> {
   const row = await db.query('SELECT swapper, status FROM orders WHERE hash = $1', [hash])
   if (!row.rows.length) throw new Error('Order not found')
-  if (row.rows[0].swapper !== swapper) throw new Error('Not your order')
+  if (swapper !== undefined && row.rows[0].swapper !== swapper) throw new Error('Not your order')
   if (row.rows[0].status !== 'pending' && row.rows[0].status !== 'active') {
     throw new Error('Cannot cancel')
   }

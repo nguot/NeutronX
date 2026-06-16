@@ -1,16 +1,16 @@
 # Graph Report - dex-aggregator  (2026-06-16)
 
 ## Corpus Check
-- 122 files · ~128,470 words
+- 123 files · ~119,769 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 959 nodes · 1302 edges · 73 communities (59 shown, 14 thin omitted)
+- 965 nodes · 1311 edges · 73 communities (59 shown, 14 thin omitted)
 - Extraction: 100% EXTRACTED · 0% INFERRED · 0% AMBIGUOUS · INFERRED: 5 edges (avg confidence: 0.8)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `25c5794c`
+- Built from commit: `99e63fb2`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -48,7 +48,6 @@
 - [[_COMMUNITY_Community 30|Community 30]]
 - [[_COMMUNITY_Community 31|Community 31]]
 - [[_COMMUNITY_Community 32|Community 32]]
-- [[_COMMUNITY_Community 33|Community 33]]
 - [[_COMMUNITY_Community 34|Community 34]]
 - [[_COMMUNITY_Community 35|Community 35]]
 - [[_COMMUNITY_Community 36|Community 36]]
@@ -134,8 +133,8 @@ Cohesion: 0.07
 Nodes (26): author, dependencies, cors, dotenv, ethers, express, pg, @uniswap/sdk-core (+18 more)
 
 ### Community 4 - "Community 4"
-Cohesion: 0.11
-Nodes (23): getAggregator(), router, cancelOrder(), createOrder(), ERC20_ABI, getDomainSeparator(), getOrder(), getOrders() (+15 more)
+Cohesion: 0.07
+Nodes (35): getAggregator(), readEnvFile(), requireAdmin(), router, writeEnvFile(), router, getCredentials(), login() (+27 more)
 
 ### Community 5 - "Community 5"
 Cohesion: 0.09
@@ -249,10 +248,6 @@ Nodes (6): cors(), DECIMALS, json(), PORT, QuoteRequest, SYMBOLS
 Cohesion: 0.22
 Nodes (7): CHAIN_RPCS, INITIAL, useWallet(), Window, Inner(), NAV, Tab
 
-### Community 33 - "Community 33"
-Cohesion: 0.29
-Nodes (8): readEnvFile(), requireAdmin(), router, writeEnvFile(), getCredentials(), login(), tokenFor(), verifyToken()
-
 ### Community 34 - "Community 34"
 Cohesion: 0.22
 Nodes (8): Consumers, Limitations / notes, Order parameter suggestion — `POST /suggest-params`, PRICE gate — anchored to the live market rate, Request / response, SIZE gate — `minFillBps` chosen by a coverage search, The model: a fill happens iff TWO independent gates pass, Why coverage is the constraint
@@ -350,7 +345,7 @@ Cohesion: 0.09
 Nodes (33): AGGREGATORS, availableAggregators(), resolveAggregatorChainId(), CHAIN_NAMES, KyberBuildResponse, KyberRouteResponse, kyberswapAdapter, oneInchAdapter (+25 more)
 
 ## Knowledge Gaps
-- **470 isolated node(s):** `name`, `version`, `description`, `main`, `start` (+465 more)
+- **472 isolated node(s):** `name`, `version`, `description`, `main`, `start` (+467 more)
   These have ≤1 connection - possible missing edges or undocumented components.
 - **14 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
@@ -362,7 +357,7 @@ _Questions this graph is uniquely positioned to answer:_
 - **Why does `db` connect `Community 0` to `Community 4`, `Community 77`?**
   _High betweenness centrality (0.004) - this node is a cross-community bridge._
 - **What connects `name`, `version`, `description` to the rest of the system?**
-  _470 weakly-connected nodes found - possible documentation gaps or missing edges._
+  _472 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `Community 0` be split into smaller, more focused modules?**
   _Cohesion score 0.05040611562350693 - nodes in this community are weakly interconnected._
 - **Should `Community 1` be split into smaller, more focused modules?**

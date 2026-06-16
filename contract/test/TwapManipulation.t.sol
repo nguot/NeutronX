@@ -52,7 +52,7 @@ contract TwapManipulationTest is Test {
 
     function setUp() public {
         vm.createSelectFork(vm.envString("ALCHEMY_RPC_URL"));
-        auction = new FillAuction(treasury, WETH, FACTORY, 60); // 60s TWAP, as deployed
+        auction = new FillAuction(treasury, WETH, FACTORY, 60, false); // 60s TWAP, as deployed
     }
 
     function test_manipulatedTwap_collapsesRequiredCollateral() public {

@@ -503,9 +503,13 @@ export async function updateSlotFiller(orderHash: string, slotIndex: number, fil
 
 // Filler calls this after successfully calling claimSlot() on Chain A.
 // Transitions 'claimed' → 'done' so the dev UI stops showing "Claim WETH".
+// Trufy 3.10: only a 'claimed' slot may move to 'done'. The endpoint is public,
+// so without this guard anyone could mark a still-'available' slot 'done' and
+// hide it from the destination watcher (which only matches 'available' rows),
+// suppressing settlement. The WHERE clause makes that a no-op.
 export async function markSlotDone(orderHash: string, slotIndex: number): Promise<void> {
   await db.query(
-    "UPDATE cc_slots SET status='done' WHERE order_hash=$1 AND slot_index=$2",
+    "UPDATE cc_slots SET status='done' WHERE order_hash=$1 AND slot_index=$2 AND status='claimed'",
     [orderHash, slotIndex]
   )
 }

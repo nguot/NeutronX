@@ -37,7 +37,7 @@ abstract contract AdversarialBase is Test {
 
     function _deployCore() internal {
         permit2 = new MockPermit2();
-        auction = new FillAuction(treasury, address(0), address(0), 0); // oracle-disabled (notional == fill)
+        auction = new FillAuction(treasury, address(0), address(0), 0, true); // oracle-disabled (notional == fill)
         reactor = new PartialFillReactor(address(permit2), address(auction), cosigner);
         auction.setReactor(address(reactor));
         reactor.setFallbackExecutor(fallbackExec);

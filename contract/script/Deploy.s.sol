@@ -31,7 +31,7 @@ contract Deploy is Script {
         vm.startBroadcast(deployerKey);
 
         // 1. Deploy FillAuction
-        FillAuction fillAuction = new FillAuction(deployer, WETH, UNIV3_FACTORY, TWAP_WINDOW);
+        FillAuction fillAuction = new FillAuction(deployer, WETH, UNIV3_FACTORY, TWAP_WINDOW, false);
         console.log("FillAuction:        ", address(fillAuction));
 
         // 2. Deploy PartialFillReactor

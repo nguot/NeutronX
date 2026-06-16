@@ -35,7 +35,7 @@ contract FrontRunGriefingTest is Test {
 
     function setUp() public {
         permit2 = new MockPermit2();
-        auction = new FillAuction(treasury, address(0), address(0), 0); // oracle-disabled (1:1) mode
+        auction = new FillAuction(treasury, address(0), address(0), 0, true); // oracle-disabled (1:1) mode
         inputToken = new MockERC20("USDC", "USDC");
         outputToken = new MockERC20("WETH", "WETH");
 

@@ -47,6 +47,18 @@ contract FillAuction is IFillAuction, ReentrancyGuard {
     address public immutable uniV3Factory;
     uint32  public immutable twapWindow;
 
+    // Trufy 3.6: oracle-disabled mode (raw amount treated as ETH notional) must
+    // be chosen EXPLICITLY at deploy time via this flag. When false, the
+    // constructor rejects a zero oracle config, so a production deployment can
+    // never SILENTLY fall back to mispriced raw units through a misconfiguration.
+    bool public immutable oracleDisabled;
+
+    // Trufy 3.1: absolute floor (in wei) on required collateral, owner-settable,
+    // default 0. A short-horizon TWAP can be pushed down to undercut the stake;
+    // this floor bounds the worst case so a manipulated quote cannot drive the
+    // required stake to near-zero. Applied in register() and previewCollateral().
+    uint256 public minCollateral;
+
     // collateralRate[orderSizeBucket], in bps of fillAmount(ceiling). Sizes
     // registration-time collateral. No fill-ratio dimension, so collateral
     // is linear in the registered ceiling - a larger ceiling is never
@@ -80,13 +92,25 @@ contract FillAuction is IFillAuction, ReentrancyGuard {
         _;
     }
 
-    constructor(address _treasury, address _weth, address _uniV3Factory, uint32 _twapWindow) {
+    constructor(address _treasury, address _weth, address _uniV3Factory, uint32 _twapWindow, bool _oracleDisabled) {
         require(_treasury != address(0), "zero treasury");
-        treasury     = _treasury;
-        owner        = msg.sender;
-        weth         = _weth;
-        uniV3Factory = _uniV3Factory;
-        twapWindow   = _twapWindow;
+        // Trufy 3.6: fail closed on a half/zero oracle config unless oracle-disabled
+        // mode was deliberately requested. The TWAP path only runs when
+        // uniV3Factory != 0 (see DynamicStakeLib), so that is the switch that must
+        // be intentional.
+        if (_oracleDisabled) {
+            require(_uniV3Factory == address(0), "disabled needs zero factory");
+        } else {
+            require(_weth         != address(0), "zero weth");
+            require(_uniV3Factory != address(0), "zero univ3 factory");
+            require(_twapWindow    > 0,          "zero twap window");
+        }
+        treasury       = _treasury;
+        owner          = msg.sender;
+        weth           = _weth;
+        uniV3Factory   = _uniV3Factory;
+        twapWindow     = _twapWindow;
+        oracleDisabled = _oracleDisabled;
 
         // Default collateralRate[orderSizeBucket], in bps of fillAmount.
         // Taken from the original 2D design's "10-30% fill" row - a
@@ -129,6 +153,11 @@ contract FillAuction is IFillAuction, ReentrancyGuard {
         refundTable[sBucket][rBucket] = value;
     }
 
+    // Trufy 3.1: set the absolute collateral floor (wei). Owner-only.
+    function setMinCollateral(uint256 value) external onlyOwner {
+        minCollateral = value;
+    }
+
     /// D-1: exact ETH collateral a filler must stake for `fillAmount` of an order
     /// with this `inputToken`/`feeTier`/`deadline`. Off-chain clients call this
     /// instead of re-deriving the TWAP, then send it as msg.value to reactor.register.
@@ -141,7 +170,8 @@ contract FillAuction is IFillAuction, ReentrancyGuard {
         uint256 notionalEth = DynamicStakeLib.toEthNotional(
             fillAmount, inputToken, feeTier, weth, uniV3Factory, twapWindow
         );
-        return DynamicStakeLib.computeCollateral(notionalEth, deadline, collateralRate);
+        uint256 required = DynamicStakeLib.computeCollateral(notionalEth, deadline, collateralRate);
+        return required < minCollateral ? minCollateral : required;   // Trufy 3.1 floor
     }
 
     function register(
@@ -169,6 +199,7 @@ contract FillAuction is IFillAuction, ReentrancyGuard {
             fillAmount, inputToken, feeTier, weth, uniV3Factory, twapWindow
         );
         uint256 required = DynamicStakeLib.computeCollateral(notionalEth, deadline, collateralRate);
+        if (required < minCollateral) required = minCollateral;   // Trufy 3.1: absolute floor
         require(msg.value >= required,           "insufficient stake");
         require(required  <= type(uint128).max,  "stake too large");
 

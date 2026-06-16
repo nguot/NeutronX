@@ -67,9 +67,18 @@ contract EscrowSrc {
     bool    private _initialized;
     uint8   private _mutex;    // reentrancy guard: 0 = free, 1 = locked
 
+    // Trufy 3.3: pull-payment fallback for the native-ETH safety deposit. If a
+    // push to filler/swapper fails (recipient is a contract that rejects ETH),
+    // the amount is credited here instead of reverting, so token settlement and
+    // cancellation can NEVER be bricked by a non-payable recipient. The owed
+    // party withdraws it later via claimEth().
+    mapping(address => uint256) public pendingEth;
+
     // ── Events ─────────────────────────────────────────────────────────────────
     event Withdrawn(address indexed filler, bytes32 secret);
     event Cancelled(address indexed swapper, uint256 amount, address indexed canceller, uint256 safetyDeposit);
+    event EthCredited(address indexed owed, uint256 amount);
+    event EthClaimed(address indexed owed, address indexed to, uint256 amount);
 
     // ── Modifiers ──────────────────────────────────────────────────────────────
     modifier nonReentrant() {
@@ -132,10 +141,7 @@ contract EscrowSrc {
 
         claimed = true;
         IERC20(token).safeTransfer(filler, amount);
-        if (safetyDeposit > 0) {
-            (bool ok, ) = filler.call{value: safetyDeposit}("");
-            require(ok, "deposit transfer failed");
-        }
+        if (safetyDeposit > 0) _payEth(filler, safetyDeposit);
         emit Withdrawn(filler, secret);
     }
 
@@ -159,10 +165,41 @@ contract EscrowSrc {
             // escrow and reclaim the deposit — making slot grief-jamming cost only
             // gas. Routing it to the swapper removes that reclaim loophole and
             // compensates the swapper for the capital lock-up.
-            (bool ok, ) = swapper.call{value: safetyDeposit}("");
-            require(ok, "deposit transfer failed");
+            // Trufy 3.3: pull-payment so a swapper that rejects ETH can't make
+            // cancel() (and thus the slot) permanently stuck.
+            _payEth(swapper, safetyDeposit);
         }
         emit Cancelled(swapper, amount, msg.sender, safetyDeposit);
+    }
+
+    // ── ETH payout (pull-payment) ───────────────────────────────────────────────
+    /**
+     * Trufy 3.3: try to push `amt` to `to`; if the send fails (non-payable
+     * recipient), credit it as a claimable balance instead of reverting. Called
+     * only from within the nonReentrant withdraw()/cancel(), so the mutex is held
+     * during the external call.
+     */
+    function _payEth(address to, uint256 amt) private {
+        (bool ok, ) = to.call{value: amt}("");
+        if (!ok) {
+            pendingEth[to] += amt;
+            emit EthCredited(to, amt);
+        }
+    }
+
+    /**
+     * Withdraw any ETH credited to msg.sender by a failed safety-deposit push
+     * (Trufy 3.3). Optionally routes to a different payable `to`, so a contract
+     * that can't receive ETH directly can still recover the funds.
+     */
+    function claimEth(address to) external nonReentrant {
+        require(to != address(0), "zero to");
+        uint256 amt = pendingEth[msg.sender];
+        require(amt > 0, "nothing to claim");
+        pendingEth[msg.sender] = 0;
+        (bool ok, ) = to.call{value: amt}("");
+        require(ok, "eth claim failed");
+        emit EthClaimed(msg.sender, to, amt);
     }
 
     // ── status ─────────────────────────────────────────────────────────────────

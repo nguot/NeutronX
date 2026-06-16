@@ -57,7 +57,7 @@
 
 \addbibresource{Danh_sach_tai_lieu_tham_khao.bib} % chèn file chứa danh mục tài liệu tham khảo vào 
 
-\include{lstlisting} % Phần này cho phép chèn code và formatting code như C, C++, Python
+\input{lstlisting} % Phần này cho phép chèn code và formatting code (cấu hình listings)
 
 \input{Tu_viet_tat}
 
@@ -72,7 +72,7 @@
 
 \setlength{\headheight}{10pt}
 
-\def \TITLE{Xây dựng hệ thống tổng hợp giao dịch phi tập trung hỗ trợ khớp lệnh từng phần và giao dịch xuyên chuỗi}
+\def \TITLE{Ứng dụng DEX aggregator sử dụng kiến trúc intent solver}
 \def \AUTHOR{Vũ Tiến An Nguyên}
 
 % ===================================================
@@ -181,9 +181,10 @@
 \pagenumbering{gobble}
 \subfile{Chuong/0_3_Tom_tat_noi_dung.tex}
 
-\newpage
-\pagenumbering{gobble}
-\subfile{Chuong/0_4_Tom_tat_noi_dung_English.tex}
+% Tóm tắt tiếng Anh đã được bỏ theo yêu cầu.
+% \newpage
+% \pagenumbering{gobble}
+% \subfile{Chuong/0_4_Tom_tat_noi_dung_English.tex}
 
 % ===================================================
 % \pagestyle{empty} % Header và footer rỗng
@@ -263,39 +264,33 @@
 %\fancyhead[LE]{\rightmark}
 \fancyfoot[RE, LO]{\thepage}
 
+% ===== KHUNG 5 CHƯƠNG MỚI (contract-centric) =====
 \chapter{GIỚI THIỆU ĐỀ TÀI}
 \label{chapter:Introduction}
-\subfile{Chuong/1_Gioi_thieu} % Phần mở đầu
+\subfile{Chuong/1_Gioi_thieu} % Chương 1 — đã viết lại
 
 \newpage
-%\pagestyle{fancy} % Áp dụng header và footer
-\chapter{KHẢO SÁT VÀ PHÂN TÍCH YÊU CẦU}
+\chapter{BỐI CẢNH VÀ ĐỀ XUẤT GIẢI PHÁP}
 \label{chapter:Related_works}
-\subfile{Chuong/2_Khao_sat}
-
-
-\newpage
-%\pagestyle{fancy} % Áp dụng header và footer
-\chapter{NỀN TẢNG LÝ THUYẾT VÀ CÔNG NGHỆ SỬ DỤNG}
-\label{chapter:Methodology}
-\subfile{Chuong/3_Cong_nghe}
+\subfile{Chuong/2_Khao_sat} % Chương 2 — đã viết lại (gộp khảo sát + đề xuất)
 
 \newpage
-%\pagestyle{fancy} % Áp dụng header và footer
-\chapter{PHÂN TÍCH THIẾT KẾ, TRIỂN KHAI VÀ ĐÁNH GIÁ HỆ THỐNG}
+\chapter{THIẾT KẾ VÀ HIỆN THỰC HỢP ĐỒNG THÔNG MINH}
 \label{chapter:Experiment}
-\subfile{Chuong/4_Ket_qua_thuc_nghiem}
+\subfile{Chuong/4_Ket_qua_thuc_nghiem} % Chương 3 — TODO: viết lại nội dung theo outline mới
 
 \newpage
-%\pagestyle{fancy} % Áp dụng header và footer
-\chapter{CÁC GIẢI PHÁP VÀ ĐÓNG GÓP NỔI BẬT}
-\label{chapter:SolutionAndContribution}
-\subfile{Chuong/5_Giai_phap_dong_gop}
+\chapter{KIỂM THỬ VÀ RÀ SOÁT BẢO MẬT}
+\label{chapter:Methodology}
+\subfile{Chuong/4_Kiem_thu} % Chương 4 — TODO: viết nội dung kiểm thử + audit
+
 \newpage
-%\pagestyle{fancy} % Áp dụng header và footer
-\chapter{KẾT LUẬN VÀ HƯỚNG PHÁT TRIỂN} %Kết luận và hướng phát triển}
+\chapter{KẾT LUẬN VÀ HƯỚNG PHÁT TRIỂN}
 \label{chapter:conclusion}
-\subfile{Chuong/6_Ket_luan}
+\subfile{Chuong/6_Ket_luan} % Chương 5 — TODO: cập nhật theo outline mới
+
+% Chương lý thuyết cũ (3_Cong_nghe) -> chuyển nội dung xuống PHỤ LỤC khi viết tiếp.
+% Chương "Các giải pháp và đóng góp" cũ (5_Giai_phap_dong_gop) -> đã GỘP vào Chương 2.
 
 \newpage
 %\pagestyle{fancy} % Áp dụng header và footer
@@ -326,9 +321,10 @@
     {{\bfseries{\scshape} \thecontentslabel.\ }} % numbered format
     {}         % unnumbered format
     {\titlerule*[0.3pc]{.}\contentspage}         % filler-page-format, e.g dots
-\chapter{HƯỚNG DẪN VIẾT ĐỒ ÁN TỐT NGHIỆP}
-\subfile{Chuong/Phu_luc_A}
-\newpage
+% Phụ lục "Hướng dẫn viết đồ án" của template đã được bỏ (chỉ là boilerplate).
+% \chapter{HƯỚNG DẪN VIẾT ĐỒ ÁN TỐT NGHIỆP}
+% \subfile{Chuong/Phu_luc_A}
+% \newpage
 \chapter{ĐẶC TẢ USE CASE}
 \subfile{Chuong/Phu_luc_B}
 \end{document}

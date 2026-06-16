@@ -14,12 +14,18 @@ const REACTOR_ABI = [
   'function remainingInput(bytes32 orderHash, uint256 orderAmount) view returns (uint256)'
 ]
 
+// Trufy 3.8: must match PartialFillReactor.ORDER_TYPE_HASH (and orderService)
+// EXACTLY — the canonical 11-field type that includes the price curve. The old
+// 8-field hash produced a different orderHash, so remainingInput() was queried
+// against the wrong accounting slot and partially-filled orders were quoted at
+// full size.
 const ORDER_TYPE_HASH = ethers.utils.keccak256(
   ethers.utils.toUtf8Bytes(
     'PartialFillOrder(' +
     'address swapper,address inputToken,uint256 inputAmount,' +
     'address outputToken,uint256 minOutputAmount,' +
-    'uint256 deadline,uint256 nonce,uint16 minFillBps' +
+    'uint256 deadline,uint256 nonce,uint16 minFillBps,' +
+    'uint128 startPrice,uint32 decayPerBlock,uint24 feeTier' +
     ')'
   )
 )
@@ -27,9 +33,10 @@ const ORDER_TYPE_HASH = ethers.utils.keccak256(
 function computeOrderHash(order: any): string {
   return ethers.utils.keccak256(
     ethers.utils.defaultAbiCoder.encode(
-      ['bytes32','address','address','uint256','address','uint256','uint256','uint256','uint16'],
+      ['bytes32','address','address','uint256','address','uint256','uint256','uint256','uint16','uint128','uint32','uint24'],
       [ORDER_TYPE_HASH, order.swapper, order.input_token, order.input_amount,
-       order.output_token, order.min_output, order.deadline, order.nonce, order.min_fill_bps]
+       order.output_token, order.min_output, order.deadline, order.nonce, order.min_fill_bps,
+       order.start_price, order.decay_per_block, order.fee_tier]
     )
   )
 }

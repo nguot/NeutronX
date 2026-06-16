@@ -1,0 +1,15 @@
+[0] Config.pm:328> INFO - This is Biber 2.21
+[0] Config.pm:331> INFO - Logfile is 'DoAn.blg'
+[95] biber-MSWIN64:342> INFO - === 
+[133] Biber.pm:421> INFO - Reading 'DoAn.bcf'
+[232] Biber.pm:1002> INFO - Found 7 citekeys in bib section 0
+[244] Biber.pm:4487> INFO - Processing section 0
+[254] Biber.pm:4678> INFO - Looking for bibtex file 'Danh_sach_tai_lieu_tham_khao.bib' for section 0
+[312] bibtex.pm:1713> INFO - LaTeX decoding ...
+[320] bibtex.pm:1519> INFO - Found BibTeX data source 'Danh_sach_tai_lieu_tham_khao.bib'
+[371] UCollate.pm:68> INFO - Overriding locale 'en-US' defaults 'normalization = NFD' with 'normalization = prenormalized'
+[371] UCollate.pm:68> INFO - Overriding locale 'en-US' defaults 'variable = shifted' with 'variable = non-ignorable'
+[372] Biber.pm:4307> INFO - Sorting list 'none/global//global/global/global' of type 'entry' with template 'none' and locale 'en-US'
+[372] Biber.pm:4313> INFO - No sort tailoring available for locale 'en-US'
+[380] bbl.pm:676> INFO - Writing 'DoAn.bbl' with encoding 'UTF-8'
+[383] bbl.pm:779> INFO - Output to DoAn.bbl

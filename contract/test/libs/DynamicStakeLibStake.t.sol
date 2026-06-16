@@ -38,7 +38,7 @@ contract DynamicStakeLibStakeTest is Test {
             }
         }
 
-        FillAuction auction = new FillAuction(makeAddr("treasury"), address(0), address(0), 0);
+        FillAuction auction = new FillAuction(makeAddr("treasury"), address(0), address(0), 0, true);
         for (uint8 s = 0; s < 4; s++) {
             liveCollateralRate[s] = auction.collateralRate(s);
             for (uint8 r = 0; r < 5; r++) {

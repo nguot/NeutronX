@@ -78,7 +78,7 @@ contract FillAuctionTest is Test {
 
     function setUp() public {
         reactor = new MockReactor();
-        auction = new FillAuction(treasury, address(0), address(0), 0); // oracle-disabled (1:1) mode
+        auction = new FillAuction(treasury, address(0), address(0), 0, true); // oracle-disabled (1:1) mode
         auction.setReactor(address(reactor));
         reactor.setAuction(address(auction));
 

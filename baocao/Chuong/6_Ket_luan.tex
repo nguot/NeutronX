@@ -1,12 +1,42 @@
 \documentclass[../DoAn.tex]{subfiles}
 \begin{document}
-\section{Kết luận}
-Sinh viên so sánh kết quả nghiên cứu hoặc sản phẩm của mình với các nghiên cứu hoặc sản phẩm tương tự.
 
-Sinh viên phân tích trong suốt quá trình thực hiện ĐATN, mình đã làm được gì, chưa làm được gì, các đóng góp nổi bật là gì, và tổng hợp những bài học kinh nghiệm rút ra nếu có.
+\section{Kết luận}
+\label{sec:concl}
+
+Đồ án đã xây dựng được hệ thống NeutronX, một ứng dụng tổng hợp giao dịch phi tập trung theo kiến trúc intent solver, và kiểm chứng nó trên môi trường mạng giả lập. So với năm mục tiêu đặt ra ở mục~\ref{subsection:1.2.1}, kết quả đạt được như Bảng~\ref{table:goals}.
+
+\begin{table}[H]
+    \centering
+    \caption{Đối chiếu kết quả với các mục tiêu ban đầu.}
+    \label{table:goals}
+    \begin{tabular}{|p{6cm}|p{7cm}|}
+        \hline
+        \textbf{Mục tiêu} & \textbf{Kết quả} \\
+        \hline
+        Khớp lệnh từng phần theo đấu giá Hà Lan & Đã cài đặt trong \texttt{PartialFillReactor}, mỗi phần tính giá độc lập, đã kiểm thử. \\
+        \hline
+        Ký lệnh ngoài chuỗi bằng EIP-712 và Permit2 & Đã làm; người dùng ký bằng ví, không tốn phí gas khi tạo lệnh. \\
+        \hline
+        Đặt cọc và phạt ràng buộc filler & Đã cài đặt trong \texttt{FillAuction}, phân biệt được filler thua cuộc và filler bỏ dở. \\
+        \hline
+        Cơ chế dự phòng đảm bảo lệnh hoàn tất & Đã cài đặt trong \texttt{FallbackExecutor}, hỗ trợ Uniswap và KyberSwap. \\
+        \hline
+        Giao dịch xuyên chuỗi không cầu nối, khớp từng phần & Đã cài đặt theo mô hình ký quỹ riêng mỗi slot, chạy đầu cuối thành công với hai filler. \\
+        \hline
+    \end{tabular}
+\end{table}
+
+Như vậy, cả năm mục tiêu đều đã đạt được ở mức cài đặt và kiểm thử trên môi trường giả lập. Đóng góp đáng kể nhất của đồ án là cơ chế đặt cọc và phạt ràng buộc filler, và phần giao dịch xuyên chuỗi có hỗ trợ khớp từng phần - hai điểm mà các hệ thống đã khảo sát ít làm. Qua quá trình thực hiện, em cũng rút ra được nhiều kinh nghiệm về lập trình hợp đồng thông minh, đặc biệt là việc một sai sót nhỏ trong logic cũng có thể dẫn tới mất tài sản, nên việc kiểm thử kỹ và rà soát bảo mật là rất quan trọng.
+
+\section{Hạn chế}
+\label{sec:limitations}
+
+Bên cạnh các kết quả trên, đồ án vẫn còn một số hạn chế. Thứ nhất, hệ thống mới chỉ chạy trên mạng giả lập, chưa được triển khai lên mạng chính thức. Thứ hai, các filler trong kiểm thử được cấp vốn lớn nên đồ án mới kiểm chứng được tính đúng của các luồng, chưa mô phỏng được sự cạnh tranh kinh tế thật khi vốn có hạn; ngoài ra cũng chưa có thanh khoản và người dùng thật. Thứ ba, một số chỗ trong thiết kế còn mang tính tập trung, đáng kể nhất là khóa đồng ký (cosigner) hiện do một bên duy nhất giữ. Thứ tư, phần xuyên chuỗi mới làm cho hai chuỗi tương thích EVM, và cơ chế dự phòng mới hỗ trợ hai sàn là Uniswap và KyberSwap.
 
 \section{Hướng phát triển}
-Trong phần này, sinh viên trình bày định hướng công việc trong tương lai để hoàn thiện sản phẩm hoặc nghiên cứu của mình.
+\label{sec:future}
 
-Trước tiên, sinh viên trình bày các công việc cần thiết để hoàn thiện các chức năng/nhiệm vụ đã làm. Sau đó sinh viên phân tích các hướng đi mới cho phép cải thiện và nâng cấp các chức năng/nhiệm vụ đã làm.
+Từ các hạn chế trên, đồ án có thể được phát triển tiếp theo nhiều hướng. Trước hết là triển khai hệ thống lên mạng thử nghiệm rồi tiến tới mạng chính thức, kèm theo một đợt kiểm toán bảo mật do chuyên gia thực hiện. Tiếp theo, có thể phân tán vai trò cosigner cho nhiều bên thay vì một khóa duy nhất, để giảm sự phụ thuộc tập trung. Phần tính cọc theo giá có thể được làm chặt hơn bằng cách kéo dài cửa sổ lấy giá trung bình và kết hợp thêm một nguồn giá độc lập. Cơ chế dự phòng có thể bổ sung thêm các bộ chuyển đổi cho những sàn khác như 1inch hay 0x. Cuối cùng, phần xuyên chuỗi có thể mở rộng ra nhiều hơn hai chuỗi.
+
 \end{document}

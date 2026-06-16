@@ -76,12 +76,20 @@ export function startEscrowDstWatcher(opts: EscrowDstWatcherOpts): void {
   // per new block number in a burst — overlapping async handlers would all read
   // the same stale lastBlock and re-query/re-process the same EscrowCreated event
   // (and re-call claim() on an already-settled escrow). Drain sequentially instead.
+  // Trufy 3.9: re-scan a trailing window of recently-seen blocks on every drain,
+  // not just the strictly-new range. EscrowCreated events for slots that weren't
+  // settleable on the first pass (source filler not yet indexed, a transient
+  // claim failure rolled back by 3.11, etc.) are therefore reprocessed instead of
+  // being dropped forever once the checkpoint advances past them. handleEscrow is
+  // idempotent — it early-returns for non-'available' slots and rechecks
+  // claimed()/refunded() — so reprocessing a settled escrow is a cheap no-op.
+  const RESCAN_LAG = 30
   async function drain() {
     if (draining) return
     draining = true
     try {
       while (lastBlock >= 0 && latestSeen > lastBlock) {
-        const fromBlock = lastBlock + 1
+        const fromBlock = Math.max(0, lastBlock + 1 - RESCAN_LAG)
         const toBlock   = latestSeen
         try {
           const logs = await factory.queryFilter(factory.filters.EscrowCreated(), fromBlock, toBlock)
@@ -272,11 +280,24 @@ async function handleEscrow(
   // Queued per (label, cosigner): send + wait must complete before the next claim()
   // from this wallet on this chain is sent, so each one picks up the correctly
   // incremented nonce.
-  const tx = await withCosignerQueue(`${label}:${cosignerWallet.address}`, async () => {
-    const sent = await escrow.connect(cosignerWallet).claim(secret)
-    await sent.wait()
-    return sent
-  })
+  //
+  // Trufy 3.11: if the claim send/confirmation fails, the slot must NOT stay
+  // stranded in 'locked' (findSlotByHashlock only matches 'available', so it
+  // could never be retried). Roll it back to 'available' and rethrow so the
+  // drain loop logs it; the escrow is still on-chain and will be re-processed
+  // on the next rescan pass (Trufy 3.9).
+  let tx
+  try {
+    tx = await withCosignerQueue(`${label}:${cosignerWallet.address}`, async () => {
+      const sent = await escrow.connect(cosignerWallet).claim(secret)
+      await sent.wait()
+      return sent
+    })
+  } catch (e) {
+    await updateSlotStatus(match.order_hash, match.slot_index, 'available', escrowAddr)
+    console.error(`[${label}] claim failed for slot ${match.slot_index} — rolled back to available for retry`)
+    throw e
+  }
 
   await updateSlotStatus(match.order_hash, match.slot_index, 'claimed', escrowAddr)
   console.log(`[${label}] ✔ claimed  slot=${match.slot_index}  tx=${tx.hash}`)

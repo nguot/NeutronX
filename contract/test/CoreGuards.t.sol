@@ -45,7 +45,7 @@ contract CoreGuardsTest is AdversarialBase {
 
     function test_setReactor_revert_zero() public {
         // A fresh auction has no reactor yet, so we reach the zero-address guard.
-        FillAuction fresh = new FillAuction(treasury, address(0), address(0), 0);
+        FillAuction fresh = new FillAuction(treasury, address(0), address(0), 0, true);
         vm.expectRevert("zero reactor");
         fresh.setReactor(address(0));
     }

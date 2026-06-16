@@ -17,7 +17,7 @@ contract TwapCollateralTest is Test {
 
     function setUp() public {
         vm.createSelectFork(vm.envString("ALCHEMY_RPC_URL"));
-        auction = new FillAuction(treasury, WETH, FACTORY, 60); // 60s TWAP
+        auction = new FillAuction(treasury, WETH, FACTORY, 60, false); // 60s TWAP
     }
 
     /// WETH input short-circuits the oracle: notional == fillAmount.

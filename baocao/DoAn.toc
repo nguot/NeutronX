@@ -1,0 +1,49 @@
+\ttl@change@i {\@ne }{chapter}{0.0cm}{\bfseries \vspace {0.3cm}}{{\bfseries {\scshape } CHƯƠNG \thecontentslabel .\ }}{}{\titlerule *[0.3pc]{.}\contentspage }\relax 
+\ttl@change@v {chapter}{}{}{}\relax 
+\ttl@change@i {\@ne }{section}{0.0cm}{\vspace {0.3cm}}{\thecontentslabel \ }{}{\titlerule *[0.3pc]{.}\contentspage }\relax 
+\ttl@change@v {section}{}{}{}\relax 
+\ttl@change@i {\@ne }{subsection}{1.0cm}{\vspace {0.3cm}}{\thecontentslabel \ }{}{\titlerule *[0.3pc]{.}\contentspage }\relax 
+\ttl@change@v {subsection}{}{}{}\relax 
+\thispagestyle {empty}
+\contentsline {chapter}{\numberline {1}GIỚI THIỆU ĐỀ TÀI}{1}{chapter.1}%
+\contentsline {section}{\numberline {1.1}Đặt vấn đề}{1}{section.1.1}%
+\contentsline {section}{\numberline {1.2}Mục tiêu, phạm vi và giới hạn}{2}{section.1.2}%
+\contentsline {subsection}{\numberline {1.2.1}Mục tiêu}{2}{subsection.1.2.1}%
+\contentsline {subsection}{\numberline {1.2.2}Phạm vi}{2}{subsection.1.2.2}%
+\contentsline {subsection}{\numberline {1.2.3}Giới hạn}{3}{subsection.1.2.3}%
+\contentsline {section}{\numberline {1.3}Định hướng giải pháp}{3}{section.1.3}%
+\contentsline {section}{\numberline {1.4}Bố cục đồ án}{3}{section.1.4}%
+\contentsline {chapter}{\numberline {2}BỐI CẢNH VÀ ĐỀ XUẤT GIẢI PHÁP}{5}{chapter.2}%
+\contentsline {section}{\numberline {2.1}Quá trình phát triển của Uniswap và chỗ còn thiếu}{5}{section.2.1}%
+\contentsline {section}{\numberline {2.2}Tổng quan hệ thống NeutronX và mô hình lệnh}{6}{section.2.2}%
+\contentsline {section}{\numberline {2.3}Khớp lệnh từng phần theo đấu giá kiểu Hà Lan}{6}{section.2.3}%
+\contentsline {section}{\numberline {2.4}Đặt cọc và phạt}{7}{section.2.4}%
+\contentsline {section}{\numberline {2.5}Cơ chế dự phòng}{8}{section.2.5}%
+\contentsline {section}{\numberline {2.6}Giao dịch xuyên chuỗi không sử dụng cầu nối}{9}{section.2.6}%
+\contentsline {section}{\numberline {2.7}Đánh đổi trong thiết kế}{11}{section.2.7}%
+\contentsline {chapter}{\numberline {3}THIẾT KẾ VÀ HIỆN THỰC HỢP ĐỒNG THÔNG MINH}{12}{chapter.3}%
+\contentsline {section}{\numberline {3.1}Kiến trúc tổng thể và luồng giao dịch}{12}{section.3.1}%
+\contentsline {section}{\numberline {3.2}Mô hình dữ liệu lệnh}{13}{section.3.2}%
+\contentsline {section}{\numberline {3.3}Hợp đồng PartialFillReactor}{14}{section.3.3}%
+\contentsline {section}{\numberline {3.4}Hợp đồng FillAuction}{15}{section.3.4}%
+\contentsline {section}{\numberline {3.5}Hợp đồng FallbackExecutor}{16}{section.3.5}%
+\contentsline {section}{\numberline {3.6}Các hợp đồng cho giao dịch xuyên chuỗi}{17}{section.3.6}%
+\contentsline {section}{\numberline {3.7}Backend và Frontend}{18}{section.3.7}%
+\contentsline {chapter}{\numberline {4}KIỂM THỬ VÀ RÀ SOÁT BẢO MẬT}{19}{chapter.4}%
+\contentsline {section}{\numberline {4.1}Phương pháp và môi trường kiểm thử}{19}{section.4.1}%
+\contentsline {section}{\numberline {4.2}Kết quả kiểm thử chức năng}{19}{section.4.2}%
+\contentsline {section}{\numberline {4.3}Kiểm thử đối kháng, bất biến và sinh ngẫu nhiên}{21}{section.4.3}%
+\contentsline {section}{\numberline {4.4}Rà soát bảo mật}{23}{section.4.4}%
+\contentsline {section}{\numberline {4.5}Kết luận chương}{23}{section.4.5}%
+\contentsline {chapter}{\numberline {5}KẾT LUẬN VÀ HƯỚNG PHÁT TRIỂN}{25}{chapter.5}%
+\contentsline {section}{\numberline {5.1}Kết luận}{25}{section.5.1}%
+\contentsline {section}{\numberline {5.2}Hạn chế}{25}{section.5.2}%
+\contentsline {section}{\numberline {5.3}Hướng phát triển}{26}{section.5.3}%
+\contentsline {chapter}{TÀI LIỆU THAM KHẢO}{29}{section*.25}%
+\contentsline {chapter}{PHỤ LỤC}{31}{section*.26}%
+\ttl@change@i {\@ne }{chapter}{0.0cm}{\bfseries \vspace {0.3cm}}{{\bfseries {\scshape } \thecontentslabel .\ }}{}{\titlerule *[0.3pc]{.}\contentspage }\relax 
+\ttl@change@v {chapter}{}{}{}\relax 
+\contentsline {chapter}{\numberline {A}ĐẶC TẢ USE CASE}{31}{appendix.1.A}%
+\contentsline {section}{\numberline {A.1}Đặc tả use case ``Thống kê tình hình mượn sách''}{31}{section.1.A.1}%
+\contentsline {section}{\numberline {A.2}Đặc tả use case ``Đăng ký làm thẻ mượn''}{31}{section.1.A.2}%
+\contentsfinish 
