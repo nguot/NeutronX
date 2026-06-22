@@ -1,7 +1,7 @@
 \documentclass[../DoAn.tex]{subfiles}
 \begin{document}
 
-Với một hệ thống giữ tài sản của người dùng, kiểm thử không dừng ở mức ``chạy được'' --- cần chứng minh được rằng các tính chất an toàn giữ nguyên ngay cả khi bị tấn công. Chương này trình bày cách đồ án tổ chức kiểm thử theo từng tính chất cụ thể, rồi tóm tắt kết quả rà soát bảo mật độc lập từ Trufy~\cite{trufy2026}.
+Với một hệ thống giữ tài sản của người dùng, kiểm thử không dừng ở mức ``chạy được'' --- hệ thống cần chứng minh được rằng các tính chất an toàn giữ nguyên ngay cả khi bị tấn công. Chương này trình bày cách đồ án tổ chức kiểm thử theo từng tính chất cụ thể, rồi tóm tắt kết quả rà soát bảo mật độc lập từ Trufy~\cite{trufy2026}.
 
 \section{Phương pháp và môi trường kiểm thử}
 \label{sec:test-env}
@@ -159,7 +159,7 @@ assertGe(usdc.balanceOf(swapper), 9_000e6); // tong nguoi dung nhan >= san ca le
 
 Bot trích xuất được phần chênh giữa giá thị trường lúc nó khớp và mức sàn --- khoảng vài trăm USDC. Nếu bot chờ thêm đến khi giá rơi dưới 4\,500~USDC thì giao dịch bị từ chối, như kiểm thử \tcode{test_lateFill_belowFloor_reverts} xác nhận. Kiểm thử \tcode{test_registerThenAbandon_isSlashed_noProfit} kiểm thêm: đăng ký rồi bỏ dở không giúp bot thu lợi mà còn khiến bot bị phạt mất cọc.
 
-Hệ thống không loại bỏ hoàn toàn MEV --- bot vẫn kiếm được một ít trong khoảng người dùng đã chấp nhận. Đây là giới hạn thiết kế được bàn thêm ở mục~\ref{sec:test-coverage}.
+Hệ thống không loại bỏ hoàn toàn MEV --- bot vẫn kiếm được một phần trong biên độ giá người dùng đã chấp nhận. Đây là giới hạn thiết kế được bàn thêm ở mục~\ref{sec:test-coverage}.
 
 \subsection{Ngăn khớp trùng và bảo đảm hoàn tất lệnh}
 
@@ -230,12 +230,12 @@ Trufy ghi nhận 8 phát hiện: 3 mức cao, 4 mức trung bình, 1 mức thấ
 \subsection{Phát hiện đã khắc phục}
 
 \textbf{3.2 --- Token fee-on-transfer (Cao).}
-Hợp đồng cũ kiểm tra mức sàn output dựa trên \emph{số danh nghĩa} mà nó yêu cầu filler chuyển, chứ không phải số người dùng thực nhận; một token tự trừ phí khi chuyển sẽ làm người dùng nhận dưới sàn mà giao dịch vẫn lọt.
+Hợp đồng cũ kiểm tra mức sàn output dựa trên \emph{số danh nghĩa} mà nó yêu cầu filler chuyển, chứ không phải số người dùng thực nhận; một token tự trừ phí khi chuyển sẽ làm người dùng nhận dưới sàn mà giao dịch vẫn lọt qua kiểm tra.
 
 Sửa: trong \texttt{executePartialChunk}, hợp đồng nay đo \emph{chênh lệch số dư thực tế} của người dùng quanh lần chuyển (\texttt{balanceOf} trước và sau), rồi áp cả mức sàn lẫn kế toán lên số thực nhận đó. Kiểm thử với một token thu phí 2\% xác nhận một lần khớp khiến người dùng nhận dưới sàn nay bị revert thay vì âm thầm trả thiếu (\tcode{test_feeOnTransferOutput_belowFloor_reverts}), và khi vẫn trên sàn thì người dùng được ghi đúng số thực nhận (\tcode{test_feeOnTransferOutput_aboveFloor_creditsActualReceived}).
 
 \textbf{3.3 --- Watcher bỏ qua sự kiện sau outage dài (Cao).}
-Khi backend khởi động lại sau khi dừng lâu, checkpoint của watcher nhảy thẳng về block hiện tại, bỏ qua mọi sự kiện trong khoảng trống.
+Khi backend khởi động lại sau khi dừng lâu, watcher bắt đầu từ block hiện tại và bỏ qua mọi sự kiện trong khoảng trống.
 
 Sửa: logic checkpoint nay phân biệt hai trường hợp --- chuỗi bị đặt lại (checkpoint vượt quá đỉnh hiện tại, buộc lùi về đỉnh) và backlog thật sau outage (giữ checkpoint cũ để quét bù). Phần quét bù được chia thành từng đoạn block có giới hạn để một lần truy vấn log không vượt giới hạn của nhà cung cấp RPC. Việc tái hiện trọn vẹn vẫn cần một lần dừng dài thực tế trên production, nhưng cơ chế bỏ sót đã được loại bỏ ở mức mã nguồn.
 

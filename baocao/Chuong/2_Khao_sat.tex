@@ -132,7 +132,7 @@ Hình~\ref{fig:crosschain_arch} mô tả kiến trúc trên hai chuỗi: ở m�
 \section{Đánh đổi trong thiết kế}
 \label{section:2.7}
 
-Mỗi cơ chế trên kéo theo một đánh đổi thiết kế. Việc dùng cosigner đơn giản hóa thiết kế nhưng tạo ra một điểm phụ thuộc tập trung. Việc tính cọc qua TWAP với cửa sổ ngắn phù hợp với môi trường giả lập nhưng dễ bị thao túng hơn cửa sổ dài dùng trong thực tế. Cơ chế dự phòng yêu cầu một bộ chuyển đổi riêng cho mỗi sàn tích hợp. Việc quy giá trị lệnh về ETH đòi hỏi token giao dịch phải có hồ thanh khoản ghép cặp với WETH. Các đánh đổi này và các rủi ro liên quan được phân tích chi tiết ở Chương~\ref{chapter:Methodology} và Chương~\ref{chapter:conclusion}.
+Mỗi cơ chế trên kéo theo một đánh đổi thiết kế. Việc dùng cosigner đơn giản hóa thiết kế nhưng tạo ra một điểm phụ thuộc tập trung. Việc tính cọc qua TWAP với cửa sổ ngắn phù hợp với môi trường giả lập nhưng cửa sổ ngắn dễ bị thao túng hơn cửa sổ dài dùng trong thực tế. Cơ chế dự phòng yêu cầu một bộ chuyển đổi riêng cho mỗi sàn tích hợp. Việc quy giá trị lệnh về ETH đòi hỏi token giao dịch phải có hồ thanh khoản ghép cặp với WETH. Các đánh đổi này và các rủi ro liên quan được phân tích chi tiết ở Chương~\ref{chapter:Methodology} và Chương~\ref{chapter:conclusion}.
 
 Tóm lại, chương này đã tìm hiểu quá trình phát triển của Uniswap qua ba giai đoạn, từ đó làm rõ những hạn chế mà các hệ thống hiện tại chưa giải quyết được. Dựa trên đó, đồ án đề xuất bốn cơ chế: khớp lệnh từng phần với giá được ký, ràng buộc filler bằng cọc và phạt, cơ chế dự phòng qua DEX aggregator, và giao dịch xuyên chuỗi không cầu nối. Chương tiếp theo sẽ đi vào thiết kế và cài đặt chi tiết các cơ chế này ở tầng hợp đồng thông minh.
 
