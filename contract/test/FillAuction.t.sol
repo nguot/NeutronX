@@ -180,14 +180,14 @@ contract FillAuctionTest is Test {
         uint256 reward    = auction.pendingReturns(slasher);
         uint256 balBefore = slasher.balance;
         vm.prank(slasher);
-        auction.withdraw();
+        auction.withdraw(payable(slasher));
         assertEq(slasher.balance, balBefore + reward);
     }
 
     function test_withdraw_revert_nothingToWithdraw() public {
         vm.prank(filler);
         vm.expectRevert("nothing to withdraw");
-        auction.withdraw();
+        auction.withdraw(payable(filler));
     }
 
     // ── onFillSuccess() ──

@@ -101,7 +101,7 @@ contract MultiOrderScenarioTest is AdversarialBase {
 
         // and every filler can actually pull their funds out
         vm.prank(h2);
-        auction.withdraw();
+        auction.withdraw(payable(h2));
         assertEq(auction.pendingReturns(h2), 0);
     }
 }

@@ -24,9 +24,11 @@
 \usepackage[ruled,vlined]{algorithm2e}  % Hỗ trợ viết các giải thuật
 \usepackage{capt-of} % Cho phép sử dụng caption lớn đối với landscape page
 \usepackage{multirow} % Merge cells
+\usepackage{longtable} % Bảng dài nhiều trang (danh sách test ở phụ lục)
 \usepackage{fancyhdr} % Cho phép tùy biến header và footer
 \usepackage[natbib,backend=biber,style=ieee]{biblatex} % Giúp chèn tài liệu tham khảo
 \usepackage{appendix}
+\usepackage{pdfpages}
 
 \usepackage[font=small,labelfont=bf]{caption}
 
@@ -157,13 +159,13 @@
 \setlength{\parskip}{6pt}
 %Lùi đầu dòng
 \setlength{\parindent}{15pt}
+\setlength{\emergencystretch}{3em}
 
 
 
 % =========================== BODY ===============
 \begin{document}
 % \newgeometry{top=2cm, bottom=2cm, left=2cm, right=2cm}
-\subfile{Bia} % Phần bìa
 \subfile{Bia_lot} % Phần bìa
 % \restoregeometry
 
@@ -275,7 +277,7 @@
 \subfile{Chuong/2_Khao_sat} % Chương 2 — đã viết lại (gộp khảo sát + đề xuất)
 
 \newpage
-\chapter{THIẾT KẾ VÀ HIỆN THỰC HỢP ĐỒNG THÔNG MINH}
+\chapter{XÂY DỰNG CÁC HỢP ĐỒNG THÔNG MINH}
 \label{chapter:Experiment}
 \subfile{Chuong/4_Ket_qua_thuc_nghiem} % Chương 3 — TODO: viết lại nội dung theo outline mới
 
@@ -292,16 +294,10 @@
 % Chương lý thuyết cũ (3_Cong_nghe) -> chuyển nội dung xuống PHỤ LỤC khi viết tiếp.
 % Chương "Các giải pháp và đóng góp" cũ (5_Giai_phap_dong_gop) -> đã GỘP vào Chương 2.
 
-\newpage
-%\pagestyle{fancy} % Áp dụng header và footer
-\chapter*{MỘT SỐ LƯU Ý VỀ TÀI LIỆU THAM KHẢO} %Kết luận và hướng phát triển}
-\label{chapter:reference}
-\subfile{Chuong/7_Luu_y_tai_lieu_tham_khao}
-
-
 % ===================================================
 \newpage
 \renewcommand\bibname{TÀI LIỆU THAM KHẢO}
+\nocite{*}
 \printbibliography
 \phantomsection\addcontentsline{toc}{chapter}{TÀI LIỆU THAM KHẢO}
 
@@ -321,10 +317,20 @@
     {{\bfseries{\scshape} \thecontentslabel.\ }} % numbered format
     {}         % unnumbered format
     {\titlerule*[0.3pc]{.}\contentspage}         % filler-page-format, e.g dots
-% Phụ lục "Hướng dẫn viết đồ án" của template đã được bỏ (chỉ là boilerplate).
-% \chapter{HƯỚNG DẪN VIẾT ĐỒ ÁN TỐT NGHIỆP}
-% \subfile{Chuong/Phu_luc_A}
-% \newpage
-\chapter{ĐẶC TẢ USE CASE}
+\chapter{MỘT SỐ USE CASE KHÁC}
+\subfile{Chuong/Phu_luc_A}
+\newpage
+\chapter{CƠ SỞ DỮ LIỆU}
 \subfile{Chuong/Phu_luc_B}
+\newpage
+\chapter{DANH SÁCH TRƯỜNG HỢP KIỂM THỬ}\label{apdx:testcases}
+\subfile{Chuong/Phu_luc_C}
+\newpage
+\chapter{KIẾN THỨC NỀN TẢNG}
+\subfile{Chuong/Phu_luc_D}
+\newpage
+\chapter{BÁO CÁO RÀ SOÁT BẢO MẬT (TRUFY)}
+\label{apdx:trufy}
+Dưới đây là toàn văn báo cáo rà soát bảo mật do Trufy thực hiện cho dự án NeutronX, tháng 6 năm 2026~\cite{trufy2026}. Báo cáo ghi nhận 8 phát hiện (3 mức cao, 4 mức trung bình, 1 mức thấp); phân tích và phản hồi từng phát hiện được trình bày tại mục~\ref{sec:audit} của luận văn.
+\includepdf[pages=-, pagecommand={\thispagestyle{empty}}]{../auditfinal1.pdf}
 \end{document}

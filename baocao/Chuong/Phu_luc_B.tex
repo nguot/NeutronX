@@ -1,11 +1,87 @@
 \documentclass[../DoAn.tex]{subfiles}
 \begin{document}
-Nếu trong nội dung chính không đủ không gian cho các use case khác (ngoài các use case nghiệp vụ chính) thì đặc tả thêm cho các use case đó ở đây.
 
-\section{Đặc tả use case ``Thống kê tình hình mượn sách''}
-\ldots
+Backend dùng cơ sở dữ liệu PostgreSQL để lưu lệnh và trạng thái khớp. Phụ lục này liệt kê các bảng chính. Hai bảng \texttt{orders} và \texttt{fills} phục vụ giao dịch trong cùng một chuỗi; nhóm bảng \texttt{cc\_*} phục vụ giao dịch xuyên chuỗi. Cơ sở dữ liệu lưu thông tin lệnh và trạng thái, không giữ tài sản của người dùng.
 
-\section{Đặc tả use case ``Đăng ký làm thẻ mượn''}
-\ldots
+\section{Bảng \texttt{orders} (lệnh trong cùng chuỗi)}
+
+\begin{table}[H]
+    \centering
+    \begin{tabular}{|>{\raggedright\arraybackslash}p{5.5cm}|>{\raggedright\arraybackslash}p{8cm}|}
+        \hline
+        \textbf{Cột} & \textbf{Ý nghĩa} \\
+        \hline
+        \texttt{hash} & Mã băm của lệnh (khóa chính). \\
+        \hline
+        \texttt{swapper} & Địa chỉ người tạo lệnh. \\
+        \hline
+        \texttt{input\_token} / \texttt{output\_token} & Token bán ra / token muốn nhận. \\
+        \hline
+        \texttt{input\_amount} / \texttt{min\_output} & Khối lượng bán / mức nhận tối thiểu. \\
+        \hline
+        \texttt{deadline} / \texttt{nonce} & Hạn chót (block) / số chống lặp lệnh. \\
+        \hline
+        \texttt{min\_fill\_bps} & Tỉ lệ tối thiểu cho mỗi lần khớp. \\
+        \hline
+        \texttt{start\_price} / \texttt{decay\_per\_block} / \texttt{fee\_tier} & Tham số đường cong giá đấu giá Hà Lan. \\
+        \hline
+        \texttt{start\_block} & Block bắt đầu giảm giá. \\
+        \hline
+        \texttt{signature} & Chữ ký của lệnh. \\
+        \hline
+        \texttt{status} & Trạng thái lệnh (pending, filled...). \\
+        \hline
+        \texttt{fallback\_initiated} & Đã chuyển sang chế độ dự phòng hay chưa. \\
+        \hline
+        \texttt{preferred\_aggregator} & Sàn ưu tiên cho cơ chế dự phòng (rỗng = tự chọn). \\
+        \hline
+    \end{tabular}
+\end{table}
+
+\section{Bảng \texttt{fills} (các lần khớp)}
+
+\begin{table}[H]
+    \centering
+    \begin{tabular}{|>{\raggedright\arraybackslash}p{5.5cm}|>{\raggedright\arraybackslash}p{8cm}|}
+        \hline
+        \textbf{Cột} & \textbf{Ý nghĩa} \\
+        \hline
+        \texttt{id} & Khóa chính (mã giao dịch + chỉ số log). \\
+        \hline
+        \texttt{order\_hash} & Lệnh tương ứng (khóa ngoại tới \texttt{orders}). \\
+        \hline
+        \texttt{filler} & Địa chỉ filler thực hiện lần khớp. \\
+        \hline
+        \texttt{fill\_amount} / \texttt{output\_amount} & Khối lượng khớp / số tiền trả ra. \\
+        \hline
+        \texttt{tx\_hash} / \texttt{block\_number} & Mã giao dịch và số block. \\
+        \hline
+        \texttt{path} / \texttt{graph} & Dữ liệu phụ về đường khớp (nếu có). \\
+        \hline
+    \end{tabular}
+\end{table}
+
+\section{Các bảng cho giao dịch xuyên chuỗi}
+
+Nhóm bảng \texttt{cc\_*} lưu trạng thái xuyên chuỗi, gồm: \texttt{cc\_sessions} lưu bí mật gốc và địa chỉ cosigner cho mỗi người dùng; \texttt{cc\_orders} lưu thông tin lệnh xuyên chuỗi (số slot, gốc cây Merkle, hai chữ ký, hạn T2, mã hai chuỗi...); \texttt{cc\_slots} lưu từng slot (khóa băm, lá Merkle, bằng chứng, trạng thái, filler được giao, địa chỉ hợp đồng ký quỹ đã triển khai); và \texttt{cc\_fillers} lưu danh sách filler đăng ký phục vụ.
+
+\begin{table}[H]
+    \centering
+    \begin{tabular}{|>{\raggedright\arraybackslash}p{5.5cm}|>{\raggedright\arraybackslash}p{8cm}|}
+        \hline
+        \textbf{Bảng} & \textbf{Vai trò} \\
+        \hline
+        \texttt{cc\_sessions} & Phiên của người dùng: bí mật gốc, cosigner. \\
+        \hline
+        \texttt{cc\_orders} & Lệnh xuyên chuỗi: số slot, gốc Merkle, chữ ký, hạn T2. \\
+        \hline
+        \texttt{cc\_slots} & Từng slot: khóa băm, bằng chứng Merkle, trạng thái, escrow. \\
+        \hline
+        \texttt{cc\_fillers} & Danh sách filler đăng ký phục vụ. \\
+        \hline
+    \end{tabular}
+\end{table}
+
+Ngoài ra còn một số bảng phụ trợ như \texttt{tokens} (danh sách token hiển thị) và \texttt{indexer\_state} (mốc block mà các thành phần theo dõi đã xử lý tới).
 
 \end{document}

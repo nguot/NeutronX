@@ -1,53 +1,30 @@
 \documentclass[../DoAn.tex]{subfiles}
 \begin{document}
 
-Chương này gồm hai phần. Phần đầu tìm hiểu hiện trạng giao dịch phi tập trung thông qua sự phát triển của Uniswap - sàn DEX lớn nhất hiện nay - để thấy rõ chỗ còn thiếu mà đồ án muốn bổ sung. Phần sau trình bày tổng quan hệ thống NeutronX cùng bốn cơ chế đóng góp ở mức ý tưởng, kèm lý do vì sao thiết kế như vậy; còn cách cài đặt cụ thể thì để dành cho Chương~\ref{chapter:Experiment}.
+Chương này gồm hai phần. Phần đầu tìm hiểu quá trình phát triển của Uniswap --- sàn DEX lớn nhất hiện nay --- để làm rõ những hạn chế còn tồn tại, từ đó xác định hướng giải pháp. Phần sau trình bày tổng quan hệ thống NeutronX cùng bốn cơ chế đóng góp ở mức ý tưởng, kèm lý do vì sao thiết kế như vậy; cách cài đặt cụ thể được trình bày ở Chương~\ref{chapter:Experiment}.
 
-\section{Quá trình phát triển của Uniswap và chỗ còn thiếu}
+\section{Quá trình phát triển của Uniswap và những hạn chế hiện tại}
 \label{section:2.1}
 
-Thay vì so sánh dàn trải nhiều hệ thống, đồ án chọn tìm hiểu kỹ một trường hợp tiêu biểu là Uniswap, vì đây là sàn giao dịch phi tập trung có khối lượng lớn nhất, và bản thân nó cũng đã đi qua nhiều giai đoạn phản ánh đúng sự phát triển chung của lĩnh vực. Có thể chia quá trình này thành ba giai đoạn.
+Uniswap là sàn giao dịch phi tập trung có khối lượng giao dịch lớn nhất hiện nay, với lịch sử phát triển lâu dài qua nhiều giai đoạn gắn liền với sự trưởng thành của lĩnh vực DEX. Do đó, đồ án chọn Uniswap làm điểm xuất phát để phân tích. Có thể chia quá trình phát triển này thành ba giai đoạn.
 
-\textbf{Giai đoạn 1 - Uniswap v2/v3 (AMM).} Đây là mô hình tạo lập thị trường tự động: người dùng swap trực tiếp với một hồ thanh khoản trên chuỗi, giá được tính theo công thức dựa trên lượng tài sản trong hồ. Ưu điểm là luôn sẵn sàng và hoàn toàn phi tập trung. Nhược điểm thì như đã nói ở mục~\ref{section:1.1}: giá người dùng nhận được bị giới hạn bởi thanh khoản có sẵn trên chuỗi, nên dễ bị trượt giá khi giao dịch lớn.
+\textbf{Giai đoạn 1 - Uniswap v2/v3 (AMM).} Đây là mô hình tạo lập thị trường tự động: người dùng giao dịch trực tiếp với một hồ thanh khoản trên chuỗi, giá được tính theo công thức dựa trên lượng tài sản trong hồ. Ưu điểm là luôn sẵn sàng và hoàn toàn phi tập trung. Nhược điểm đã được nêu ở mục~\ref{section:1.1}: giá người dùng nhận được bị giới hạn bởi thanh khoản có sẵn trên chuỗi, nên dễ bị trượt giá khi giao dịch lớn.
 
-\textbf{Giai đoạn 2 - UniswapX (giao dịch theo ý định).} Để giải quyết vấn đề trên, Uniswap đưa ra UniswapX theo mô hình ý định: người dùng ký lệnh ngoài chuỗi, rồi các filler cạnh tranh nhau thực hiện. Vì filler có thể lấy thanh khoản từ nhiều nguồn, kể cả ngoài chuỗi, nên người dùng có thể nhận được giá tốt hơn. UniswapX cũng dùng đấu giá kiểu Hà Lan (giá giảm dần để filler vào khi thấy có lãi) và bước đầu hỗ trợ giao dịch xuyên chuỗi. Cần nói rõ là phần lớn ý tưởng nền tảng mà đồ án dựa vào đã có từ giai đoạn này.
+\textbf{Giai đoạn 2 - UniswapX (giao dịch theo ý định).} Để giải quyết vấn đề trên, Uniswap đưa ra UniswapX theo mô hình ý định: người dùng ký lệnh ngoài chuỗi, rồi các filler cạnh tranh nhau thực hiện. Vì filler có thể lấy thanh khoản từ nhiều nguồn, kể cả ngoài chuỗi, nên người dùng có thể nhận được giá tốt hơn. UniswapX cũng dùng đấu giá kiểu Hà Lan (giá giảm dần để filler tham gia khi có lãi) và bước đầu hỗ trợ giao dịch xuyên chuỗi. Cần lưu ý rằng phần lớn ý tưởng nền tảng mà đồ án dựa vào đã có từ giai đoạn này.
 
-\textbf{Giai đoạn 3 - chỗ đồ án muốn bổ sung.} Dù vậy, vẫn còn ba điểm mà các hệ thống theo ý định hiện nay (kể cả UniswapX) chưa làm trọn vẹn, và đó cũng là phần đồ án muốn cải tiến:
+\textbf{Giai đoạn 3 - những điểm chưa được giải quyết.} Dù vậy, các hệ thống theo ý định hiện nay (kể cả UniswapX) vẫn tồn tại một số hạn chế chưa được giải quyết:
 \begin{itemize}
-    \item \textbf{Khớp lệnh từng phần với giá được ký}: cho phép một lệnh được nhiều filler khớp dần thành nhiều phần, mỗi phần tính giá theo đường cong đã được xác thực, thay vì chỉ khớp trọn vẹn hoặc bỏ.
-    \item \textbf{Ràng buộc filler bằng kinh tế}: bắt filler đặt cọc khi nhận lệnh và bị phạt nếu bỏ dở phần đã nhận, thay vì cho filler tham gia mà không phải chịu trách nhiệm gì.
+    \item \textbf{Khớp lệnh từng phần với giá được ký}: cho phép một lệnh được nhiều filler khớp dần thành nhiều phần, mỗi phần tính giá theo đường cong đã được xác thực, thay vì khớp trọn vẹn hoặc bỏ.
+    \item \textbf{Ràng buộc filler bằng kinh tế}: buộc filler đặt cọc khi nhận lệnh và chịu phạt nếu bỏ dở phần đã nhận, thay vì cho filler tham gia mà không phải chịu trách nhiệm nào.
     \item \textbf{Xuyên chuỗi khớp từng phần, không cầu nối}: chia một lệnh xuyên chuỗi thành nhiều phần độc lập bằng hợp đồng khóa thời gian theo mã băm kết hợp cây Merkle, thay vì khớp nguyên lệnh qua một cầu nối trung gian.
 \end{itemize}
 
-Bảng~\ref{table:comparison} tóm tắt sự khác nhau theo từng đặc tính. Bảng chỉ ghi nhận một đặc tính \emph{có} hay \emph{không}, không nhằm nói hệ thống nào tốt hơn; mục đích là cho thấy NeutronX bổ sung thêm vài đặc tính theo cách ít gặp, chứ không phải để thay thế các hệ thống đã có.
-
-\begin{table}[H]
-    \centering
-    \caption{So sánh đặc tính giữa các giai đoạn của Uniswap và NeutronX.}
-    \label{table:comparison}
-    \begin{tabular}{|l|c|c|c|}
-        \hline
-        \textbf{Đặc tính} & \textbf{Uniswap v3} & \textbf{UniswapX} & \textbf{NeutronX} \\
-        \hline
-        Lấy thanh khoản ngoài chuỗi      & Không & Có    & Có \\
-        \hline
-        Đấu giá kiểu Hà Lan               & Không & Có    & Có \\
-        \hline
-        Khớp lệnh từng phần               & Một phần & Một phần & Có \\
-        \hline
-        Đặt cọc và phạt filler            & Không & Không & Có \\
-        \hline
-        Đảm bảo khớp trước hạn            & Không & Không & Có \\
-        \hline
-        Xuyên chuỗi khớp từng phần        & Không & Một phần & Có \\
-        \hline
-    \end{tabular}
-\end{table}
+Ba điểm này là hướng mà đồ án tập trung giải quyết và sẽ được trình bày cụ thể từ mục~\ref{section:2.3} trở đi.
 
 \section{Tổng quan hệ thống NeutronX và mô hình lệnh}
 \label{section:2.2}
 
-Ý tưởng chính của NeutronX là tách riêng hai việc: việc người dùng ``nói ra ý muốn'' và việc filler ``thực hiện''. Người dùng (swapper) chỉ ký một lệnh mô tả mình muốn giao dịch gì; còn các filler thì đọc lệnh, đặt cọc rồi thực hiện từng phần trên chuỗi, dưới sự ràng buộc của các hợp đồng thông minh.
+Ý tưởng chính của NeutronX là tách biệt hai vai trò: người dùng (swapper) ký lệnh biểu đạt mong muốn giao dịch; các filler cạnh tranh đặt cọc và thực hiện từng phần trên chuỗi dưới sự ràng buộc của các hợp đồng thông minh.
 
 Toàn bộ thông tin của một giao dịch được gói trong một cấu trúc lệnh duy nhất (gọi là \texttt{PartialFillOrder}), gồm các trường mô tả tài sản vào và ra, khối lượng, mức đầu ra tối thiểu mà người dùng chấp nhận, thời hạn, cùng các tham số của đường cong giá đấu giá Hà Lan. Lệnh được ký theo chuẩn EIP-712 nên người dùng không tốn phí gas khi tạo lệnh (chi tiết EIP-712 và Permit2 xem Phụ lục~\ref{apdx:eip712}); danh sách đầy đủ các trường được trình bày ở mục~\ref{sec:order-model}.
 
@@ -56,9 +33,9 @@ Bốn mục tiếp theo trình bày bốn cơ chế đóng góp, tương ứng v
 \section{Khớp lệnh từng phần theo đấu giá kiểu Hà Lan}
 \label{section:2.3}
 
-Cơ chế đầu tiên cho phép một lệnh được khớp thành nhiều phần. Mỗi lệnh có kèm một đường cong giá theo kiểu đấu giá Hà Lan: giá bắt đầu ở mức cao, rồi giảm dần theo từng khối (block). Filler nào thấy mức giá hiện tại đủ để mình có lãi thì nhảy vào khớp một phần khối lượng; phần còn lại tiếp tục được chào ở giá thấp dần cho tới khi hết hoặc hết hạn. Nói cách khác, ``đấu giá kiểu Hà Lan'' ở đây chỉ là một cách để thị trường tự tìm ra mức giá mà tại đó có filler chịu vào (khái niệm đầy đủ xem Phụ lục~\ref{apdx:dutch}).
+Cơ chế đầu tiên cho phép một lệnh được khớp thành nhiều phần. Mỗi lệnh gắn với một đường cong giá theo kiểu đấu giá Hà Lan: giá bắt đầu ở mức cao rồi giảm dần theo từng khối (block). Khi mức giá hiện tại đủ để có lãi, một filler sẽ khớp một phần khối lượng; phần còn lại tiếp tục có thể được khớp ở mức giá giảm dần cho đến khi khớp hết hoặc lệnh hết hạn. Cơ chế đấu giá kiểu Hà Lan giúp thị trường tự xác định mức giá mà tại đó có filler sẵn sàng tham gia (khái niệm đầy đủ xem Phụ lục~\ref{apdx:dutch}).
 
-Có hai điểm cần chú ý trong thiết kế. Một là, mỗi phần được tính giá độc lập tại đúng mức giá đang có lúc khớp, để tránh việc tính dồn rồi bị tràn số ở phần cuối. Hai là, các tham số của đường cong giá được đưa vào phần dữ liệu ký, nên cũng được bên đồng ký (cosigner) xác thực; nếu không, một filler có thể tự đặt giá khởi điểm bằng một rồi chiếm đoạt tài sản của người dùng, nên bước xác thực này là bắt buộc.
+Thiết kế gồm hai đặc điểm quan trọng. Thứ nhất, mỗi phần được tính giá độc lập tại đúng mức giá ở thời điểm khớp, nhằm tránh việc tích lũy giá trị trên toàn bộ lệnh dẫn đến tràn số ở phần cuối. Thứ hai, các tham số của đường cong giá nằm trong phần dữ liệu được ký, nên cũng được bên đồng ký (cosigner) xác thực. Bước xác thực này là bắt buộc: nếu không, một filler có thể tự đặt giá khởi điểm ở mức rất thấp rồi chiếm đoạt tài sản của người dùng.
 
 % ─────────────────────────────────────────────────────────────────────────────
 % HÌNH 2.1 — ĐỒ THỊ GIÁ ĐẤU GIÁ HÀ LAN
@@ -80,9 +57,9 @@ Có hai điểm cần chú ý trong thiết kế. Một là, mỗi phần đư�
 \section{Đặt cọc và phạt}
 \label{section:2.4}
 
-Cơ chế thứ hai - cũng là điểm khác biệt rõ nhất so với các hệ thống đã tìm hiểu - dùng kinh tế để ràng buộc filler. Khi đăng ký nhận một phần lệnh, filler phải bỏ ra một khoản cọc, và khoản cọc này được tính tùy theo cỡ lệnh và thời gian còn lại tới hạn. Nếu filler làm xong đúng phần đã nhận thì được lấy lại cọc; còn nếu chỉ giao thiếu so với phần mình đã cam kết thì phần thiếu sẽ bị giữ lại như một khoản phạt.
+Cơ chế thứ hai dùng kinh tế để ràng buộc filler. Khi đăng ký nhận một phần lệnh, filler phải nộp một khoản cọc được tính theo cỡ lệnh và thời gian còn lại tới hạn. Nếu filler giao đúng phần đã cam kết, cọc được hoàn lại toàn bộ; trường hợp giao thiếu, phần thiếu bị giữ lại làm khoản phạt.
 
-Điểm đáng chú ý của thiết kế là phân biệt được hai trường hợp dễ nhầm với nhau. Một filler ``thua cuộc'' (do filler khác đã khớp hết phần đó trước) thì không có lỗi và phải được hoàn cọc đầy đủ; chỉ filler thật sự ``bỏ dở'' - tức là bỏ lại phần còn khớp được mà mình đã nhận - mới bị phạt. Hình~\ref{fig:slash_decision} minh họa cách phân biệt này. Nếu không có cơ chế cọc và phạt, một filler có thể đăng ký nhận lệnh rồi để đó, làm lệnh của người dùng treo cho đến khi hết hạn.
+Thiết kế phân biệt hai trường hợp dễ nhầm với nhau. Filler ``thua cuộc'' (do filler khác đã khớp hết phần đó trước) không có lỗi và được hoàn cọc đầy đủ; filler ``bỏ dở'' --- tức là không thực hiện phần đã nhận dù vẫn có thể khớp được --- bị phạt mất một phần cọc. Hình~\ref{fig:slash_decision} minh họa cách phân biệt này. Nếu không có cơ chế cọc và phạt, một filler có thể đăng ký nhận lệnh nhưng không thực hiện, khiến lệnh của người dùng bị đình trệ cho đến khi hết hạn.
 
 % ─────────────────────────────────────────────────────────────────────────────
 % HÌNH 2.2 — CÂY QUYẾT ĐỊNH PHẠT / HOÀN CỌC
@@ -104,16 +81,16 @@ Cơ chế thứ hai - cũng là điểm khác biệt rõ nhất so với các h�
 \section{Cơ chế dự phòng}
 \label{section:2.5}
 
-Cơ chế thứ ba giúp lệnh không bị bỏ dở khi hết hạn. Khi một lệnh đã gần tới hạn mà vẫn còn phần chưa được khớp, một thành phần dự phòng sẽ tự động hoán đổi nốt phần còn lại thông qua một sàn giao dịch (aggregator), với điều kiện kết quả nhận được vẫn phải đạt mức tối thiểu mà người dùng đã ký. Để tránh xung đột, luồng dự phòng và luồng khớp thông thường được thiết kế loại trừ lẫn nhau, không để cùng một phần khối lượng bị tiêu hai lần.
+Cơ chế thứ ba giúp lệnh không bị bỏ dở khi hết hạn. Khi một lệnh đã gần tới hạn mà vẫn còn phần chưa được khớp, một thành phần dự phòng sẽ tự động hoán đổi nốt phần còn lại thông qua các bộ tổng hợp nhiều sàn (DEX aggregator) để tìm giá tốt nhất có thể từ thanh khoản trên chuỗi --- vì khi không còn filler nào sẵn sàng cung cấp nguồn ngoài chuỗi tốt hơn thì đây là phương án cuối còn lại. Điều kiện luôn được giữ là kết quả nhận được phải đạt mức tối thiểu mà người dùng đã ký, và cùng một phần khối lượng không thể bị xử lý hai lần.
 
-Về khả năng mở rộng, hợp đồng dự phòng có một danh sách trắng (allowlist) các sàn được phép gọi tới, nên không bị khóa cứng vào một sàn duy nhất. Tuy nhiên cũng cần nói thật là mỗi sàn mới cần thêm một bộ chuyển đổi (adapter) ở ngoài chuỗi để gọi API lấy đường đi và mã hóa dữ liệu giao dịch theo đúng định dạng riêng của nó; trong phạm vi đồ án đã làm bộ chuyển đổi cho hai sàn là Uniswap và KyberSwap, và có thể thêm các sàn khác như 1inch hay 0x theo cùng cách. Sơ đồ chi tiết của luồng dự phòng được trình bày ở mục~\ref{subsec:fallback}.
+Về khả năng mở rộng, hợp đồng dự phòng có một danh sách trắng (allowlist) các sàn được phép gọi tới, nên không bị khóa cứng vào một sàn duy nhất. Tuy nhiên đây cũng là một giới hạn về mặt thực thi: mỗi aggregator có API và định dạng dữ liệu riêng, vốn không đồng bộ với nhau, nên mỗi sàn mới cần thêm một bộ chuyển đổi (adapter) riêng ở ngoài chuỗi. Trong phạm vi đồ án, hệ thống đã triển khai bộ chuyển đổi cho hai sàn là Uniswap và KyberSwap, và có thể thêm các sàn khác như 1inch hay 0x theo cùng cách. Sơ đồ chi tiết của luồng dự phòng được trình bày ở mục~\ref{subsec:fallback}.
 
 \section{Giao dịch xuyên chuỗi không sử dụng cầu nối}
 \label{section:2.6}
 
-Cơ chế thứ tư mở rộng hệ thống sang giao dịch giữa hai chuỗi, và là phần ít gặp nhất. Các giải pháp xuyên chuỗi dựa trên hợp đồng khóa thời gian theo mã băm (Hashed Timelock Contract - HTLC) thường khớp nguyên lệnh theo kiểu được ăn cả ngã về không (khái niệm HTLC xem Phụ lục~\ref{apdx:htlc}). NeutronX thì chia một lệnh xuyên chuỗi thành $N$ phần (gọi là slot), và với mỗi slot, triển khai một hợp đồng ký quỹ \emph{riêng} trên cả hai chuỗi. Nhờ vậy, nhiều filler có thể khớp nhiều phần một cách độc lập; một slot gặp sự cố cũng không ảnh hưởng tới các slot khác; và tài sản của những slot chưa được khớp thì không bao giờ rời khỏi ví người dùng.
+Cơ chế thứ tư mở rộng hệ thống sang giao dịch giữa hai chuỗi. Các giải pháp xuyên chuỗi dựa trên hợp đồng khóa thời gian theo mã băm (Hashed Timelock Contract - HTLC)~\cite{herlihy2018atomic} thường khớp trọn vẹn cả lệnh theo nguyên tắc toàn bộ hoặc không có gì (khái niệm HTLC xem Phụ lục~\ref{apdx:htlc}). NeutronX chia một lệnh xuyên chuỗi thành $N$ phần (gọi là slot), mỗi slot có một hợp đồng ký quỹ riêng trên cả hai chuỗi. Kiến trúc này cho phép nhiều filler khớp các slot độc lập với nhau; lỗi tại một slot không lan sang slot khác; tài sản của các slot chưa được nhận không rời khỏi ví người dùng.
 
-Hình~\ref{fig:crosschain_arch} mô tả kiến trúc trên hai chuỗi: ở mỗi chuỗi có một hợp đồng nhà máy (factory) lo việc tạo ra các hợp đồng ký quỹ cho từng slot; một thành phần theo dõi (watcher) ở backend lo việc tiết lộ bí mật để hoàn tất giao dịch. Một điều kiện về thời gian luôn được giữ để bảo vệ filler, đó là thời hạn trên chuỗi đích (T2) luôn sớm hơn thời hạn trên chuỗi nguồn (T1).
+Hình~\ref{fig:crosschain_arch} mô tả kiến trúc trên hai chuỗi: ở mỗi chuỗi có một hợp đồng nhà máy (factory) đảm nhận việc tạo ra các hợp đồng ký quỹ cho từng slot; một thành phần theo dõi (watcher) ở backend đảm nhận việc tiết lộ bí mật để hoàn tất giao dịch. Một điều kiện về thời gian luôn được giữ để bảo vệ filler, đó là thời hạn trên chuỗi đích (T2) luôn sớm hơn thời hạn trên chuỗi nguồn (T1).
 
 % ─────────────────────────────────────────────────────────────────────────────
 % HÌNH 2.3 — KIẾN TRÚC XUYÊN CHUỖI HAI CHUỖI
@@ -133,7 +110,7 @@ Hình~\ref{fig:crosschain_arch} mô tả kiến trúc trên hai chuỗi: ở m�
     \label{fig:crosschain_arch}
 \end{figure}
 
-Để khớp được từng phần mà chỉ phải ký một lần, hệ thống dùng một cây Merkle các bí mật. Từ một bí mật gốc, hệ thống tính ra bí mật riêng cho từng slot, rồi băm thành các khóa (hashlock) làm lá của cây Merkle; chỉ giá trị gốc (root) của cây được người dùng và cosigner ký và đưa lên chuỗi. Hình~\ref{fig:merkle_secret} minh họa cách sắp xếp này. Nhờ vậy, hệ thống cấp được quyền khớp cho từng slot một cách độc lập trong khi cả lệnh chỉ cần một chữ ký.
+Để khớp được từng phần mà ký một lần duy nhất, hệ thống dùng một cây Merkle các bí mật. Từ một bí mật gốc, hệ thống tính ra bí mật riêng cho từng slot, rồi băm thành các khóa (hashlock) làm lá của cây Merkle; duy nhất giá trị gốc (root) của cây được người dùng và cosigner ký rồi đưa lên chuỗi. Hình~\ref{fig:merkle_secret} minh họa cách sắp xếp này. Nhờ vậy, hệ thống cấp được quyền khớp cho từng slot một cách độc lập trong khi cả lệnh dùng một chữ ký duy nhất.
 
 % ─────────────────────────────────────────────────────────────────────────────
 % HÌNH 2.4 — PHÂN CẤP BÍ MẬT VÀ CÂY MERKLE
@@ -155,8 +132,8 @@ Hình~\ref{fig:crosschain_arch} mô tả kiến trúc trên hai chuỗi: ở m�
 \section{Đánh đổi trong thiết kế}
 \label{section:2.7}
 
-Mỗi cơ chế ở trên đều có một sự đánh đổi mà đồ án chấp nhận. Việc dùng một bên đồng ký (cosigner) giúp thiết kế đơn giản hơn, nhưng đổi lại tạo ra một điểm phụ thuộc tập trung. Việc tính cọc bằng cách quy giá trị lệnh về ETH dựa trên giá trung bình theo thời gian (TWAP) với cửa sổ ngắn thì hợp với môi trường giả lập, nhưng lại dễ bị thao túng hơn so với cửa sổ dài dùng trong thực tế. Cơ chế dự phòng thì cần thêm một bộ chuyển đổi cho mỗi sàn muốn tích hợp. Việc tính cọc bằng ETH cũng đòi hỏi token giao dịch phải có hồ thanh khoản ghép cặp với WETH. Những đánh đổi này, cùng các rủi ro còn lại, được nói rõ hơn ở chương kiểm thử và rà soát bảo mật (Chương~\ref{chapter:Methodology}) và khi tổng kết hạn chế ở Chương~\ref{chapter:conclusion}.
+Mỗi cơ chế trên kéo theo một đánh đổi thiết kế. Việc dùng cosigner đơn giản hóa thiết kế nhưng tạo ra một điểm phụ thuộc tập trung. Việc tính cọc qua TWAP với cửa sổ ngắn phù hợp với môi trường giả lập nhưng dễ bị thao túng hơn cửa sổ dài dùng trong thực tế. Cơ chế dự phòng yêu cầu một bộ chuyển đổi riêng cho mỗi sàn tích hợp. Việc quy giá trị lệnh về ETH đòi hỏi token giao dịch phải có hồ thanh khoản ghép cặp với WETH. Các đánh đổi này và các rủi ro liên quan được phân tích chi tiết ở Chương~\ref{chapter:Methodology} và Chương~\ref{chapter:conclusion}.
 
-Tóm lại, chương này đã tìm hiểu quá trình phát triển của Uniswap để xác định chỗ còn thiếu, rồi trình bày bốn cơ chế đóng góp của NeutronX ở mức ý tưởng cùng lý do và sự đánh đổi của từng cơ chế. Chương tiếp theo sẽ đi vào thiết kế và cài đặt chi tiết các cơ chế này ở tầng hợp đồng thông minh.
+Tóm lại, chương này đã tìm hiểu quá trình phát triển của Uniswap qua ba giai đoạn, từ đó làm rõ những hạn chế mà các hệ thống hiện tại chưa giải quyết được. Dựa trên đó, đồ án đề xuất bốn cơ chế: khớp lệnh từng phần với giá được ký, ràng buộc filler bằng cọc và phạt, cơ chế dự phòng qua DEX aggregator, và giao dịch xuyên chuỗi không cầu nối. Chương tiếp theo sẽ đi vào thiết kế và cài đặt chi tiết các cơ chế này ở tầng hợp đồng thông minh.
 
 \end{document}

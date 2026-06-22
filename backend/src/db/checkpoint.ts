@@ -1,3 +1,4 @@
+import { ethers } from 'ethers'
 import { db } from './client'
 
 export async function ensureIndexerStateTable() {
@@ -26,22 +27,67 @@ export async function setCheckpoint(name: string, block: number) {
   )
 }
 
-// Anvil forwards eth_getLogs ranges that fall below its fork point to the
-// upstream RPC, and Alchemy's free tier rejects ranges > 10 blocks there. A
-// checkpoint persisted from an earlier session (different fork height, or a
-// non-forked anvil) can sit far below — or above — the current tip, by
-// millions of blocks. There's nothing to backfill in local dev, so self-heal
-// by rewinding to currentBlock once the drift is implausibly large for a
-// single session — while still tolerating a real backlog (e.g. backend was
-// down for a while on a --block-time chain).
-const MAX_CHECKPOINT_LAG = 1000
+// ─── Trufy 3.3 — outage recovery ────────────────────────────────────────────
+// A long backend outage leaves a real backlog of events (e.g. SlotFilled) that
+// must be REPLAYED on restart, not skipped. The previous logic rewound the
+// checkpoint to the current tip whenever it drifted "too far", which silently
+// dropped every event in the gap. We now distinguish two cases:
+//   • checkpoint AHEAD of the tip   → chain reset/rollback (anvil restarted on a
+//                                     fresh fork). Cannot index the future, so
+//                                     rewind to tip is the only option.
+//   • checkpoint BEHIND the tip     → genuine backlog. Backfill the gap (the
+//                                     poll loops query it in bounded chunks via
+//                                     queryFilterChunked). Only in local dev,
+//                                     where a stale checkpoint from a previous
+//                                     fork can sit millions of blocks back, do we
+//                                     rewind once the lag is implausibly large
+//                                     AND backfill is not explicitly enabled.
+const DEV_REWIND_LAG = Number(process.env.INDEXER_DEV_REWIND_LAG ?? 5000)
+const CHUNK_SIZE     = Number(process.env.INDEXER_CHUNK ?? 2000)
+const BACKFILL =
+  (process.env.INDEXER_BACKFILL ?? (process.env.NODE_ENV === 'production' ? 'true' : 'false')) === 'true'
 
 export async function resolveCheckpoint(name: string, currentBlock: number, label: string): Promise<number> {
   let last = await getCheckpoint(name, currentBlock)
-  if (Math.abs(currentBlock - last) > MAX_CHECKPOINT_LAG) {
-    console.warn(`${label}: checkpoint ${last} too far from tip ${currentBlock} (chain reset?) — rewinding`)
+
+  // Checkpoint ahead of the tip ⇒ the chain was reset to a lower height.
+  if (last > currentBlock) {
+    console.warn(`${label}: checkpoint ${last} ahead of tip ${currentBlock} (chain reset?) — rewinding`)
+    last = currentBlock
+    await setCheckpoint(name, last)
+    return last
+  }
+
+  // Checkpoint behind the tip by an implausible margin, with backfill disabled:
+  // treat as a stale local-dev fork and rewind. Production defaults BACKFILL=true,
+  // so a real outage backlog is always replayed instead.
+  if (currentBlock - last > DEV_REWIND_LAG && !BACKFILL) {
+    console.warn(
+      `${label}: checkpoint ${last} lags tip ${currentBlock} by >${DEV_REWIND_LAG} blocks and backfill is off — ` +
+      `rewinding (set INDEXER_BACKFILL=true to replay the gap)`
+    )
     last = currentBlock
     await setCheckpoint(name, last)
   }
   return last
+}
+
+// 3.3: query a (possibly large) block range in bounded chunks so a single
+// eth_getLogs never exceeds the RPC provider's range limit when catching up
+// after a long outage. Logs are returned in ascending block order.
+export async function queryFilterChunked(
+  contract: ethers.Contract,
+  filter: ethers.EventFilter,
+  fromBlock: number,
+  toBlock: number,
+  chunk: number = CHUNK_SIZE,
+): Promise<ethers.Event[]> {
+  if (toBlock < fromBlock) return []
+  const out: ethers.Event[] = []
+  for (let start = fromBlock; start <= toBlock; start += chunk) {
+    const end = Math.min(start + chunk - 1, toBlock)
+    const logs = await contract.queryFilter(filter, start, end)
+    out.push(...logs)
+  }
+  return out
 }

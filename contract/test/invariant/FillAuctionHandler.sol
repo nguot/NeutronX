@@ -127,7 +127,7 @@ contract FillAuctionHandler is Test {
         address actor = actors[actorSeed % actors.length];
         if (auction.pendingReturns(actor) == 0) return;
         vm.prank(actor);
-        auction.withdraw();
+        auction.withdraw(payable(actor));
     }
 
     /// Advance the chain so deadlines / slash windows can be crossed.

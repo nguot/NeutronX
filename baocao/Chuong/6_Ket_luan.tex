@@ -27,16 +27,31 @@
     \end{tabular}
 \end{table}
 
-Như vậy, cả năm mục tiêu đều đã đạt được ở mức cài đặt và kiểm thử trên môi trường giả lập. Đóng góp đáng kể nhất của đồ án là cơ chế đặt cọc và phạt ràng buộc filler, và phần giao dịch xuyên chuỗi có hỗ trợ khớp từng phần - hai điểm mà các hệ thống đã khảo sát ít làm. Qua quá trình thực hiện, em cũng rút ra được nhiều kinh nghiệm về lập trình hợp đồng thông minh, đặc biệt là việc một sai sót nhỏ trong logic cũng có thể dẫn tới mất tài sản, nên việc kiểm thử kỹ và rà soát bảo mật là rất quan trọng.
+Như vậy, cả năm mục tiêu đều đã đạt được ở mức cài đặt và kiểm thử trên môi trường giả lập. Đóng góp đáng kể nhất của đồ án là cơ chế đặt cọc và phạt ràng buộc filler, và phần giao dịch xuyên chuỗi có hỗ trợ khớp từng phần - hai điểm mà các hệ thống đã khảo sát ít làm. Quá trình thực hiện đồ án cho thấy một sai sót nhỏ trong logic hợp đồng thông minh có thể dẫn tới mất tài sản người dùng, từ đó xác nhận tầm quan trọng của kiểm thử kỹ và rà soát bảo mật độc lập.
 
 \section{Hạn chế}
 \label{sec:limitations}
 
-Bên cạnh các kết quả trên, đồ án vẫn còn một số hạn chế. Thứ nhất, hệ thống mới chỉ chạy trên mạng giả lập, chưa được triển khai lên mạng chính thức. Thứ hai, các filler trong kiểm thử được cấp vốn lớn nên đồ án mới kiểm chứng được tính đúng của các luồng, chưa mô phỏng được sự cạnh tranh kinh tế thật khi vốn có hạn; ngoài ra cũng chưa có thanh khoản và người dùng thật. Thứ ba, một số chỗ trong thiết kế còn mang tính tập trung, đáng kể nhất là khóa đồng ký (cosigner) hiện do một bên duy nhất giữ. Thứ tư, phần xuyên chuỗi mới làm cho hai chuỗi tương thích EVM, và cơ chế dự phòng mới hỗ trợ hai sàn là Uniswap và KyberSwap.
+Đồ án có một số hạn chế:
+
+\begin{itemize}
+    \item \textbf{Chưa lên mainnet.} Hệ thống hiện được chạy trên mạng giả lập, chưa được triển khai lên mạng thử nghiệm hay mạng chính thức.
+    \item \textbf{Chưa mô phỏng cạnh tranh kinh tế thực tế.} Các filler trong kiểm thử được cấp vốn không giới hạn, do đó kết quả kiểm chứng giới hạn ở tính đúng của luồng, chưa phản ánh hành vi khi vốn có hạn; cũng chưa có thanh khoản và người dùng thực.
+    \item \textbf{Cosigner tập trung.} Khóa đồng ký (cosigner) hiện do một bên duy nhất nắm giữ, tạo ra điểm tin tưởng tập trung trong hệ thống.
+    \item \textbf{Phạm vi hỗ trợ hẹp.} Phần xuyên chuỗi hiện hỗ trợ các chuỗi tương thích EVM; cơ chế dự phòng hiện tích hợp Uniswap và KyberSwap.
+\end{itemize}
 
 \section{Hướng phát triển}
 \label{sec:future}
 
-Từ các hạn chế trên, đồ án có thể được phát triển tiếp theo nhiều hướng. Trước hết là triển khai hệ thống lên mạng thử nghiệm rồi tiến tới mạng chính thức, kèm theo một đợt kiểm toán bảo mật do chuyên gia thực hiện. Tiếp theo, có thể phân tán vai trò cosigner cho nhiều bên thay vì một khóa duy nhất, để giảm sự phụ thuộc tập trung. Phần tính cọc theo giá có thể được làm chặt hơn bằng cách kéo dài cửa sổ lấy giá trung bình và kết hợp thêm một nguồn giá độc lập. Cơ chế dự phòng có thể bổ sung thêm các bộ chuyển đổi cho những sàn khác như 1inch hay 0x. Cuối cùng, phần xuyên chuỗi có thể mở rộng ra nhiều hơn hai chuỗi.
+Từ các hạn chế trên, đồ án có thể được phát triển tiếp theo các hướng sau:
+
+\begin{itemize}
+    \item \textbf{Triển khai và kiểm toán.} Đưa hệ thống lên mạng thử nghiệm rồi tiến tới mainnet, kèm theo một đợt kiểm toán bảo mật do chuyên gia thực hiện.
+    \item \textbf{Phi tập trung hóa cosigner.} Chạy module backend ký lệnh trong môi trường thực thi tin cậy (TEE --- Trusted Execution Environment), để phần ký chạy trong một vùng cô lập không thể can thiệp từ bên ngoài mà không cần tin vào một bên duy nhất.
+    \item \textbf{Tăng độ bền cơ chế tính cọc.} Kéo dài cửa sổ lấy giá trung bình (TWAP) và kết hợp thêm nguồn giá độc lập để khó thao túng hơn.
+    \item \textbf{Mở rộng dự phòng.} Thêm bộ chuyển đổi cho các sàn khác như 1inch và 0x.
+    \item \textbf{Mở rộng xuyên chuỗi.} Hỗ trợ nhiều hơn hai chuỗi EVM, tiến tới các chuỗi không tương thích EVM.
+\end{itemize}
 
 \end{document}

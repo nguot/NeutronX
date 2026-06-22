@@ -1,7 +1,7 @@
 import { ethers } from 'ethers'
 import { findSlotByHashlock, updateSlotStatus, deriveSecret, getCosignerWallet } from '../services/crosschainService'
 import { db } from '../db/client'
-import { ensureIndexerStateTable, resolveCheckpoint, setCheckpoint } from '../db/checkpoint'
+import { ensureIndexerStateTable, resolveCheckpoint, setCheckpoint, queryFilterChunked } from '../db/checkpoint'
 
 // Factory emits one event per filler clone deployment
 const FACTORY_ABI = [
@@ -92,7 +92,7 @@ export function startEscrowDstWatcher(opts: EscrowDstWatcherOpts): void {
         const fromBlock = Math.max(0, lastBlock + 1 - RESCAN_LAG)
         const toBlock   = latestSeen
         try {
-          const logs = await factory.queryFilter(factory.filters.EscrowCreated(), fromBlock, toBlock)
+          const logs = await queryFilterChunked(factory, factory.filters.EscrowCreated(), fromBlock, toBlock)
           for (const log of logs) {
             const [escrow, dstFiller, hashlock, recipient, token, amount, dstExpiry] = log.args!
             console.log(`[${label}] EscrowCreated  ${escrow.slice(0,10)}…  H_i=${hashlock.slice(0,10)}…`)

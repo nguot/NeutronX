@@ -1,6 +1,6 @@
 import { ethers } from 'ethers'
 import { db } from '../db/client'
-import { ensureIndexerStateTable, resolveCheckpoint, setCheckpoint } from '../db/checkpoint'
+import { ensureIndexerStateTable, resolveCheckpoint, setCheckpoint, queryFilterChunked } from '../db/checkpoint'
 import * as dotenv from 'dotenv'
 dotenv.config()
 
@@ -102,7 +102,7 @@ export async function startIndexer() {
   provider.on('block', async (blockNumber: number) => {
     if (blockNumber > lastFillBlock) {
       try {
-        const logs = await reactor.queryFilter(reactor.filters.PartialFillExecuted(), lastFillBlock + 1, blockNumber)
+        const logs = await queryFilterChunked(reactor, reactor.filters.PartialFillExecuted(), lastFillBlock + 1, blockNumber)
         for (const log of logs) await handlePartialFill(log)
         lastFillBlock = blockNumber
         await setCheckpoint('reactor_partial_fill', lastFillBlock)
@@ -113,7 +113,7 @@ export async function startIndexer() {
 
     if (blockNumber > lastFallbackBlock) {
       try {
-        const logs = await fallbackExecutor.queryFilter(fallbackExecutor.filters.FallbackExecuted(), lastFallbackBlock + 1, blockNumber)
+        const logs = await queryFilterChunked(fallbackExecutor, fallbackExecutor.filters.FallbackExecuted(), lastFallbackBlock + 1, blockNumber)
         for (const log of logs) await handleFallbackExecuted(log)
         lastFallbackBlock = blockNumber
         await setCheckpoint('fallback_executed', lastFallbackBlock)

@@ -2374,13 +2374,20 @@
     <bcf:datasource type="file" datatype="bibtex" glob="false">Danh_sach_tai_lieu_tham_khao.bib</bcf:datasource>
   </bcf:bibdata>
   <bcf:section number="0">
-    <bcf:citekey order="1" intorder="1">hovy1993automated</bcf:citekey>
-    <bcf:citekey order="2" intorder="1">peterson2007computer</bcf:citekey>
-    <bcf:citekey order="3" intorder="1">NguyenThucHai</bcf:citekey>
-    <bcf:citekey order="4" intorder="1">poesio2001discourse</bcf:citekey>
-    <bcf:citekey order="5" intorder="1">knott1996data</bcf:citekey>
-    <bcf:citekey order="6" intorder="1">BernersTim</bcf:citekey>
-    <bcf:citekey order="7" intorder="1">LectureA</bcf:citekey>
+    <bcf:citekey order="1" intorder="1">werner2022sok</bcf:citekey>
+    <bcf:citekey order="2" intorder="1">daian2020flashboys</bcf:citekey>
+    <bcf:citekey order="3" intorder="1">herlihy2018atomic</bcf:citekey>
+    <bcf:citekey order="4" intorder="1">openzeppelin_contracts</bcf:citekey>
+    <bcf:citekey order="5" intorder="1">trufy2026</bcf:citekey>
+    <bcf:citekey order="6" intorder="1">trufy2026</bcf:citekey>
+    <bcf:citekey order="7" intorder="1" nocite="1">*</bcf:citekey>
+    <bcf:citekey order="8" intorder="1">wood2014ethereum</bcf:citekey>
+    <bcf:citekey order="9" intorder="1">merkle1987digital</bcf:citekey>
+    <bcf:citekey order="10" intorder="1">openzeppelin_contracts</bcf:citekey>
+    <bcf:citekey order="11" intorder="1">herlihy2018atomic</bcf:citekey>
+    <bcf:citekey order="12" intorder="1">daian2020flashboys</bcf:citekey>
+    <bcf:citekey order="12" intorder="2">qin2022quantifying</bcf:citekey>
+    <bcf:citekey order="13" intorder="1">trufy2026</bcf:citekey>
   </bcf:section>
   <!-- SORTING TEMPLATES -->
   <bcf:sortingtemplate name="none">

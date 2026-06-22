@@ -10,6 +10,8 @@ A self-teaching map for the `contract/` folder. Two goals:
 
 Everything here points at real files and functions in this repo.
 
+> **Mới bắt đầu / sát ngày bảo vệ?** Nhảy thẳng tới mục **★ BẮT ĐẦU TỪ ĐÂY** bên dưới — nó gộp thứ tự đọc (§2) và rebuild (§5) thành một lộ trình dẫn dắt có time-box, kèm đường tắt khi thiếu thời gian.
+
 ---
 
 ## 0. The one-paragraph mental model
@@ -30,6 +32,35 @@ Four actors recur everywhere — keep them straight:
 - **filler** — executes chunks, pays the output token, stakes collateral.
 - **cosigner** — a backend key that signs/authorizes orders (the trust anchor; see finding L-1).
 - **treasury / slasher** — receive forfeited / slashed collateral.
+
+---
+
+## ★ BẮT ĐẦU TỪ ĐÂY — vòng lặp đọc → code lại (lộ trình dẫn dắt)
+
+Mục tiêu: hiểu *sâu* để bảo vệ được và code thêm được tại chỗ. Cách nhanh nhất KHÔNG phải đọc tuần tự hết, mà là **vòng lặp 4 bước cho TỪNG mảnh**:
+
+> **(1) Đọc cặp** `src/X.sol` + `test/X.t.sol` (test là spec chạy được) → **(2) Trace** hàm chính từng dòng theo CHECKS→EFFECTS→INTERACTIONS → **(3) Re-code test-first** ở repo nháp (`forge init`), viết test trước rồi implement tới xanh → **(4) Diff** với bản gốc — *chỗ bạn thiếu chính là bài học.*
+
+Vì sao re-code chứ không chỉ đọc: đọc cho **nhận diện** ("nhìn đúng đấy"), re-code cho **tái tạo** ("tự viết lại được"). Live-code lúc bảo vệ cần tái tạo. Đừng nhìn bản gốc tới khi test xanh hoặc bí thật.
+
+### Chẩn đoán trước (15 phút, làm NGAY)
+Trả lời cold 6 câu ở **§7 Self-quiz**. Câu nào lắp bắp = đúng mảnh cần học. Đây là la bàn — học theo lỗ hổng, không học dàn trải.
+
+### Lộ trình gộp (đọc §2 ⊕ rebuild §5), theo chặng có time-box
+| Chặng | Đọc (§2) | Re-code (§5) | Thời gian | "Aha" cốt lõi |
+|---|---|---|---|---|
+| **A. Nền** | RemainingLib, DecayCursorLib | **M1 + M2** | ~nửa ngày | giá giảm tuyến tính clamp ≥0; "0 remaining ≠ chưa chạm" |
+| **B. Trái tim** | PartialFillReactor → tập trung `executePartialChunk` | **M3 → M4** | ~1 ngày | EIP-712 digest; vì sao giá phải nằm TRONG struct ký (C-1); 2 tầng floor |
+| **C. Kinh tế** | FillAuction + DynamicStakeLib | **M5** | ~1 ngày | 3 cờ terminal, "settle đúng một lần"; thua-đua ≠ slashable (H-1/H-2) |
+| **D. Xuyên chuỗi** | EscrowDst→Src→Factories + `crosschain.md` | **M7 (MiniHTLC)** | ~1 ngày | atomic ⇔ T2<T1 + chung filler |
+
+### Đường tắt nếu SÁT bảo vệ (không đủ thời gian rebuild hết)
+1. **Chẩn đoán §7** → khoanh lỗ hổng.
+2. Đọc cold **§3 (life of an order)** + **§4 (bảng bất biến)** — đây là bộ xương trả lời mọi câu phản biện.
+3. Re-code **chỉ 2 mảnh keystone**: **M1 DecayCursorLib** (~30p) + **M3 minimal reactor** (~1-2h). Đủ cơ bắp live-code cho ask khả năng cao nhất (Pausable/fee đụng reactor, contract mới đụng HTLC/decay).
+4. Mỗi finding sẽ bị hỏi (3.1/3.2/3.3, C-1, C-2) → mở test ghim nó, đọc 1 lần.
+
+→ Phần còn lại của tài liệu (§1-§7) là chi tiết cho từng bước trên. Bắt đầu bằng §7, rồi theo bảng chặng.
 
 ---
 

@@ -166,24 +166,33 @@ contract PartialFillReactor is ReentrancyGuard {
         // the final fill can never underflow / brick the order.
         uint256 outputAmount = FullMath.mulDiv(fillAmount, uint256(currentPrice), 1e18);
 
-        // C-1: enforce the swapper's slippage floor — pro-rata on each chunk, and
-        // the absolute minimum once the order is fully consumed.
+        // C-1: per-chunk pro-rata floor; the absolute minimum is checked once the
+        // order is fully consumed (below, against the ACTUAL received total).
         uint256 minChunk = FullMath.mulDiv(order.info.minOutputAmount, fillAmount, order.info.inputAmount);
-        require(outputAmount >= minChunk, "min output");
-        uint256 paid = _paidOutput[orderHash] + outputAmount;
-        _paidOutput[orderHash] = paid;
-        if (newRemaining == 0) require(paid >= order.info.minOutputAmount, "min output total");
 
         // ── INTERACTIONS ──
         // forge-lint: disable-next-line(unsafe-typecast)
         permit2.transferFrom(order.info.swapper, msg.sender, uint160(fillAmount), order.info.inputToken);
+
+        // 3.2: enforce the slippage floor on what the swapper ACTUALLY receives,
+        // measured as a balance delta, not the nominal transfer amount. A
+        // fee-on-transfer output token would otherwise satisfy the floor on paper
+        // while crediting the swapper less than minChunk. The surrounding
+        // nonReentrant guard protects the state writes that follow the transfer.
+        uint256 balBefore = IERC20(order.info.outputToken).balanceOf(order.info.swapper);
         IERC20(order.info.outputToken).safeTransferFrom(msg.sender, order.info.swapper, outputAmount);
+        uint256 received = IERC20(order.info.outputToken).balanceOf(order.info.swapper) - balBefore;
+
+        require(received >= minChunk, "min output");
+        uint256 paid = _paidOutput[orderHash] + received;
+        _paidOutput[orderHash] = paid;
+        if (newRemaining == 0) require(paid >= order.info.minOutputAmount, "min output total");
 
         // 3.5: pass the live remainder *before* this fill so the auction can cap
         // the refund denominator — a registrant that consumes the entire shrunk
         // remainder is not penalised as if they under-delivered their commitment.
         fillAuction.onFillSuccess(orderHash, msg.sender, fillAmount, currentRemaining);
-        emit PartialFillExecuted(orderHash, msg.sender, fillAmount, outputAmount);
+        emit PartialFillExecuted(orderHash, msg.sender, fillAmount, received);
     }
 
     function remainingInput(bytes32 orderHash, uint256 orderAmount)

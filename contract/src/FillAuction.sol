@@ -274,11 +274,12 @@ contract FillAuction is IFillAuction, ReentrancyGuard {
         emit StakeReleased(reg.filler, orderHash, reg.stakeAmount);
     }
 
-    function withdraw() external nonReentrant {
+    function withdraw(address payable to) external nonReentrant {
+        require(to != address(0), "zero to");
         uint256 amount = pendingReturns[msg.sender];
         require(amount > 0, "nothing to withdraw");
         pendingReturns[msg.sender] = 0;
-        (bool ok,) = msg.sender.call{value: amount}("");
+        (bool ok,) = to.call{value: amount}("");
         require(ok, "transfer failed");
     }
 

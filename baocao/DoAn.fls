@@ -125,6 +125,8 @@ INPUT C:\Program Files\MiKTeX\tex\latex\capt-of\capt-of.sty
 INPUT C:\Program Files\MiKTeX\tex\latex\capt-of\capt-of.sty
 INPUT C:\Program Files\MiKTeX\tex\latex\multirow\multirow.sty
 INPUT C:\Program Files\MiKTeX\tex\latex\multirow\multirow.sty
+INPUT C:\Program Files\MiKTeX\tex\latex\tools\longtable.sty
+INPUT C:\Program Files\MiKTeX\tex\latex\tools\longtable.sty
 INPUT C:\Program Files\MiKTeX\tex\latex\fancyhdr\fancyhdr.sty
 INPUT C:\Program Files\MiKTeX\tex\latex\fancyhdr\fancyhdr.sty
 INPUT C:\Program Files\MiKTeX\tex\latex\biblatex\biblatex.sty
@@ -193,10 +195,30 @@ INPUT C:\Program Files\MiKTeX\tex\latex\l3packages\xparse\xparse.sty
 INPUT C:\Program Files\MiKTeX\tex\latex\l3packages\xparse\xparse.sty
 INPUT C:\Program Files\MiKTeX\tex\latex\appendix\appendix.sty
 INPUT C:\Program Files\MiKTeX\tex\latex\appendix\appendix.sty
+INPUT C:\Program Files\MiKTeX\tex\latex\pdfpages\pdfpages.sty
+INPUT C:\Program Files\MiKTeX\tex\latex\pdfpages\pdfpages.sty
+INPUT C:\Program Files\MiKTeX\tex\latex\tools\calc.sty
+INPUT C:\Program Files\MiKTeX\tex\latex\tools\calc.sty
+INPUT C:\Program Files\MiKTeX\tex\latex\eso-pic\eso-pic.sty
+INPUT C:\Program Files\MiKTeX\tex\latex\eso-pic\eso-pic.sty
+INPUT C:\Program Files\MiKTeX\tex\latex\xcolor\xcolor.sty
+INPUT C:\Program Files\MiKTeX\tex\latex\xcolor\xcolor.sty
+INPUT C:\Program Files\MiKTeX\tex\latex\xcolor\xcolor.sty
+INPUT C:\Program Files\MiKTeX\tex\latex\graphics-cfg\color.cfg
+INPUT C:\Program Files\MiKTeX\tex\latex\graphics-cfg\color.cfg
+INPUT C:\Program Files\MiKTeX\tex\latex\graphics-cfg\color.cfg
+INPUT C:\Program Files\MiKTeX\tex\latex\graphics\mathcolor.ltx
+INPUT C:\Program Files\MiKTeX\tex\latex\graphics\mathcolor.ltx
+INPUT C:\Program Files\MiKTeX\tex\latex\graphics\mathcolor.ltx
+INPUT C:\Program Files\MiKTeX\tex\latex\pdfpages\pppdftex.def
+INPUT C:\Program Files\MiKTeX\tex\latex\pdfpages\pppdftex.def
+INPUT C:\Program Files\MiKTeX\tex\latex\pdfpages\pppdftex.def
 INPUT C:\Program Files\MiKTeX\tex\latex\caption\caption.sty
 INPUT C:\Program Files\MiKTeX\tex\latex\caption\caption.sty
 INPUT C:\Program Files\MiKTeX\tex\latex\caption\caption3.sty
 INPUT C:\Program Files\MiKTeX\tex\latex\caption\caption3.sty
+INPUT C:\Program Files\MiKTeX\tex\latex\caption\ltcaption.sty
+INPUT C:\Program Files\MiKTeX\tex\latex\caption\ltcaption.sty
 INPUT C:\Program Files\MiKTeX\tex\latex\listings\listings.sty
 INPUT C:\Program Files\MiKTeX\tex\latex\listings\listings.sty
 INPUT C:\Program Files\MiKTeX\tex\latex\listings\lstpatch.sty
@@ -247,8 +269,6 @@ INPUT C:\Program Files\MiKTeX\tex\latex\glossaries\styles\glossary-list.sty
 INPUT C:\Program Files\MiKTeX\tex\latex\glossaries\styles\glossary-list.sty
 INPUT C:\Program Files\MiKTeX\tex\latex\glossaries\styles\glossary-long.sty
 INPUT C:\Program Files\MiKTeX\tex\latex\glossaries\styles\glossary-long.sty
-INPUT C:\Program Files\MiKTeX\tex\latex\tools\longtable.sty
-INPUT C:\Program Files\MiKTeX\tex\latex\tools\longtable.sty
 INPUT C:\Program Files\MiKTeX\tex\latex\glossaries\styles\glossary-super.sty
 INPUT C:\Program Files\MiKTeX\tex\latex\glossaries\styles\glossary-super.sty
 INPUT C:\Program Files\MiKTeX\tex\latex\supertabular\supertabular.sty
@@ -338,8 +358,6 @@ INPUT .\DoAn.bbl
 INPUT .\DoAn.bbl
 INPUT .\DoAn.bbl
 INPUT DoAn.bbl
-INPUT C:\Program Files\MiKTeX\tex\latex\caption\ltcaption.sty
-INPUT C:\Program Files\MiKTeX\tex\latex\caption\ltcaption.sty
 INPUT .\DoAn.out
 INPUT .\DoAn.out
 INPUT DoAn.out
@@ -348,12 +366,12 @@ OUTPUT DoAn.pdf
 INPUT .\DoAn.out
 INPUT .\DoAn.out
 OUTPUT DoAn.out
-INPUT .\Bia.tex
-INPUT .\Bia.tex
-INPUT Bia.tex
-INPUT .\Bia.tex
-INPUT .\Bia.tex
-INPUT Bia.tex
+INPUT .\Bia_lot.tex
+INPUT .\Bia_lot.tex
+INPUT Bia_lot.tex
+INPUT .\Bia_lot.tex
+INPUT .\Bia_lot.tex
+INPUT Bia_lot.tex
 INPUT C:\Program Files\MiKTeX\fonts\tfm\vntex\urwvn\utmb8v.tfm
 INPUT C:\Program Files\MiKTeX\fonts\tfm\vntex\urwvn\utmb8v.tfm
 INPUT C:\Program Files\MiKTeX\fonts\tfm\vntex\urwvn\utmb8v.tfm
@@ -393,12 +411,6 @@ INPUT C:\Program Files\MiKTeX\fonts\tfm\public\amsfonts\symbols\msbm10.tfm
 INPUT C:\Program Files\MiKTeX\fonts\tfm\public\amsfonts\symbols\msbm7.tfm
 INPUT C:\Users\vutie\AppData\Local\MiKTeX\fonts\map\pdftex\pdftex.map
 INPUT C:\Program Files\MiKTeX\fonts\enc\dvips\vntex\t5.enc
-INPUT .\Bia_lot.tex
-INPUT .\Bia_lot.tex
-INPUT Bia_lot.tex
-INPUT .\Bia_lot.tex
-INPUT .\Bia_lot.tex
-INPUT Bia_lot.tex
 INPUT .\Chuong\0_2_Loi_cam_on.tex
 INPUT Chuong\0_2_Loi_cam_on.tex
 INPUT .\Chuong\0_2_Loi_cam_on.tex
@@ -413,6 +425,10 @@ INPUT .\DoAn.toc
 INPUT .\DoAn.toc
 INPUT DoAn.toc
 INPUT C:\Program Files\MiKTeX\fonts\tfm\vntex\urwvn\utmbc8v.tfm
+INPUT C:\Program Files\MiKTeX\tex\latex\vntex\t5pcr.fd
+INPUT C:\Program Files\MiKTeX\tex\latex\vntex\t5pcr.fd
+INPUT C:\Program Files\MiKTeX\tex\latex\vntex\t5pcr.fd
+INPUT C:\Program Files\MiKTeX\fonts\tfm\vntex\urwvn\ucrr8v.tfm
 OUTPUT DoAn.toc
 INPUT .\DoAn.lof
 INPUT .\DoAn.lof
@@ -421,10 +437,6 @@ OUTPUT DoAn.lof
 INPUT .\DoAn.lot
 INPUT .\DoAn.lot
 INPUT DoAn.lot
-INPUT C:\Program Files\MiKTeX\tex\latex\vntex\t5pcr.fd
-INPUT C:\Program Files\MiKTeX\tex\latex\vntex\t5pcr.fd
-INPUT C:\Program Files\MiKTeX\tex\latex\vntex\t5pcr.fd
-INPUT C:\Program Files\MiKTeX\fonts\tfm\vntex\urwvn\ucrr8v.tfm
 OUTPUT DoAn.lot
 INPUT .\Chuong\1_Gioi_thieu.tex
 INPUT .\Chuong\1_Gioi_thieu.tex
@@ -446,8 +458,6 @@ INPUT Chuong\2_Khao_sat.tex
 INPUT .\Chuong\2_Khao_sat.tex
 INPUT .\Chuong\2_Khao_sat.tex
 INPUT Chuong\2_Khao_sat.tex
-INPUT C:\Program Files\MiKTeX\fonts\tfm\vntex\urwvn\utmr8v.tfm
-INPUT C:\Program Files\MiKTeX\fonts\tfm\vntex\urwvn\utmb8v.tfm
 INPUT .\Hinhve\dutch_auction.png
 INPUT .\Hinhve\dutch_auction.png
 INPUT Hinhve\dutch_auction.png
@@ -455,6 +465,8 @@ INPUT .\Hinhve\dutch_auction.png
 INPUT .\Hinhve\dutch_auction.png
 INPUT .\Hinhve\dutch_auction.png
 INPUT .\Hinhve\dutch_auction.png
+INPUT C:\Program Files\MiKTeX\fonts\tfm\vntex\urwvn\utmr8v.tfm
+INPUT C:\Program Files\MiKTeX\fonts\tfm\vntex\urwvn\utmb8v.tfm
 INPUT .\Hinhve\slash_decision.png
 INPUT .\Hinhve\slash_decision.png
 INPUT Hinhve\slash_decision.png
@@ -489,6 +501,20 @@ INPUT .\Hinhve\arch.png
 INPUT .\Hinhve\arch.png
 INPUT .\Hinhve\arch.png
 INPUT .\Hinhve\arch.png
+INPUT .\Hinhve\contract_packages.png
+INPUT .\Hinhve\contract_packages.png
+INPUT Hinhve\contract_packages.png
+INPUT .\Hinhve\contract_packages.png
+INPUT .\Hinhve\contract_packages.png
+INPUT .\Hinhve\contract_packages.png
+INPUT .\Hinhve\contract_packages.png
+INPUT .\Hinhve\contract_deps.png
+INPUT .\Hinhve\contract_deps.png
+INPUT Hinhve\contract_deps.png
+INPUT .\Hinhve\contract_deps.png
+INPUT .\Hinhve\contract_deps.png
+INPUT .\Hinhve\contract_deps.png
+INPUT .\Hinhve\contract_deps.png
 INPUT .\Hinhve\sequence_samechain.png
 INPUT .\Hinhve\sequence_samechain.png
 INPUT Hinhve\sequence_samechain.png
@@ -497,6 +523,11 @@ INPUT .\Hinhve\sequence_samechain.png
 INPUT .\Hinhve\sequence_samechain.png
 INPUT .\Hinhve\sequence_samechain.png
 INPUT C:\Program Files\MiKTeX\fonts\tfm\vntex\urwvn\ucrr8v.tfm
+INPUT C:\Program Files\MiKTeX\fonts\tfm\vntex\urwvn\ucrr8v.tfm
+INPUT C:\Program Files\MiKTeX\fonts\tfm\vntex\urwvn\utmr8v.tfm
+INPUT C:\Program Files\MiKTeX\fonts\tfm\vntex\urwvn\utmr8v.tfm
+INPUT C:\Program Files\MiKTeX\fonts\tfm\vntex\urwvn\ucrb8v.tfm
+INPUT C:\Program Files\MiKTeX\fonts\tfm\vntex\urwvn\ucrro8v.tfm
 INPUT .\Hinhve\reactor_state.png
 INPUT .\Hinhve\reactor_state.png
 INPUT Hinhve\reactor_state.png
@@ -504,6 +535,31 @@ INPUT .\Hinhve\reactor_state.png
 INPUT .\Hinhve\reactor_state.png
 INPUT .\Hinhve\reactor_state.png
 INPUT .\Hinhve\reactor_state.png
+INPUT C:\Program Files\MiKTeX\fonts\tfm\vntex\urwvn\utmr8v.tfm
+INPUT C:\Program Files\MiKTeX\fonts\tfm\public\amsfonts\cmextra\cmex7.tfm
+INPUT C:\Program Files\MiKTeX\fonts\tfm\public\amsfonts\cmextra\cmex7.tfm
+INPUT C:\Program Files\MiKTeX\fonts\tfm\public\latex-fonts\lasy5.tfm
+INPUT C:\Program Files\MiKTeX\fonts\tfm\public\amsfonts\symbols\msam7.tfm
+INPUT C:\Program Files\MiKTeX\fonts\tfm\public\amsfonts\symbols\msam5.tfm
+INPUT C:\Program Files\MiKTeX\fonts\tfm\public\amsfonts\symbols\msbm7.tfm
+INPUT C:\Program Files\MiKTeX\fonts\tfm\public\amsfonts\symbols\msbm5.tfm
+INPUT C:\Program Files\MiKTeX\fonts\tfm\public\amsfonts\cmextra\cmex7.tfm
+INPUT C:\Program Files\MiKTeX\fonts\tfm\public\amsfonts\symbols\msam5.tfm
+INPUT C:\Program Files\MiKTeX\fonts\tfm\public\amsfonts\symbols\msbm5.tfm
+INPUT .\Hinhve\sequence_crosschain.png
+INPUT .\Hinhve\sequence_crosschain.png
+INPUT Hinhve\sequence_crosschain.png
+INPUT .\Hinhve\sequence_crosschain.png
+INPUT .\Hinhve\sequence_crosschain.png
+INPUT .\Hinhve\sequence_crosschain.png
+INPUT .\Hinhve\sequence_crosschain.png
+INPUT .\Hinhve\crosschain_timing.png
+INPUT .\Hinhve\crosschain_timing.png
+INPUT Hinhve\crosschain_timing.png
+INPUT .\Hinhve\crosschain_timing.png
+INPUT .\Hinhve\crosschain_timing.png
+INPUT .\Hinhve\crosschain_timing.png
+INPUT .\Hinhve\crosschain_timing.png
 INPUT .\Hinhve\frontend_1.png
 INPUT .\Hinhve\frontend_1.png
 INPUT Hinhve\frontend_1.png
@@ -511,7 +567,6 @@ INPUT .\Hinhve\frontend_1.png
 INPUT .\Hinhve\frontend_1.png
 INPUT .\Hinhve\frontend_1.png
 INPUT .\Hinhve\frontend_1.png
-INPUT C:\Program Files\MiKTeX\fonts\tfm\vntex\urwvn\utmr8v.tfm
 INPUT C:\Program Files\MiKTeX\fonts\tfm\vntex\urwvn\utmb8v.tfm
 INPUT .\Hinhve\frontend_2.png
 INPUT .\Hinhve\frontend_2.png
@@ -520,15 +575,53 @@ INPUT .\Hinhve\frontend_2.png
 INPUT .\Hinhve\frontend_2.png
 INPUT .\Hinhve\frontend_2.png
 INPUT .\Hinhve\frontend_2.png
+INPUT .\Hinhve\crosschain_1.png
+INPUT .\Hinhve\crosschain_1.png
+INPUT Hinhve\crosschain_1.png
+INPUT .\Hinhve\crosschain_1.png
+INPUT .\Hinhve\crosschain_1.png
+INPUT .\Hinhve\crosschain_1.png
+INPUT .\Hinhve\crosschain_1.png
+INPUT .\Hinhve\crosschain_2.png
+INPUT .\Hinhve\crosschain_2.png
+INPUT Hinhve\crosschain_2.png
+INPUT .\Hinhve\crosschain_2.png
+INPUT .\Hinhve\crosschain_2.png
+INPUT .\Hinhve\crosschain_2.png
+INPUT .\Hinhve\crosschain_2.png
 INPUT .\Chuong\4_Kiem_thu.tex
 INPUT .\Chuong\4_Kiem_thu.tex
 INPUT Chuong\4_Kiem_thu.tex
 INPUT .\Chuong\4_Kiem_thu.tex
 INPUT .\Chuong\4_Kiem_thu.tex
 INPUT Chuong\4_Kiem_thu.tex
-INPUT C:\Program Files\MiKTeX\fonts\tfm\vntex\urwvn\ucrr8v.tfm
+INPUT C:\Program Files\MiKTeX\fonts\tfm\public\cm\cmr8.tfm
+INPUT C:\Program Files\MiKTeX\fonts\tfm\public\cm\cmmi8.tfm
+INPUT C:\Program Files\MiKTeX\fonts\tfm\public\cm\cmsy8.tfm
+INPUT C:\Program Files\MiKTeX\fonts\tfm\public\cm\cmex10.tfm
+INPUT C:\Program Files\MiKTeX\fonts\tfm\public\amsfonts\cmextra\cmex8.tfm
+INPUT C:\Program Files\MiKTeX\fonts\tfm\public\amsfonts\cmextra\cmex7.tfm
+INPUT C:\Program Files\MiKTeX\fonts\tfm\public\latex-fonts\lasy8.tfm
+INPUT C:\Program Files\MiKTeX\fonts\tfm\public\amsfonts\symbols\msam10.tfm
+INPUT C:\Program Files\MiKTeX\fonts\tfm\public\amsfonts\symbols\msam10.tfm
+INPUT C:\Program Files\MiKTeX\fonts\tfm\public\amsfonts\symbols\msam5.tfm
+INPUT C:\Program Files\MiKTeX\fonts\tfm\public\amsfonts\symbols\msbm10.tfm
+INPUT C:\Program Files\MiKTeX\fonts\tfm\public\amsfonts\symbols\msbm10.tfm
+INPUT C:\Program Files\MiKTeX\fonts\tfm\public\amsfonts\symbols\msbm5.tfm
+INPUT C:\Program Files\MiKTeX\fonts\tfm\public\cm\cmr10.tfm
+INPUT C:\Program Files\MiKTeX\fonts\tfm\public\cm\cmmi10.tfm
+INPUT C:\Program Files\MiKTeX\fonts\tfm\public\cm\cmsy10.tfm
+INPUT C:\Program Files\MiKTeX\fonts\tfm\public\cm\cmex10.tfm
+INPUT C:\Program Files\MiKTeX\fonts\tfm\public\amsfonts\cmextra\cmex8.tfm
+INPUT C:\Program Files\MiKTeX\fonts\tfm\public\amsfonts\cmextra\cmex7.tfm
+INPUT C:\Program Files\MiKTeX\fonts\tfm\public\latex-fonts\lasy10.tfm
+INPUT C:\Program Files\MiKTeX\fonts\tfm\public\amsfonts\symbols\msam10.tfm
+INPUT C:\Program Files\MiKTeX\fonts\tfm\public\amsfonts\symbols\msam7.tfm
+INPUT C:\Program Files\MiKTeX\fonts\tfm\public\amsfonts\symbols\msam5.tfm
+INPUT C:\Program Files\MiKTeX\fonts\tfm\public\amsfonts\symbols\msbm10.tfm
+INPUT C:\Program Files\MiKTeX\fonts\tfm\public\amsfonts\symbols\msbm7.tfm
+INPUT C:\Program Files\MiKTeX\fonts\tfm\public\amsfonts\symbols\msbm5.tfm
 INPUT C:\Program Files\MiKTeX\fonts\tfm\vntex\urwvn\utmr8v.tfm
-INPUT C:\Program Files\MiKTeX\fonts\tfm\vntex\urwvn\ucrro8v.tfm
 INPUT C:\Program Files\MiKTeX\fonts\tfm\vntex\urwvn\ucrb8v.tfm
 INPUT .\Chuong\6_Ket_luan.tex
 INPUT .\Chuong\6_Ket_luan.tex
@@ -536,33 +629,161 @@ INPUT Chuong\6_Ket_luan.tex
 INPUT .\Chuong\6_Ket_luan.tex
 INPUT .\Chuong\6_Ket_luan.tex
 INPUT Chuong\6_Ket_luan.tex
-INPUT .\Chuong\7_Luu_y_tai_lieu_tham_khao.tex
-INPUT .\Chuong\7_Luu_y_tai_lieu_tham_khao.tex
-INPUT Chuong\7_Luu_y_tai_lieu_tham_khao.tex
-INPUT .\Chuong\7_Luu_y_tai_lieu_tham_khao.tex
-INPUT .\Chuong\7_Luu_y_tai_lieu_tham_khao.tex
-INPUT Chuong\7_Luu_y_tai_lieu_tham_khao.tex
 INPUT C:\Program Files\MiKTeX\fonts\tfm\vntex\urwvn\utmr8v.tfm
 INPUT C:\Program Files\MiKTeX\fonts\tfm\vntex\urwvn\utmb8v.tfm
+INPUT .\Chuong\Phu_luc_A.tex
+INPUT .\Chuong\Phu_luc_A.tex
+INPUT Chuong\Phu_luc_A.tex
+INPUT .\Chuong\Phu_luc_A.tex
+INPUT .\Chuong\Phu_luc_A.tex
+INPUT Chuong\Phu_luc_A.tex
+INPUT C:\Program Files\MiKTeX\tex\latex\psnfss\ts1pcr.fd
+INPUT C:\Program Files\MiKTeX\tex\latex\psnfss\ts1pcr.fd
+INPUT C:\Program Files\MiKTeX\tex\latex\psnfss\ts1pcr.fd
+INPUT C:\Program Files\MiKTeX\tex\latex\psnfss\ts1pcr.fd
+INPUT C:\Program Files\MiKTeX\fonts\tfm\adobe\courier\pcrr8c.tfm
+INPUT C:\Program Files\MiKTeX\fonts\vf\adobe\courier\pcrr8c.vf
+INPUT C:\Program Files\MiKTeX\fonts\tfm\adobe\courier\pcrr8r.tfm
 INPUT .\Chuong\Phu_luc_B.tex
 INPUT .\Chuong\Phu_luc_B.tex
 INPUT Chuong\Phu_luc_B.tex
 INPUT .\Chuong\Phu_luc_B.tex
 INPUT .\Chuong\Phu_luc_B.tex
 INPUT Chuong\Phu_luc_B.tex
+INPUT .\Chuong\Phu_luc_C.tex
+INPUT .\Chuong\Phu_luc_C.tex
+INPUT Chuong\Phu_luc_C.tex
+INPUT .\Chuong\Phu_luc_C.tex
+INPUT .\Chuong\Phu_luc_C.tex
+INPUT Chuong\Phu_luc_C.tex
+INPUT .\Chuong\Phu_luc_D.tex
+INPUT .\Chuong\Phu_luc_D.tex
+INPUT Chuong\Phu_luc_D.tex
+INPUT .\Chuong\Phu_luc_D.tex
+INPUT .\Chuong\Phu_luc_D.tex
+INPUT Chuong\Phu_luc_D.tex
+INPUT ..\auditfinal1.pdf
+INPUT ..\auditfinal1.pdf
+INPUT ..\auditfinal1.pdf
+INPUT ..\auditfinal1.pdf
+INPUT ..\auditfinal1.pdf
+INPUT ..\auditfinal1.pdf
+INPUT ..\auditfinal1.pdf
+INPUT ..\auditfinal1.pdf
+INPUT ..\auditfinal1.pdf
+INPUT ..\auditfinal1.pdf
+INPUT ..\auditfinal1.pdf
+INPUT ..\auditfinal1.pdf
+INPUT ..\auditfinal1.pdf
+INPUT ..\auditfinal1.pdf
+INPUT ..\auditfinal1.pdf
+INPUT ..\auditfinal1.pdf
+INPUT ..\auditfinal1.pdf
+INPUT ..\auditfinal1.pdf
+INPUT ..\auditfinal1.pdf
+INPUT ..\auditfinal1.pdf
+INPUT ..\auditfinal1.pdf
+INPUT ..\auditfinal1.pdf
+INPUT ..\auditfinal1.pdf
+INPUT ..\auditfinal1.pdf
+INPUT ..\auditfinal1.pdf
+INPUT ..\auditfinal1.pdf
+INPUT ..\auditfinal1.pdf
+INPUT ..\auditfinal1.pdf
+INPUT ..\auditfinal1.pdf
+INPUT ..\auditfinal1.pdf
+INPUT ..\auditfinal1.pdf
+INPUT ..\auditfinal1.pdf
+INPUT ..\auditfinal1.pdf
+INPUT ..\auditfinal1.pdf
+INPUT ..\auditfinal1.pdf
+INPUT ..\auditfinal1.pdf
+INPUT ..\auditfinal1.pdf
+INPUT ..\auditfinal1.pdf
+INPUT ..\auditfinal1.pdf
+INPUT ..\auditfinal1.pdf
+INPUT ..\auditfinal1.pdf
+INPUT ..\auditfinal1.pdf
+INPUT ..\auditfinal1.pdf
+INPUT ..\auditfinal1.pdf
+INPUT ..\auditfinal1.pdf
+INPUT ..\auditfinal1.pdf
+INPUT ..\auditfinal1.pdf
+INPUT ..\auditfinal1.pdf
+INPUT ..\auditfinal1.pdf
+INPUT ..\auditfinal1.pdf
+INPUT ..\auditfinal1.pdf
+INPUT ..\auditfinal1.pdf
+INPUT ..\auditfinal1.pdf
+INPUT ..\auditfinal1.pdf
+INPUT ..\auditfinal1.pdf
+INPUT ..\auditfinal1.pdf
+INPUT ..\auditfinal1.pdf
+INPUT ..\auditfinal1.pdf
+INPUT ..\auditfinal1.pdf
+INPUT ..\auditfinal1.pdf
+INPUT ..\auditfinal1.pdf
+INPUT ..\auditfinal1.pdf
+INPUT ..\auditfinal1.pdf
+INPUT ..\auditfinal1.pdf
+INPUT ..\auditfinal1.pdf
+INPUT ..\auditfinal1.pdf
+INPUT ..\auditfinal1.pdf
+INPUT ..\auditfinal1.pdf
+INPUT ..\auditfinal1.pdf
+INPUT ..\auditfinal1.pdf
+INPUT ..\auditfinal1.pdf
+INPUT ..\auditfinal1.pdf
+INPUT ..\auditfinal1.pdf
+INPUT ..\auditfinal1.pdf
+INPUT ..\auditfinal1.pdf
+INPUT ..\auditfinal1.pdf
+INPUT ..\auditfinal1.pdf
+INPUT ..\auditfinal1.pdf
+INPUT ..\auditfinal1.pdf
+INPUT ..\auditfinal1.pdf
+INPUT ..\auditfinal1.pdf
+INPUT ..\auditfinal1.pdf
+INPUT ..\auditfinal1.pdf
+INPUT ..\auditfinal1.pdf
+INPUT ..\auditfinal1.pdf
+INPUT ..\auditfinal1.pdf
+INPUT ..\auditfinal1.pdf
+INPUT ..\auditfinal1.pdf
+INPUT ..\auditfinal1.pdf
+INPUT ..\auditfinal1.pdf
+INPUT ..\auditfinal1.pdf
+INPUT ..\auditfinal1.pdf
+INPUT ..\auditfinal1.pdf
+INPUT ..\auditfinal1.pdf
+INPUT ..\auditfinal1.pdf
+INPUT ..\auditfinal1.pdf
+INPUT ..\auditfinal1.pdf
+INPUT ..\auditfinal1.pdf
+INPUT ..\auditfinal1.pdf
 INPUT DoAn.aux
 INPUT .\DoAn.out
 INPUT .\DoAn.out
 INPUT DoAn.run.xml
 OUTPUT DoAn.run.xml
+INPUT C:\Program Files\MiKTeX\fonts\type1\public\amsfonts\cm\cmex10.pfb
+INPUT C:\Program Files\MiKTeX\fonts\type1\public\amsfonts\cm\cmex10.pfb
 INPUT C:\Program Files\MiKTeX\fonts\type1\public\amsfonts\cm\cmmi12.pfb
 INPUT C:\Program Files\MiKTeX\fonts\type1\public\amsfonts\cm\cmmi12.pfb
+INPUT C:\Program Files\MiKTeX\fonts\type1\public\amsfonts\cm\cmmi9.pfb
+INPUT C:\Program Files\MiKTeX\fonts\type1\public\amsfonts\cm\cmmi9.pfb
 INPUT C:\Program Files\MiKTeX\fonts\type1\public\amsfonts\cm\cmr12.pfb
 INPUT C:\Program Files\MiKTeX\fonts\type1\public\amsfonts\cm\cmr12.pfb
+INPUT C:\Program Files\MiKTeX\fonts\type1\public\amsfonts\cm\cmr9.pfb
+INPUT C:\Program Files\MiKTeX\fonts\type1\public\amsfonts\cm\cmr9.pfb
 INPUT C:\Program Files\MiKTeX\fonts\type1\public\amsfonts\cm\cmsy10.pfb
 INPUT C:\Program Files\MiKTeX\fonts\type1\public\amsfonts\cm\cmsy10.pfb
+INPUT C:\Program Files\MiKTeX\fonts\type1\public\amsfonts\symbols\msam10.pfb
+INPUT C:\Program Files\MiKTeX\fonts\type1\public\amsfonts\symbols\msam10.pfb
 INPUT C:\Program Files\MiKTeX\fonts\type1\vntex\urwvn\ucrb8v.pfb
 INPUT C:\Program Files\MiKTeX\fonts\type1\vntex\urwvn\ucrb8v.pfb
+INPUT C:\Program Files\MiKTeX\fonts\type1\urw\courier\ucrr8a.pfb
+INPUT C:\Program Files\MiKTeX\fonts\type1\urw\courier\ucrr8a.pfb
 INPUT C:\Program Files\MiKTeX\fonts\type1\vntex\urwvn\ucrr8v.pfb
 INPUT C:\Program Files\MiKTeX\fonts\type1\vntex\urwvn\ucrr8v.pfb
 INPUT C:\Program Files\MiKTeX\fonts\type1\vntex\urwvn\ucrro8v.pfb

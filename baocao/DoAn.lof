@@ -1,16 +1,24 @@
 \addvspace {10\p@ }
 \addvspace {10\p@ }
-\contentsline {figure}{\numberline {2.1}{\ignorespaces Đường cong giá giảm dần theo block trong đấu giá kiểu Hà Lan và các điểm khớp lệnh từng phần.}}{7}{figure.caption.9}%
-\contentsline {figure}{\numberline {2.2}{\ignorespaces Cách phân biệt hoàn cọc (filler không có lỗi) hay phạt cọc (filler bỏ dở) sau thời hạn.}}{8}{figure.caption.10}%
-\contentsline {figure}{\numberline {2.3}{\ignorespaces Kiến trúc giao dịch xuyên chuỗi với một hợp đồng ký quỹ riêng cho mỗi slot trên cả hai chuỗi.}}{9}{figure.caption.11}%
-\contentsline {figure}{\numberline {2.4}{\ignorespaces Cách tạo bí mật cho từng slot từ một bí mật gốc và cây Merkle tương ứng.}}{10}{figure.caption.12}%
+\contentsline {figure}{\numberline {2.1}{\ignorespaces Đường cong giá giảm dần theo block trong đấu giá kiểu Hà Lan và các điểm khớp lệnh từng phần.}}{6}{figure.caption.7}%
+\contentsline {figure}{\numberline {2.2}{\ignorespaces Cách phân biệt hoàn cọc (filler không có lỗi) hay phạt cọc (filler bỏ dở) sau thời hạn.}}{7}{figure.caption.8}%
+\contentsline {figure}{\numberline {2.3}{\ignorespaces Kiến trúc giao dịch xuyên chuỗi với một hợp đồng ký quỹ riêng cho mỗi slot trên cả hai chuỗi.}}{8}{figure.caption.9}%
+\contentsline {figure}{\numberline {2.4}{\ignorespaces Cách tạo bí mật cho từng slot từ một bí mật gốc và cây Merkle tương ứng.}}{9}{figure.caption.10}%
 \addvspace {10\p@ }
-\contentsline {figure}{\numberline {3.1}{\ignorespaces Kiến trúc tổng thể của hệ thống NeutronX gồm bốn tầng.}}{12}{figure.caption.13}%
-\contentsline {figure}{\numberline {3.2}{\ignorespaces Sơ đồ trình tự vòng đời một lệnh được khớp từng phần trong cùng một chuỗi.}}{13}{figure.caption.14}%
-\contentsline {figure}{\numberline {3.3}{\ignorespaces Các trạng thái của một lệnh trong hợp đồng PartialFillReactor.}}{15}{figure.caption.16}%
-\contentsline {figure}{\numberline {3.4}{\ignorespaces Một số màn hình của giao diện người dùng.}}{18}{figure.caption.19}%
+\contentsline {figure}{\numberline {3.1}{\ignorespaces Kiến trúc tổng thể của hệ thống NeutronX gồm bốn tầng.}}{11}{figure.caption.11}%
+\contentsline {figure}{\numberline {3.2}{\ignorespaces Sơ đồ gói các hợp đồng thông minh của NeutronX.}}{12}{figure.caption.12}%
+\contentsline {figure}{\numberline {3.3}{\ignorespaces Sơ đồ phụ thuộc giữa các hợp đồng.}}{12}{figure.caption.13}%
+\contentsline {figure}{\numberline {3.4}{\ignorespaces Sơ đồ trình tự vòng đời một lệnh được khớp từng phần trong cùng một chuỗi.}}{13}{figure.caption.14}%
+\contentsline {figure}{\numberline {3.5}{\ignorespaces Các trạng thái của một lệnh trong hợp đồng PartialFillReactor.}}{16}{figure.caption.17}%
+\contentsline {figure}{\numberline {3.6}{\ignorespaces Sơ đồ trình tự luồng giao dịch xuyên chuỗi (6 bước).}}{22}{figure.caption.23}%
+\contentsline {figure}{\numberline {3.7}{\ignorespaces Ràng buộc thời gian T2 < T1 bảo vệ filler khỏi mất cả hai đầu.}}{23}{figure.caption.24}%
+\contentsline {figure}{\numberline {3.8}{\ignorespaces Một số màn hình của giao diện người dùng.}}{24}{figure.caption.25}%
+\contentsline {figure}{\numberline {3.9}{\ignorespaces Giao diện người dùng cho giao dịch xuyên chuỗi.}}{24}{figure.caption.26}%
 \addvspace {10\p@ }
-\contentsline {figure}{\numberline {4.1}{\ignorespaces Kết quả chạy kịch bản kiểm thử đầu cuối cho giao dịch xuyên chuỗi.}}{21}{figure.caption.21}%
+\addvspace {10\p@ }
+\addvspace {10\p@ }
+\addvspace {10\p@ }
+\addvspace {10\p@ }
 \addvspace {10\p@ }
 \addvspace {10\p@ }
 \contentsfinish 

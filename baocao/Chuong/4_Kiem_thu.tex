@@ -1,137 +1,267 @@
 \documentclass[../DoAn.tex]{subfiles}
 \begin{document}
 
-Sau khi đã thiết kế và cài đặt các hợp đồng ở chương trước, chương này kiểm tra xem chúng có thật sự chạy đúng và an toàn hay không. Phần đầu nói về cách kiểm thử và môi trường, phần giữa trình bày kết quả kiểm thử chức năng, và phần cuối là quá trình rà soát bảo mật.
+Với một hệ thống giữ tài sản của người dùng, kiểm thử không dừng ở mức ``chạy được'' --- cần chứng minh được rằng các tính chất an toàn giữ nguyên ngay cả khi bị tấn công. Chương này trình bày cách đồ án tổ chức kiểm thử theo từng tính chất cụ thể, rồi tóm tắt kết quả rà soát bảo mật độc lập từ Trufy~\cite{trufy2026}.
 
 \section{Phương pháp và môi trường kiểm thử}
 \label{sec:test-env}
 
-Việc kiểm thử được làm ở hai mức. Mức thứ nhất là kiểm thử đơn vị (unit test) cho từng hợp đồng, viết bằng Foundry - một bộ công cụ phổ biến cho Solidity. Ngoài các test thông thường, đồ án còn dùng thêm kiểm thử bất biến (invariant test), tức là để công cụ tự sinh ngẫu nhiên rất nhiều chuỗi thao tác rồi kiểm tra một tính chất luôn phải đúng (ví dụ: tổng tiền trong hợp đồng không bao giờ bị âm). Mức thứ hai là kiểm thử đầu cuối (end-to-end), chạy cả một kịch bản giao dịch thật từ lúc tạo lệnh tới lúc tất toán.
+Bộ kiểm thử dùng ba kiểu bổ trợ nhau, tất cả viết bằng Foundry:
 
-Môi trường chạy là mạng giả lập cục bộ tạo bằng Anvil. Với kịch bản trong cùng một chuỗi, đồ án dùng một mạng sao chép trạng thái từ Ethereum mainnet, nhờ đó các token và pool Uniswap có sẵn để kiểm tra phần tính cọc theo giá thật. Với kịch bản xuyên chuỗi, đồ án dùng hai mạng Anvil riêng đóng vai hai chuỗi.
+\begin{itemize}
+    \item \textbf{Kiểm thử đơn vị}: dựng từng tình huống cụ thể rồi kiểm kết quả.
+    \item \textbf{Kiểm thử sinh ngẫu nhiên (fuzz)}: công cụ tự sinh hàng nghìn bộ dữ liệu đầu vào và kiểm một tính chất phải luôn đúng, nên kết luận rộng hơn vài ví dụ tay.
+    \item \textbf{Kiểm thử bất biến (invariant)}: sinh chuỗi thao tác ngẫu nhiên và sau mỗi bước kiểm một tính chất quan trọng không được vi phạm.
+\end{itemize}
 
-Ở đây cần nói rõ vài giả định của môi trường để hiểu đúng kết quả. Các filler trong kịch bản kiểm thử được cấp sẵn một lượng vốn lớn, và các block được tạo ra bằng lệnh thủ công chứ không phải do người dùng thật giao dịch. Vì vậy, kết quả kiểm thử cho thấy các \emph{luồng hoạt động và cơ chế phạt, hoàn cọc chạy đúng}, chứ chưa phản ánh được sự cạnh tranh kinh tế giữa các filler khi vốn có hạn và phí gas là thật.
+Môi trường chạy là mạng giả lập Anvil: một mạng fork từ Ethereum mainnet (có sẵn token và pool Uniswap thật để tính cọc theo giá), và hai mạng riêng cho kịch bản xuyên chuỗi. Một lưu ý quan trọng: filler trong kiểm thử được cấp vốn lớn và không tốn phí gas thật, nên kết quả chứng minh \emph{tính đúng của các luồng và cơ chế}, không phản ánh cạnh tranh kinh tế khi vốn hữu hạn. Khi chạy lại toàn bộ bằng \texttt{forge test}, cả 149 trường hợp kiểm thử trên 24 bộ test đều đạt; kết quả tổng hợp theo thành phần như Bảng~\ref{table:forge}.
 
-\section{Kết quả kiểm thử chức năng}
-\label{sec:test-func}
-
-Bộ kiểm thử có khoảng 126 trường hợp, trong đó 125 trường hợp đạt; một trường hợp không đạt là do giá trên mạng fork dao động chứ không phải do lỗi logic. Về độ phủ mã nguồn, hợp đồng \texttt{FillAuction} đạt 100\% số dòng, còn \texttt{PartialFillReactor} đạt khoảng 94\% số dòng. Phần dưới đây nói rõ hơn về các trường hợp kiểm thử quan trọng, nhóm theo bốn cơ chế chính, và Bảng~\ref{table:testcase} tóm tắt lại.
-
-\textbf{Khớp lệnh từng phần và giá.} Nhóm này tập trung kiểm tra rằng người dùng không bị thiệt về giá. Một trường hợp quan trọng là khi filler cố tình sửa lại giá khởi điểm của lệnh thì giao dịch bị từ chối, vì giá đã được cosigner ký. Các trường hợp khác kiểm tra rằng một lần khớp trả ra ít hơn mức tối thiểu (cả khi khớp giữa chừng lẫn khi khớp nốt) đều bị chặn. Đáng chú ý, đồ án dùng một kiểm thử sinh ngẫu nhiên (fuzz) rất nhiều lịch trình khớp khác nhau để chắc chắn rằng tổng số tiền người dùng nhận được không bao giờ thấp hơn mức họ đã ký, bất kể lệnh bị chia nhỏ thế nào. Ngoài ra còn có trường hợp chặn khớp quá vụn (nhỏ hơn \texttt{minFillBps}).
-
-\textbf{Đặt cọc và phạt.} Nhóm này kiểm tra rằng việc phạt là công bằng. Trường hợp đáng chú ý nhất: khi hai filler tranh nhau một lệnh và một filler thua cuộc đua, filler thua phải lấy lại được toàn bộ cọc và \emph{không} bị phạt; ngược lại, một filler nhận lệnh rồi bỏ dở thì bị phạt và không thu được lợi gì. Các trường hợp khác kiểm tra: khi người dùng hủy lệnh hoặc vô hiệu nonce thì filler đã đăng ký được hoàn cọc (vì lỗi không thuộc về họ); và một filler chỉ khớp một phần nhỏ nhưng đúng bằng phần đã cam kết thì vẫn được hoàn đủ cọc, tránh hiểu nhầm filler khớp phần nhỏ là kẻ xấu.
-
-\textbf{Cơ chế dự phòng.} Trường hợp quan trọng nhất ở đây kiểm tra rằng sau khi cơ chế dự phòng đã chạy cho một lệnh thì không một filler nào còn khớp thường được lệnh đó nữa - đây chính là bảo đảm chống tiêu hai lần cùng một phần khối lượng. Các trường hợp khác kiểm tra: chặn chạy dự phòng quá sớm (chưa tới gần hạn), chặn gọi tới một sàn không nằm trong danh sách trắng, từ chối khi kết quả thấp hơn mức tối thiểu đã ký, và hoàn lại phần tài sản thừa cho người dùng nếu route không dùng hết.
-
-\textbf{An toàn chung.} Đồ án còn có các test chuyên về an toàn, như chống tấn công gọi lại (reentrancy) và kiểm tra khả năng chi trả của hợp đồng. Vì cách viết hai test này có vài điểm đáng chú ý, chúng được trình bày riêng ở mục~\ref{sec:test-advanced}.
-
+% ─────────────────────────────────────────────────────────────────────────────
+% HÌNH 4.1 — KẾT QUẢ CHẠY FORGE TEST
+% HƯỚNG DẪN: chạy `forge test --summary` trong thư mục contract/, chụp màn hình
+%   bảng tổng kết. Lưu vào baocao/Hinhve/forge_test.png rồi bỏ % dòng includegraphics.
+% ─────────────────────────────────────────────────────────────────────────────
 \begin{table}[H]
     \centering
-    \caption{Một số trường hợp kiểm thử quan trọng.}
-    \label{table:testcase}
-    \begin{tabular}{|l|p{5cm}|p{5.2cm}|c|}
+    \caption{Tổng hợp kết quả \texttt{forge test}: 149/149 trường hợp đạt, nhóm theo thành phần.}
+    \label{table:forge}
+    \begin{tabular}{|p{8.5cm}|c|}
         \hline
-        \textbf{Nhóm} & \textbf{Trường hợp} & \textbf{Kết quả mong đợi} & \textbf{Đạt} \\
+        \textbf{Nhóm thành phần} & \textbf{Số test đạt} \\
         \hline
-        \multirow{3}{*}{Khớp từng phần}
-          & Filler sửa giá khởi điểm & Bị từ chối (giá đã được ký) & Có \\ \cline{2-4}
-          & Khớp/hoàn tất dưới mức tối thiểu & Bị từ chối & Có \\ \cline{2-4}
-          & Fuzz nhiều lịch trình khớp & Tổng ra luôn $\geq$ mức đã ký & Có \\
+        PartialFillReactor (khớp từng phần, định giá, sàn output) & 38 \\
         \hline
-        \multirow{3}{*}{Cọc và phạt}
-          & Filler thua cuộc đua & Hoàn đủ cọc, không bị phạt & Có \\ \cline{2-4}
-          & Filler nhận rồi bỏ dở & Bị phạt, không có lãi & Có \\ \cline{2-4}
-          & Khớp phần nhỏ đúng cam kết & Hoàn đủ cọc & Có \\
+        FillAuction (cọc, phạt, hoàn cọc, bất biến solvency) & 35 \\
         \hline
-        \multirow{2}{*}{Dự phòng}
-          & Khớp thường sau khi đã dự phòng & Bị chặn (chống tiêu hai lần) & Có \\ \cline{2-4}
-          & Gọi sàn ngoài danh sách trắng & Bị từ chối & Có \\
+        Chống trích xuất giá trị bằng MEV & 11 \\
         \hline
-        An toàn chung
-          & Token độc hại gọi ngược (reentrancy) & Bị chặn & Có \\
+        FallbackExecutor (cơ chế dự phòng) & 9 \\
         \hline
-        \multirow{2}{*}{Xuyên chuỗi}
-          & Hai filler khớp hai slot cùng lệnh & Cả hai nhận đúng tài sản & Có \\ \cline{2-4}
-          & Bằng chứng Merkle / chữ ký sai & Bị từ chối & Có \\
+        Hợp đồng xuyên chuỗi (escrow theo slot, ràng buộc thời gian) & 13 \\
+        \hline
+        Thư viện tính giá/cọc và oracle TWAP & 43 \\
+        \hline
+        \textbf{Tổng cộng} & \textbf{149} \\
         \hline
     \end{tabular}
 \end{table}
 
-\textbf{Giao dịch xuyên chuỗi.} Ngoài kịch bản chính, nhóm này kiểm tra nhiều tình huống biên: một slot không thể bị khớp hai lần; một bằng chứng Merkle sai hoặc chữ ký sai bị từ chối ngay trước khi đụng tới tài sản; khi hết hạn mà giao dịch chưa hoàn tất thì tài sản được hoàn cho người dùng kèm theo việc tịch thu khoản đặt cọc an toàn của filler; và điều kiện thời gian T2 sớm hơn T1 luôn được giữ để filler không bị mất tiền. Toàn bộ luồng còn được chạy đầu cuối với hai filler khớp hai slot khác nhau của cùng một lệnh: sau khi chạy hết các bước, kịch bản kiểm tra lại số dư của người dùng và hai filler trên cả hai chuỗi rồi báo ``tất cả kiểm tra đều đạt'', như ở Hình~\ref{fig:e2e}.
+\section{Các tính chất đã chứng minh}
+\label{sec:test-proof}
 
-% ─────────────────────────────────────────────────────────────────────────────
-% HÌNH 4.1 — KẾT QUẢ KIỂM THỬ ĐẦU CUỐI XUYÊN CHUỖI
-% HƯỚNG DẪN: chụp màn hình terminal khi chạy run_cc.sh thành công, lấy đoạn cuối
-%   có dòng "ALL CHECKS PASSED" cùng bảng số dư trước/sau của swapper và 2 filler.
-% PASTE ẢNH: lưu vào  baocao/Hinhve/e2e_result.png  rồi bỏ % dòng \includegraphics.
-% ─────────────────────────────────────────────────────────────────────────────
-\begin{figure}[H]
-    \centering
-    % \includegraphics[width=0.9\textwidth]{Hinhve/e2e_result.png}
-    \caption{Kết quả chạy kịch bản kiểm thử đầu cuối cho giao dịch xuyên chuỗi.}
-    \label{fig:e2e}
-\end{figure}
+Chương~\ref{chapter:Experiment} xây dựng bốn cơ chế: khớp lệnh từng phần, đặt cọc và phạt filler, dự phòng tự động, và giao dịch xuyên chuỗi. Mỗi cơ chế đi kèm các kịch bản lỗi hoặc tấn công tiềm ẩn; sáu tính chất dưới đây kiểm tra từng kịch bản đó:
+\begin{enumerate}
+    \item \textbf{Tính đúng và không bị kẹt của khớp từng phần} --- tích lũy kết quả qua nhiều nhịp có thể gây tràn số hoặc để lại phần dư không tất toán được.
+    \item \textbf{Bảo đảm mức ra tối thiểu cho người dùng} --- filler kiểm soát lượng trả ra và có thể trả thiếu hoặc thao túng tham số giá.
+    \item \textbf{Cơ chế cọc và phạt kháng khai thác kinh tế} --- filler có thể khai báo sai phần đăng ký hoặc bỏ dở để giảm mức phạt.
+    \item \textbf{MEV nằm trong ngưỡng chấp nhận của lệnh} --- bot có thể trì hoãn để khớp ở mức giá thấp hơn, trích xuất giá trị trong biên độ giảm giá.
+    \item \textbf{Cơ chế dự phòng loại trừ khớp trùng và bảo đảm hoàn tất} --- nếu dự phòng và filler thường xử lý cùng một phần khối lượng, tài sản bị rút hai lần.
+    \item \textbf{Giao dịch xuyên chuỗi kháng griefing và sai lệch thời gian} --- filler có thể chiếm slot mà không thực hiện, hoặc vi phạm ràng buộc T2 $<$ T1 khiến filler mất tài sản trên cả hai chuỗi.
+\end{enumerate}
+Mỗi mục dưới đây nêu tính chất và các kiểm thử tương ứng.
 
-\section{Kiểm thử đối kháng, bất biến và sinh ngẫu nhiên}
-\label{sec:test-advanced}
+\subsection{Khớp lệnh từng phần luôn đúng và không bị kẹt}
 
-Ngoài các trường hợp kiểm thử thông thường ở trên, đồ án còn dùng ba kiểu kiểm thử mạnh hơn để tăng độ tin cậy, vì với hợp đồng tài chính thì chỉ kiểm vài tình huống cụ thể là chưa đủ.
+Nhóm này kiểm hợp đồng \texttt{PartialFillReactor}. Hai tính chất cần bảo đảm: lệnh luôn có thể khớp hết và tấn công gọi lại trong lúc trả tiền bị chặn.
 
-\textbf{Kiểm thử sinh ngẫu nhiên (fuzz).} Thay vì chỉ thử vài bộ số do người viết chọn, công cụ tự sinh ra rất nhiều bộ số khác nhau rồi kiểm tra một tính chất luôn phải đúng. Ví dụ rõ nhất là trường hợp đã nhắc ở trên: công cụ sinh ngẫu nhiên đủ kiểu cách chia một lệnh thành nhiều phần (số phần, kích thước mỗi phần, thời điểm khớp) và kiểm tra rằng tổng số tiền người dùng nhận được khi lệnh khớp xong không bao giờ thấp hơn mức họ đã ký. Nhờ vậy, kết luận ``người dùng không bị trả thiếu'' không chỉ đúng cho vài ví dụ mà đúng cho rất nhiều khả năng.
+\textbf{Lệnh không bị kẹt.} Thiết kế ban đầu tích lũy kết quả toàn lệnh, gây tràn số ở nhịp cuối và khiến lệnh không tất toán được; thiết kế hiện tại định giá độc lập từng nhịp, loại bỏ lỗi này. Kiểm thử fuzz \tcode{testFuzz_alwaysSettleable} sinh ngẫu nhiên lịch giảm giá và cách chia nhịp, xác nhận lệnh khớp được về 0 với mọi đầu vào.
 
-\textbf{Kiểm thử bất biến (invariant).} Đây là kiểu kiểm thử trạng thái: công cụ tự sinh ra những chuỗi thao tác ngẫu nhiên gồm đăng ký, khớp, phạt, rút tiền và tua block, với người tham gia, số tiền và thời điểm bất kỳ; sau mỗi bước nó kiểm tra một tính chất quan trọng luôn phải giữ. Tính chất được chọn ở đây là \emph{khả năng chi trả}: số ETH mà hợp đồng \texttt{FillAuction} đang giữ phải luôn bằng đúng tổng số cọc của các đăng ký chưa tất toán cộng với tổng số tiền mọi người đang chờ rút. Điểm đáng nói nằm ở \emph{cách} kiểm: bộ kiểm thử tự giữ một ``sổ sách bóng'' chạy song song với hợp đồng. Mỗi khi một đăng ký được tạo, sổ bóng cộng thêm số cọc; mỗi khi đăng ký được tất toán hoặc bị phạt, sổ bóng trừ đi số cọc đó. Sau mỗi thao tác ngẫu nhiên, công cụ so số dư thật của hợp đồng với sổ bóng này - nếu lệch một đồng là phát hiện ngay:
+\texttt{MinFillRemainder.t.sol} kiểm tra trường hợp phần còn lại nhỏ hơn ngưỡng tối thiểu: với \texttt{minFillBps} = 50\% và tổng 100 đơn vị, filler thứ nhất khớp 60, để lại 40 đơn vị. Kiểm thử xác nhận hợp đồng cho phép filler thứ hai khớp toàn bộ 40 đơn vị còn lại, đảm bảo lệnh có thể tất toán.
 
-\begin{lstlisting}
-// "so sach bong" chay song song voi hop dong:
-function register(...) external { /* ... */ ghost_activeStake += stake; } // dang ky: + coc
-function fill(...)     external { /* ... */ ghost_activeStake -= stake; } // khop xong: - coc
-function slash(...)    external { /* ... */ ghost_activeStake -= stake; } // bi phat:  - coc
-
-// sau MOI thao tac ngau nhien, so that cua hop dong phai khop so bong:
-function invariant_solvency() public view {
-    assertEq(address(auction).balance, ghost_activeStake + totalPending);
-}
-\end{lstlisting}
-
-\textbf{Kiểm thử đối kháng (adversarial).} Nhóm này đóng vai một filler xấu (kiểu bot MEV) thắng cuộc đua sắp xếp giao dịch, rồi kiểm tra xem nó \emph{lấy được gì} và \emph{không lấy được gì}. Kết quả cho thấy bot xấu không thể sửa lại mức giá người dùng đã ký, và không thể trả cho người dùng thấp hơn mức tối thiểu. Một kết quả trung thực và đáng chú ý là: nếu bot cố tình khớp muộn để hưởng mức giá đã giảm thì nó vẫn ``vợt'' được một phần chênh lệch (trả người dùng ít hơn so với khớp sớm cùng khối lượng), nhưng phần chênh này luôn bị chặn dưới bởi sàn giá. Tức là hệ thống không loại bỏ hoàn toàn MEV, nhưng giới hạn được thiệt hại trong đúng khoảng mà người dùng đã chấp nhận khi ký lệnh. Kịch bản này được mô phỏng bằng cách cho filler xấu ``thắng cuộc đua'' - gọi thẳng các hàm theo đúng thứ tự nó muốn - rồi đo xem nó rút được bao nhiêu.
-
-Đáng chú ý nhất trong nhóm này là một test tự viết hẳn một token ERC-20 ``độc'' để chứng minh hợp đồng chống được tấn công gọi lại (reentrancy). Ngay khi hợp đồng gọi token này để trả tiền cho người dùng giữa lúc tất toán, token lập tức nhảy ngược trở lại hợp đồng để thử rút thêm một lần nữa:
+\textbf{Chống tấn công gọi lại (reentrancy).} Kiểm thử dùng một token ERC-20 mô phỏng tấn công: khi hợp đồng gọi token để chuyển tài sản ra, token gọi ngược lại hàm khớp trước khi trạng thái được cập nhật. Kiểm thử xác nhận lần gọi thứ hai bị từ chối do \texttt{remaining} đã được ghi về 0 trước khi thực hiện bất kỳ lần chuyển tài sản nào.
 
 \begin{lstlisting}
-// Token doc: dung luc duoc goi de tra tien, no nhay nguoc vao hop dong thu rut lai.
+// Token doc: khi duoc goi de tra tien, no nhay nguoc vao hop dong thu rut them.
 function transferFrom(address from, address to, uint256 amount)
     public override returns (bool)
 {
     if (armed) {
-        armed = false;                                   // chi re-enter dung mot lan
+        armed = false;                   // chi re-enter dung mot lan
         (bool ok, bytes memory ret) = target.call(attackCalldata);
-        if (!ok) { assembly { revert(add(ret, 0x20), mload(ret)) } } // bong lai loi cua guard
+        if (!ok) { assembly { revert(add(ret, 0x20), mload(ret)) } }
     }
     return super.transferFrom(from, to, amount);
 }
 \end{lstlisting}
 
-Cú gọi ngược này bị khóa chống reentrancy của hợp đồng chặn lại, làm cả giao dịch tất toán thất bại đúng như mong muốn. Việc tự viết một token tấn công như vậy cho phép kiểm chứng phòng thủ trong điều kiện sát với một cuộc tấn công thật, thay vì chỉ kiểm trên giấy.
+Kiểm thử \tcode{test_reentrantOutputToken_reverts} xác nhận khóa reentrancy phát hiện gọi lồng nhau và revert toàn bộ giao dịch ngay trước khi tiền rời khỏi hợp đồng.
 
-Đỉnh điểm của nhóm này là một kịch bản tổng hợp gồm nhiều lệnh và nhiều người tham gia, trộn lẫn filler trung thực và filler xấu: có lệnh được khớp sạch, có lệnh mà filler trung thực thua cuộc đua, có lệnh mà filler xấu đăng ký rồi bỏ và để filler trung thực khớp thay. Sau khi chạy xong, kịch bản kiểm tra một loạt tính chất toàn cục: mọi người dùng đều được khớp ở mức bằng hoặc trên sàn (không ai bị cướp); tổng token vào và ra khớp nhau; filler trung thực thua cuộc không mất đồng nào; filler hoàn thành đầy đủ thì được hoàn 100\% cọc; và hợp đồng vẫn giữ đúng khả năng chi trả. Đây chính là bằng chứng mạnh nhất cho thấy thiết kế cọc và phạt hoạt động công bằng ngay cả khi có bên cố tình phá.
+\subsection{Người dùng không bao giờ bị trả thiếu}
 
-\section{Rà soát bảo mật}
+Nhóm này xác minh hợp đồng thực thi đúng giá và mức sàn được ký trong lệnh.
+
+\textbf{Giả mạo và khớp dưới sàn.} Kiểm thử \tcode{test_tamperStartPrice_rejected} xác nhận nếu filler cố sửa giá khởi điểm trong lệnh thì chữ ký không khớp và giao dịch bị từ chối. Kiểm thử \tcode{test_fillBelowMinOutput_reverts} xác nhận một nhịp khớp trả ra dưới mức tối thiểu theo tỉ lệ cũng bị chặn.
+
+\textbf{Bẫy làm tròn xuống.} Do phép chia lấy phần nguyên, tổng các mức sàn từng nhịp có thể nhỏ hơn mức sàn tuyệt đối người dùng đã ký. Kiểm thử \tcode{test_completionBelowAbsoluteFloor_reverts} dựng ví dụ cụ thể: lệnh bán 3 đơn vị, người dùng ký yêu cầu nhận tối thiểu 5~USDC tổng cộng.
+
+\begin{itemize}
+    \item Nhịp~A: filler khớp 2 đơn vị $\Rightarrow$ sàn nhịp A $= \lfloor 5 \times 2 / 3 \rfloor = 3$~USDC, trả 3 $\checkmark$
+    \item Nhịp~B: filler khớp 1 đơn vị $\Rightarrow$ sàn nhịp B $= \lfloor 5 \times 1 / 3 \rfloor = 1$~USDC, trả 1 $\checkmark$
+    \item Tổng nhận: $3 + 1 = 4$~USDC $< 5$~USDC mà người dùng đã ký $\Rightarrow$ nhịp hoàn tất bị chặn
+\end{itemize}
+
+Hai nhịp đều qua sàn riêng, nhưng cộng lại vẫn thiếu vì phần lẻ của phép chia bị bỏ mỗi lần. Hợp đồng có chốt chặn thứ hai ở nhịp hoàn tất: tổng đã trả phải $\geq$ mức sàn tuyệt đối, nếu không thì revert với lỗi ``min output total''. Kiểm thử fuzz \tcode{testFuzz_completedOrder_neverBelowSignedFloor} xác nhận tính chất này đúng với nhiều cách chia lệnh khác nhau.
+
+\subsection{Cơ chế cọc và phạt không bị khai thác kinh tế}
+
+Nhóm này kiểm tra năm tình huống khai thác cơ chế cọc và xác nhận mỗi tình huống được chặn đúng.
+
+\textbf{Giả mạo khi đăng ký.} Khi đăng ký, filler phải nộp cọc tỉ lệ với phần lệnh cam kết. Nếu hợp đồng chấp nhận con số do filler tự khai thay vì đọc từ lệnh đã ký, filler có thể khai nhận 1\% nhưng thực khớp 100\%, khiến cọc không đủ để phạt khi bỏ dở. Kiểm thử \tcode{RegistrationForgery} xác nhận hợp đồng đọc phần trăm trực tiếp từ lệnh đã ký, loại bỏ khả năng này.
+
+\textbf{Bị filler khác giành phần.} Tình huống: filler~A đăng ký 100\% và nộp cọc đủ; filler~B khớp trước 60\%, để lại 40\% cho filler~A. Kiểm thử \tcode{test_frontRunRace_loserReclaimsFullStake} xác nhận filler~A không bị phạt: hợp đồng tính lại theo tỉ lệ thực giao (40\%), hoàn đúng 40\% cọc và không báo lỗi.
+
+\textbf{Không bị phạt oan trong các trường hợp khác.} Hai tình huống còn lại cũng được xác nhận là filler không bị phạt và lấy lại đủ cọc: khi người dùng chủ động hủy lệnh, và khi nonce của lệnh bị vô hiệu. Tên các hàm kiểm thử tương ứng (nhóm \tcode{test_H*}) được liệt kê ở Phụ lục~\ref{apdx:testcases}.
+
+\textbf{Khớp phần nhỏ và chặn khớp vụn.} \tcode{test_snipeSmallChunk_fullyRefunded} xác nhận filler khớp phần nhỏ nhưng đúng cam kết vẫn được hoàn đủ cọc. \tcode{test_minFillBps_blocksDustFill} chặn việc khớp quá vụn dưới ngưỡng tối thiểu.
+
+\textbf{Hợp đồng luôn đủ tiền chi trả.} Kiểm thử bất biến \tcode{invariant_solvency} duy trì một biến ghost theo dõi tổng cọc kỳ vọng: cộng khi có đăng ký, trừ khi tất toán hoặc phạt. Sau mỗi thao tác ngẫu nhiên, số dư thực tế của hợp đồng phải bằng biến ghost; bất kỳ sai lệch nào đều khiến kiểm thử thất bại.
+
+\begin{lstlisting}
+// "so sach bong" chay song song:
+function register(...) { ghost_activeStake += stake; } // + coc
+function fill(...)     { ghost_activeStake -= stake; } // - coc khi xong
+function slash(...)    { ghost_activeStake -= stake; } // - coc khi phat
+
+// sau MOI thao tac ngau nhien, so that phai khop so bong:
+function invariant_solvency() public view {
+    assertEq(address(auction).balance, ghost_activeStake + totalPending);
+}
+\end{lstlisting}
+
+\textbf{Kịch bản tổng hợp.} Kiểm thử \tcode{test_population_honestAndMev_invariantsHold} chạy ba lệnh với nhiều người tham gia:
+
+\begin{itemize}
+    \item \textbf{Lệnh~1}: filler trung thực đăng ký và khớp đủ 100\% $\Rightarrow$ hoàn toàn bộ cọc.
+    \item \textbf{Lệnh~2}: filler trung thực đăng ký nhưng bot MEV giành mất toàn bộ. Sau deadline, filler trung thực rút lại đủ cọc, không bị phạt.
+    \item \textbf{Lệnh~3}: bot MEV đăng ký rồi bỏ dở, bị phạt mất cọc. Filler trung thực khớp thay.
+\end{itemize}
+
+Sau ba lệnh, kiểm thử kiểm một loạt tính chất: người dùng nhận đủ hoặc trên sàn, tổng token vào ra cân bằng, filler trung thực không mất tiền, hợp đồng vẫn đủ khả năng chi trả.
+
+\subsection{Chống trích xuất giá trị bằng MEV}
+
+Tính chất này liên quan tới cả \texttt{PartialFillReactor} (định giá) và \texttt{FillAuction} (phạt). Kiểm thử \tcode{test_lateFill_skimsDecaySpread_butStaysAboveFloor} mô phỏng bot MEV và đo lượng giá trị trích xuất được.
+
+\textbf{Bối cảnh:} lệnh bán 4~WETH, giá khởi điểm 2\,500~USDC/WETH giảm dần theo từng block, mức nhận tối thiểu cả lệnh là 9\,000~USDC.
+
+\begin{itemize}
+    \item \textbf{Block sớm --- filler trung thực}: khớp 2~WETH ở giá cao, trả người dùng 5\,000~USDC.
+    \item \textbf{40 block sau --- bot MEV}: chờ giá giảm xuống khoảng 2\,300~USDC/WETH rồi mới khớp 2~WETH còn lại. Bot phải trả ít nhất theo sàn pro-rata: $9\,000 \times 2/4 = 4\,500$~USDC, nhưng trả ít hơn 5\,000~USDC so với filler trung thực.
+\end{itemize}
+
+Ba dòng kiểm tra với số cụ thể:
+
+\begin{lstlisting}
+assertLt(mevPaid, 5_000e6);              // bot tra it hon filler trung thuc
+assertGe(mevPaid, 4_500e6);              // nhung phan nay van >= san pro-rata
+assertGe(usdc.balanceOf(swapper), 9_000e6); // tong nguoi dung nhan >= san ca lenh
+\end{lstlisting}
+
+Bot trích xuất được phần chênh giữa giá thị trường lúc nó khớp và mức sàn --- khoảng vài trăm USDC. Nếu bot chờ thêm đến khi giá rơi dưới 4\,500~USDC thì giao dịch bị từ chối, như kiểm thử \tcode{test_lateFill_belowFloor_reverts} xác nhận. Kiểm thử \tcode{test_registerThenAbandon_isSlashed_noProfit} kiểm thêm: đăng ký rồi bỏ dở không giúp bot thu lợi mà còn khiến bot bị phạt mất cọc.
+
+Hệ thống không loại bỏ hoàn toàn MEV --- bot vẫn kiếm được một ít trong khoảng người dùng đã chấp nhận. Đây là giới hạn thiết kế được bàn thêm ở mục~\ref{sec:test-coverage}.
+
+\subsection{Ngăn khớp trùng và bảo đảm hoàn tất lệnh}
+
+Nhóm này kiểm \texttt{FallbackExecutor} --- hợp đồng tự thực hiện hoán đổi thay khi không có filler nào khớp trước hạn.
+
+\tcode{test_fallback_swapsSuccessfully_viaRouter} xác nhận luồng chính: khi gần hết hạn mà lệnh còn dư, hợp đồng gọi một sàn trong danh sách trắng để hoán đổi phần còn lại. Các điều kiện biên được kiểm tra và chặn đầy đủ: filler thường không thể khớp sau khi dự phòng đã chạy (ngăn khớp trùng); gọi tới sàn ngoài danh sách trắng, chạy sai thời điểm, hoặc trả ra dưới mức người dùng đã ký đều bị từ chối; tài sản đầu vào không dùng hết được hoàn lại cho người dùng. Tên các hàm kiểm thử tương ứng được liệt kê ở Phụ lục~\ref{apdx:testcases}.
+
+\subsection{Xuyên chuỗi: chống griefing và an toàn về thời gian}
+
+Nhóm này kiểm các hợp đồng ký quỹ xuyên chuỗi. Luồng chính chạy được qua \tcode{test_fillSlot_then_withdraw_paysFiller}. Các điều kiện biên đều bị chặn sớm trước khi đụng tài sản: bằng chứng Merkle sai (\tcode{test_fillSlot_invalidProof_reverts}), chữ ký người dùng sai (\tcode{test_fillSlot_invalidSwapperSig_reverts}), slot bị khớp lần thứ hai (\tcode{test_fillSlot_secondTime_revertsSlotAlreadyFilled}), cọc an toàn bằng 0 (\tcode{test_fillSlot_zeroSafetyDeposit_reverts}).
+
+\textbf{Hết hạn mà chưa hoàn tất.} Kiểm thử \tcode{test_cancel_afterExpiry_refundsSwapper_andPaysSwapperDeposit} kiểm tình huống:
+
+\begin{enumerate}
+    \item Người dùng gửi tài sản vào hợp đồng nguồn (chain~A), chờ filler khóa tài sản tương ứng ở chain~B.
+    \item Filler không hoàn thành trong thời hạn.
+    \item Sau khi hết hạn, người dùng gọi cancel: nhận lại tài sản nguồn \emph{cộng thêm} cọc an toàn của filler bị tịch thu. Người dùng không mất tiền và được bồi thường nhẹ cho thời gian bị chờ.
+\end{enumerate}
+
+\textbf{Thứ tự thời gian T2 $<$ T1.} Ràng buộc T2 (hạn hợp đồng đích) $<$ T1 (hạn hợp đồng nguồn) đảm bảo filler đủ thời gian hoàn tất trên chuỗi nguồn sau khi tiết lộ secret trên chuỗi đích. Kiểm thử \tcode{test_T2geqT1_swapperTakesBothLegs} dựng kịch bản vi phạm T2~$=$~T1: filler tiết lộ secret trên chuỗi đích để nhận tài sản, nhưng khi dùng secret đó trên chuỗi nguồn thì T1 đã qua --- người dùng hủy hợp đồng nguồn lấy lại tài sản, đồng thời dùng secret vừa lộ để rút tài sản đích, khiến filler mất tài sản trên cả hai chuỗi. Hợp đồng ngăn tình huống này bằng cách từ chối mọi lệnh có T2~$\geq$~T1 tại thời điểm tạo.
+
+Toàn bộ còn được chạy đầu cuối với hai filler khớp hai slot khác nhau của cùng một lệnh, kết thúc bằng việc kiểm lại số dư của tất cả các bên trên cả hai chain.
+
+\section{Độ phủ và phạm vi kiểm thử}
+\label{sec:test-coverage}
+
+Tổng cộng 149 trường hợp kiểm thử trên 24 bộ test đều đạt khi chạy lại bằng \texttt{forge test} (Bảng~\ref{table:forge}). Độ phủ dòng lệnh đo bằng \texttt{forge coverage}: \texttt{FallbackExecutor} 100\% (41/41), \texttt{FillAuction} 98\% (112/114), \texttt{PartialFillReactor} 95\% (93/98); các thư viện \texttt{DecayCursorLib} và \texttt{ScaledOutputLib} đạt 100\%. Nhóm hợp đồng xuyên chuỗi có độ phủ thấp hơn (\texttt{EscrowSrcFactory} 97\%, các hợp đồng ký quỹ theo slot 74--83\%), do một số nhánh hoàn tiền và hủy yêu cầu điều kiện môi trường thực để kích hoạt. Danh sách đầy đủ được liệt kê ở Phụ lục~\ref{apdx:testcases}.
+
+Bộ kiểm thử không bao phủ một số điều kiện thực tế. Anvil fork không có mempool thật và filler được cấp vốn không giới hạn, nên kết quả mới chứng minh các cơ chế đúng, chưa phản ánh cạnh tranh kinh tế khi nhiều filler vốn hữu hạn cùng tham gia trên mainnet. Một số rủi ro bảo mật như thao túng TWAP hay grief-lock xuyên chuỗi cũng cần vốn thật và môi trường production mới khai thác được --- đây là những thứ nằm ngoài tầm của local fork và được bàn kỹ hơn ở mục~\ref{sec:audit}. Backend và frontend được chạy thử thủ công để minh họa luồng; tối ưu gas không phải trọng tâm nên không được đo hệ thống.
+
+\section{Rà soát bảo mật bởi Trufy}
 \label{sec:audit}
 
-% ─────────────────────────────────────────────────────────────────────────────
-% PHẦN NÀY ĐỂ TRỐNG, CHỜ FILE AUDIT THẬT TỪ TRUFY.
-% Khi có file, dự kiến trình bày theo hướng:
-%   - Quy trình: dùng công cụ rà soát có hỗ trợ AI -> liệt kê các phát hiện theo
-%     mức nghiêm trọng -> khắc phục -> viết test hồi quy cho từng lỗi.
-%   - Bảng: Phát hiện | Nguy cơ nếu không có | Cách khắc phục | Test chứng minh.
-%   - Nêu thẳng các rủi ro còn tồn dư (chưa xử lý) để báo cáo trung thực.
-% ─────────────────────────────────────────────────────────────────────────────
+Ngoài bộ kiểm thử tự viết, đồ án sử dụng Trufy\footnote{\url{https://trufy.io} --- công cụ rà soát bảo mật hợp đồng thông minh tự động bằng AI, không phải kiểm tra bởi chuyên gia người.} để audit độc lập toàn bộ mã nguồn hợp đồng. Báo cáo đầy đủ được đính kèm tại Phụ lục~\ref{apdx:trufy}~\cite{trufy2026}.
 
-\textit{(Phần này sẽ được bổ sung dựa trên kết quả rà soát bảo mật.)}
+\subsection{Tổng quan phát hiện}
+
+Trufy ghi nhận 8 phát hiện: 3 mức cao, 4 mức trung bình, 1 mức thấp. Bảng~\ref{tab:trufy} liệt kê tất cả kèm trạng thái xử lý.
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{|c|p{7.2cm}|c|c|}
+\hline
+\textbf{Mục} & \textbf{Tên phát hiện (rút gọn)} & \textbf{Mức} & \textbf{Xử lý} \\
+\hline
+3.1 & Cross-chain grief-lock: cọc an toàn cố định & Cao & Đã giải trình \\
+\hline
+3.2 & Token fee-on-transfer qua kế toán danh nghĩa & Cao & \textbf{Đã sửa} \\
+\hline
+3.3 & Watcher bỏ qua sự kiện lịch sử sau outage & Cao & \textbf{Đã sửa} \\
+\hline
+3.4 & Nonce xuyên chuỗi không kiểm tra on-chain & Trung bình & Đã giải trình \\
+\hline
+3.5 & TWAP đơn pool 60 giây dễ bị thao túng & Trung bình & Đã giải trình \\
+\hline
+3.6 & Slot được mở lại không thể thử lại bởi cùng filler & Trung bình & Đã giải trình \\
+\hline
+3.7 & \texttt{FillAuction.withdraw()} kẹt ETH với non-payable & Trung bình & \textbf{Đã sửa} \\
+\hline
+3.8 & Fallback watcher hỗ trợ cố định 6 token & Thấp & Ngoài phạm vi \\
+\hline
+\end{tabular}
+\caption{Tám phát hiện từ báo cáo Trufy và trạng thái xử lý.}
+\label{tab:trufy}
+\end{table}
+
+\subsection{Phát hiện đã khắc phục}
+
+\textbf{3.2 --- Token fee-on-transfer (Cao).}
+Hợp đồng cũ kiểm tra mức sàn output dựa trên \emph{số danh nghĩa} mà nó yêu cầu filler chuyển, chứ không phải số người dùng thực nhận; một token tự trừ phí khi chuyển sẽ làm người dùng nhận dưới sàn mà giao dịch vẫn lọt.
+
+Sửa: trong \texttt{executePartialChunk}, hợp đồng nay đo \emph{chênh lệch số dư thực tế} của người dùng quanh lần chuyển (\texttt{balanceOf} trước và sau), rồi áp cả mức sàn lẫn kế toán lên số thực nhận đó. Kiểm thử với một token thu phí 2\% xác nhận một lần khớp khiến người dùng nhận dưới sàn nay bị revert thay vì âm thầm trả thiếu (\tcode{test_feeOnTransferOutput_belowFloor_reverts}), và khi vẫn trên sàn thì người dùng được ghi đúng số thực nhận (\tcode{test_feeOnTransferOutput_aboveFloor_creditsActualReceived}).
+
+\textbf{3.3 --- Watcher bỏ qua sự kiện sau outage dài (Cao).}
+Khi backend khởi động lại sau khi dừng lâu, checkpoint của watcher nhảy thẳng về block hiện tại, bỏ qua mọi sự kiện trong khoảng trống.
+
+Sửa: logic checkpoint nay phân biệt hai trường hợp --- chuỗi bị đặt lại (checkpoint vượt quá đỉnh hiện tại, buộc lùi về đỉnh) và backlog thật sau outage (giữ checkpoint cũ để quét bù). Phần quét bù được chia thành từng đoạn block có giới hạn để một lần truy vấn log không vượt giới hạn của nhà cung cấp RPC. Việc tái hiện trọn vẹn vẫn cần một lần dừng dài thực tế trên production, nhưng cơ chế bỏ sót đã được loại bỏ ở mức mã nguồn.
+
+\textbf{3.7 --- \texttt{FillAuction.withdraw()} kẹt ETH (Trung bình).}
+Filler là smart contract không có hàm \texttt{receive()} thì không nhận được ETH push trực tiếp. Hàm \texttt{withdraw()} cũ luôn push về \texttt{msg.sender} --- nếu thất bại thì revert, ETH bị kẹt vĩnh viễn ở hợp đồng.
+
+Sửa: hàm \texttt{withdraw()} nay nhận thêm tham số \texttt{address payable to}, cho phép filler chuyển hướng ETH về bất kỳ địa chỉ payable nào, ví dụ một ví EOA hoặc treasury có \texttt{receive()}.
+\subsection{Các phát hiện cần môi trường production để kiểm chứng}
+
+Năm phát hiện còn lại không thể tái hiện đầy đủ trên Anvil fork vì chúng đòi hỏi những điều kiện đặc thù của mainnet: vốn lớn để thao túng thị trường, mempool công khai để front-run, hay lượng token đa dạng vượt ngoài 6 token demo.
+
+\textbf{3.1 --- Cross-chain grief-lock (Cao).} Về lý thuyết, kẻ xấu thấy tham số \tcode{fillSlot} trên mempool có thể giành trước một slot rồi bỏ, khóa tài sản người dùng tới hạn. Mối đe dọa này phát sinh trên production: cần mempool công khai để thấy tham số, và cần kinh tế thật để việc grief đáng giá --- cả hai đều không tồn tại trên local fork. Hai lớp phòng vệ đã có sẵn: tham số fill (chữ ký cosigner, hashlock, Merkle proof) được backend cấp riêng cho filler đã xác thực nên kẻ ngoài không đủ thông tin; và mỗi lần nhận slot bắt buộc phải nộp một khoản cọc an toàn dương (cọc bằng 0 bị từ chối), nên việc chiếm chỗ luôn tốn chi phí thật.
+
+Điều Trufy chỉ ra là khoản cọc này hiện cố định (\tcode{MIN_SAFETY_DEPOSIT}), chưa tỉ lệ với giá trị slot. Đây thực chất là \emph{chế độ tắt oracle} của cơ chế cọc: cọc tỉ lệ đòi hỏi phải quy giá trị slot ra ETH bằng một oracle giá (TWAP), mà oracle phát huy tác dụng trên mạng thật. Hệ thống đã có tiền lệ cho đúng cách làm này ở phía cùng chuỗi --- \texttt{FillAuction} tính cọc động qua TWAP nhưng chạy với oracle tắt (cọc theo lượng danh nghĩa) trong môi trường kiểm thử. Vì vậy, nâng cọc xuyên chuỗi thành tỉ-lệ-giá-trị là việc \emph{cấu hình lúc triển khai} (bật oracle và đặt hệ số), không phải thay đổi logic lõi của escrow; và khi bật, nó đi kèm phần gia cố cửa sổ TWAP đã nêu ở phát hiện~3.5.
+
+\textbf{3.4 --- Nonce xuyên chuỗi không kiểm tra on-chain (Trung bình).} Tính duy nhất của (swapper, nonce) hiện do backend DB đảm bảo. Bảo vệ replay đã có qua orderHash duy nhất --- hai lệnh nonce giống nhau nhưng tham số khác sẽ hash khác. Thêm nonce registry on-chain là việc cần làm khi mở rộng lên multi-backend production.
+
+\textbf{3.5 --- TWAP đơn pool 60 giây (Trung bình).} Kẻ có vốn lớn có thể bơm pool 60 giây để đẩy TWAP về thấp, hạ cọc xuống gần 0. Không thể tái hiện trên local fork vì không có vốn thật. Hợp đồng đã có \texttt{minCollateral} làm sàn tuyệt đối, nhưng nâng cửa sổ TWAP và bổ sung oracle độc lập là hướng phát triển rõ ràng.
+
+\textbf{3.6 --- Slot mở lại không thể thử lại bởi cùng filler (Trung bình).} Salt CREATE2 dẫn xuất từ hashlock và địa chỉ filler va chạm với lần deploy cũ, nên filler không thể nhận lại slot mình đã bỏ. Trường hợp này hiếm, xảy ra sau một chuỗi lỗi cụ thể trên production; watcher đã có cơ chế reset slot về trạng thái available.
+
+\textbf{3.8 --- FallbackWatcher hỗ trợ cố định 6 token (Thấp).} Watcher hardcode metadata của 6 token mainnet cho mục đích demo. Hỗ trợ token động cần DB token đầy đủ và môi trường production --- nằm ngoài phạm vi đồ án.
 
 \section{Kết luận chương}
 \label{sec:test-concl}
 
-Kết quả kiểm thử cho thấy các cơ chế chính của hệ thống hoạt động đúng như thiết kế trong môi trường giả lập: lệnh được khớp từng phần đúng giá, filler bị ràng buộc bởi cọc và phạt một cách công bằng, lệnh luôn được hoàn tất nhờ cơ chế dự phòng, và giao dịch xuyên chuỗi diễn ra trọn vẹn với nhiều filler. Những hạn chế còn lại của hệ thống được bàn ở chương tiếp theo.
+Bộ kiểm thử xác nhận các tính chất an toàn cốt lõi hoạt động đúng trên môi trường giả lập: lệnh không bị kẹt, người dùng không bị trả thiếu, cơ chế cọc không bị khai thác, MEV bị giới hạn trong ngưỡng người dùng chấp nhận, và giao dịch xuyên chuỗi an toàn trước griefing. Audit từ Trufy ghi nhận 8 phát hiện: ba đã sửa, năm còn lại cần điều kiện production để kiểm chứng đầy đủ. Chi tiết ở Phụ lục~\ref{apdx:testcases} và~\ref{apdx:trufy}.
 
 \end{document}
