@@ -44,9 +44,10 @@ MEV (Maximal Extractable Value)~\cite{daian2020flashboys, qin2022quantifying} l�
 \label{apdx:create2}
 
 CREATE2 là một opcode của EVM (được giới thiệu trong EIP-1014) cho phép triển khai hợp đồng tới một địa chỉ xác định trước mà không cần thực sự triển khai. Địa chỉ được tính từ bốn thành phần: tiền tố cố định \texttt{0xff}, địa chỉ hợp đồng triển khai, một giá trị \texttt{salt} tùy chọn, và hàm băm của bytecode hợp đồng:
-\begin{equation}
-    \texttt{addr} = \texttt{keccak256}(\texttt{0xff} \,\|\, \texttt{deployer} \,\|\, \texttt{salt} \,\|\, \texttt{keccak256(bytecode)})[12:]
-\end{equation}
+\begin{multline}
+    \texttt{addr} = \texttt{keccak256}\bigl(\texttt{0xff} \;\|\; \texttt{deployer} \;\|\; \texttt{salt}\\
+    \|\; \texttt{keccak256(bytecode)}\bigr)[12:]
+\end{multline}
 
 Tính chất này cho phép hai bên tính toán và đồng thuận về địa chỉ hợp đồng ký quỹ \emph{trước} khi nó được triển khai. Trong đồ án, \texttt{EscrowSrcFactory} và \texttt{EscrowDstFactory} dùng CREATE2 để tạo các hợp đồng ký quỹ theo slot: salt được tính từ thông tin lệnh và chỉ số slot, đảm bảo địa chỉ hợp đồng là duy nhất và có thể xác minh độc lập bởi cả hai bên mà không cần giao tiếp trước.
 

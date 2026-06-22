@@ -70,5 +70,7 @@
 \contentsline {section}{\numberline {D.5}Chuẩn ký EIP-712 và Permit2}{51}{section.1.D.5}%
 \contentsline {section}{\numberline {D.6}Đấu giá kiểu Hà Lan}{51}{section.1.D.6}%
 \contentsline {section}{\numberline {D.7}MEV và tấn công chèn lệnh}{51}{section.1.D.7}%
+\contentsline {section}{\numberline {D.8}CREATE2}{52}{section.1.D.8}%
+\contentsline {section}{\numberline {D.9}Các thư viện OpenZeppelin sử dụng}{52}{section.1.D.9}%
 \contentsline {chapter}{\numberline {E}BÁO CÁO RÀ SOÁT BẢO MẬT (TRUFY)}{53}{appendix.1.E}%
 \contentsfinish 

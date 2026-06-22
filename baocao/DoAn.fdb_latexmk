@@ -1,12 +1,12 @@
 # Fdb version 4
-["biber DoAn"] 1782139118.33861 "DoAn.bcf" "DoAn.bbl" "DoAn" 1782139144.66717 0
+["biber DoAn"] 1782140075.72077 "DoAn.bcf" "DoAn.bbl" "DoAn" 1782140089.37448 0
   "Danh_sach_tai_lieu_tham_khao.bib" 1782139112.61075 6509 5612a785cf6df8e7c44384a7075182cc ""
-  "DoAn.bcf" 1782139143.94464 108812 8c816e09d15fc22f88d6056240a71805 "pdflatex"
+  "DoAn.bcf" 1782140088.70457 108890 bc544e5fb2a40eb339a61e6b7d139c34 "pdflatex"
   (generated)
   "DoAn.bbl"
   "DoAn.blg"
   (rewritten before read)
-["pdflatex"] 1782139132.5092 "DoAn.tex" "DoAn.pdf" "DoAn" 1782139144.66874 0
+["pdflatex"] 1782140077.74915 "DoAn.tex" "DoAn.pdf" "DoAn" 1782140089.37563 0
   "../auditfinal1.pdf" 1781596147.10158 2685476 a71e1a81eacdef4a08928e344cb4938d ""
   "Bia_lot.tex" 1781968815.01192 1388 47175be0c6b7a0c017e1e5cebf0e2320 ""
   "C:/Program Files/MiKTeX/fonts/enc/dvips/base/8r.enc" 1458473887 4993 1194fb36dfcb11d9ae9802f2b00b60a3 ""
@@ -235,15 +235,15 @@
   "Chuong/Phu_luc_A.tex" 1782138625.65781 7713 6587ce472dc1ab751b4dc8de68c9b2e3 ""
   "Chuong/Phu_luc_B.tex" 1782057648.7629 4406 91718ba3047d4c095215e7a5702c56b5 ""
   "Chuong/Phu_luc_C.tex" 1782057737.74525 7396 7e6563751c36a816cbf835c03c8070b1 ""
-  "Chuong/Phu_luc_D.tex" 1782127793.02478 6878 a402b66d0f373875a8e3ff507ad8ae6d ""
-  "DoAn.aux" 1782139143.90977 28053 5c20748b038a5713c556ace95926148d "pdflatex"
-  "DoAn.bbl" 1782139120.34887 29258 cd1aad5785bb71f1ae5e6fb3a5f3d3fd "biber DoAn"
-  "DoAn.lof" 1782139143.94665 2368 955cf539a7e114f74ffa148956df55a4 "pdflatex"
-  "DoAn.lot" 1782139143.94665 1698 c3bf6a6dc790a2d32fa4681f05c9d3c9 "pdflatex"
-  "DoAn.out" 1782139143.92988 13841 91c796626002fe33ac818860f214d616 "pdflatex"
-  "DoAn.run.xml" 1782139143.94665 2454 e397e4945871f84de484acf1d06e00bc "pdflatex"
+  "Chuong/Phu_luc_D.tex" 1782140067.67858 9487 177bc6efc71c3e11d0ed1573bb4003d6 ""
+  "DoAn.aux" 1782140088.67151 28867 787a5fa702cb51bed8276f9ed3d85ed8 "pdflatex"
+  "DoAn.bbl" 1782140077.68456 29258 cd1aad5785bb71f1ae5e6fb3a5f3d3fd "biber DoAn"
+  "DoAn.lof" 1782140088.70757 2368 955cf539a7e114f74ffa148956df55a4 "pdflatex"
+  "DoAn.lot" 1782140088.70757 1845 e6e6a12221a2bdfb21c71e5190126cb6 "pdflatex"
+  "DoAn.out" 1782140088.68876 14191 65e85de7669e8ba2bb900ea8c7ed3970 "pdflatex"
+  "DoAn.run.xml" 1782140088.70657 2454 e397e4945871f84de484acf1d06e00bc "pdflatex"
   "DoAn.tex" 1782112289.6283 11391 f38ed98d20a3d54154ade9c2ceac35b8 ""
-  "DoAn.toc" 1782139143.94665 6977 b20f7b56f45016238ecadda37bfa081b "pdflatex"
+  "DoAn.toc" 1782140088.70657 7151 ff667910ad74011f71491ec6a651453a "pdflatex"
   "Hinhve/arch.png" 1781584224.96161 82445 9f2d46514cc22c9dae91e36a9bd3d907 ""
   "Hinhve/contract_deps.png" 1781627411.22276 34932 664f59b9483d02114963d2e66be795ac ""
   "Hinhve/contract_packages.png" 1781627318.41035 24213 07d3e0895a95db21518a5972e7db9112 ""

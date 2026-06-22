@@ -2387,7 +2387,8 @@
     <bcf:citekey order="11" intorder="1">herlihy2018atomic</bcf:citekey>
     <bcf:citekey order="12" intorder="1">daian2020flashboys</bcf:citekey>
     <bcf:citekey order="12" intorder="2">qin2022quantifying</bcf:citekey>
-    <bcf:citekey order="13" intorder="1">trufy2026</bcf:citekey>
+    <bcf:citekey order="13" intorder="1">openzeppelin_contracts</bcf:citekey>
+    <bcf:citekey order="14" intorder="1">trufy2026</bcf:citekey>
   </bcf:section>
   <!-- SORTING TEMPLATES -->
   <bcf:sortingtemplate name="none">
