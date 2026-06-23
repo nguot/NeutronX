@@ -15,7 +15,7 @@ knowledge for any local Anvil instance, safe only on local forks.
 
 - Account 0 is the dev "MetaMask" account — import its private key into
   MetaMask to act as the swapper on the frontend. It's also hardcoded as
-  `DEV_SWAPPER_PK` in `filler/*/src/dev/ccFill.ts` and as `PK0` in
+  `DEV_SWAPPER_PK` in `filler/*/src/fill/crossChainFill.ts` and as `PK0` in
   `tests/crosschain/run_cc.sh`.
 - All three are deployed/funded by `tests/demo/setup.sh` and
   `tests/crosschain/setup_cc.sh`.

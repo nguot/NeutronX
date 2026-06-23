@@ -3,7 +3,7 @@ import axios from 'axios'
 import { BACKEND_URL, FILL_AUCTION, REACTOR } from '../config'
 import { FILL_AUCTION_ABI, REACTOR_ABI, ERC20_ABI } from '../contract/abis'
 import { wallet } from '../contract/contracts'
-import { devEnsureOutputToken } from './devFund'
+import { ensureOutputToken } from '../funding/inventory'
 import type { OrderInfo } from '../types'
 
 const ORDER_TYPE_HASH = ethers.utils.keccak256(
@@ -114,7 +114,7 @@ function explainRevertReason(rawReason: string, ctx: {
     ['fill overflow',   `Internal overflow guard tripped ("${reason}") — fillAmount is unexpectedly large.`],
     ['fill too large',  `Internal overflow guard tripped ("${reason}") — fillAmount is unexpectedly large.`],
     ['total too large', `Internal overflow guard tripped ("${reason}") — order's inputAmount is unexpectedly large.`],
-    ['stake too large',  `Internal overflow guard tripped ("${reason}") — required stake is unexpectedly large.`],
+    ['stake too large', `Internal overflow guard tripped ("${reason}") — required stake is unexpectedly large.`],
   ]
 
   for (const [key, explanation] of explanations) {
@@ -123,39 +123,27 @@ function explainRevertReason(rawReason: string, ctx: {
   return reason || 'unknown revert reason'
 }
 
-function getOrderSizeBucket(total: bigint): number {
-  if (total < 10_000n * 10n**6n) return 0
-  if (total < 100_000n * 10n**6n) return 1
-  if (total < 1_000_000n * 10n**6n) return 2
-  return 3
-}
-function getTimeMultiplier(deadline: number, currentBlock: number): number {
-  const left = deadline - currentBlock
-  if (left > 50) return 10_000; if (left > 20) return 15_000; if (left > 5) return 30_000; return 50_000
-}
-
 async function getContracts() {
-  // addresses come from .env, kept in sync by tests/demo/setup.sh after every deploy
-  const reactorAddr = REACTOR
-  const auctionAddr = FILL_AUCTION
-  if (!reactorAddr || !auctionAddr) {
+  if (!REACTOR || !FILL_AUCTION) {
     throw new Error('PARTIAL_FILL_REACTOR / FILL_AUCTION not set in .env — run tests/demo/setup.sh first')
   }
-  // Quick sanity check: if there is no code at the reactor address, contracts haven't been deployed yet
-  const code = await wallet.provider!.getCode(reactorAddr)
+  const code = await wallet.provider!.getCode(REACTOR)
   if (code === '0x') {
     throw new Error(
-      `No contract at PartialFillReactor address ${reactorAddr}.\n` +
+      `No contract at PartialFillReactor address ${REACTOR}.\n` +
       `Run: bash tests/demo/setup.sh   (then restart this filler)`
     )
   }
   return {
-    reactor:     new ethers.Contract(reactorAddr, REACTOR_ABI,      wallet),
-    fillAuction: new ethers.Contract(auctionAddr, FILL_AUCTION_ABI, wallet),
+    reactor:     new ethers.Contract(REACTOR,      REACTOR_ABI,      wallet),
+    fillAuction: new ethers.Contract(FILL_AUCTION, FILL_AUCTION_ABI, wallet),
   }
 }
 
-export async function devFill(orderBackendHash: string, fillBps: number): Promise<string> {
+// Register (if needed) + executePartialChunk for `fillBps` (in 1/100 of a
+// percent of the order's *remaining* input) on the given backend order hash.
+// Returns the settlement tx hash. Throws with an actionable message on revert.
+export async function fill(orderBackendHash: string, fillBps: number): Promise<string> {
   const { reactor, fillAuction } = await getContracts()
 
   const { data: order } = await axios.get<OrderInfo>(`${BACKEND_URL}/orders/${orderBackendHash}`)
@@ -187,14 +175,14 @@ export async function devFill(orderBackendHash: string, fillBps: number): Promis
   const outputAmount = (fillAmount * currentPrice) / 10n**18n
   const withBuffer   = outputAmount + outputAmount / 10n
 
-  await devEnsureOutputToken(order.outputToken, withBuffer)
+  await ensureOutputToken(order.outputToken, withBuffer)
 
   const erc20Token = new ethers.Contract(order.outputToken, ERC20_ABI, wallet)
   const allowed = (await erc20Token.allowance(wallet.address, reactor.address)).toBigInt()
   if (allowed < withBuffer) {
     const tx = await erc20Token.approve(reactor.address, ethers.constants.MaxUint256)
     await tx.wait()
-    console.log(`[DevFill] approved ${order.outputToken}`)
+    console.log(`[fill] approved ${order.outputToken}`)
   }
 
   // D-1: ask the auction for the exact ETH collateral (handles TWAP + decimals).
@@ -219,7 +207,6 @@ export async function devFill(orderBackendHash: string, fillBps: number): Promis
     sig: order.signature,
   }
 
-  // Check existing registration before trying to register again
   const alreadyValid = await fillAuction.hasValidRegistration(
     orderHash, wallet.address, ethers.BigNumber.from(fillAmount)
   )
@@ -233,12 +220,11 @@ export async function devFill(orderBackendHash: string, fillBps: number): Promis
       throw new Error(`Register would revert: ${explainRevertReason(reason, { order, fillAmount, remaining, currentBlock, currentPrice, minFill })}`)
     })
     await regTx.wait()
-    console.log(`[DevFill] registered  fill=${fillAmount}  stake=${ethers.utils.formatEther(stake)} ETH`)
+    console.log(`[fill] registered  fill=${fillAmount}  stake=${ethers.utils.formatEther(stake)} ETH`)
   } else {
-    console.log('[DevFill] valid registration already exists — skipping register')
+    console.log('[fill] valid registration already exists — skipping register')
   }
 
-  // Use callStatic first to get the real revert reason instead of a gas estimation error
   await reactor.callStatic.executePartialChunk(signedOrder, ethers.BigNumber.from(fillAmount))
     .catch((e: any) => {
       const reason: string = e?.reason ?? e?.error?.reason ?? e?.message ?? String(e)
@@ -247,6 +233,6 @@ export async function devFill(orderBackendHash: string, fillBps: number): Promis
 
   const tx = await reactor.executePartialChunk(signedOrder, ethers.BigNumber.from(fillAmount))
   await tx.wait()
-  console.log(`[DevFill] ✔ filled  tx=${tx.hash}`)
+  console.log(`[fill] ✔ filled  tx=${tx.hash}`)
   return tx.hash
 }

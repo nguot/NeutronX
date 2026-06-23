@@ -3,10 +3,14 @@
   "version": "1.0.0",
   "description": "NeutronX CoW filler: greedy matching against mock CEX orderbook with Dutch auction spread capture",
   "main": "index.js",
+  "bin": {
+    "cowfiller": "src/cli.ts"
+  },
   "scripts": {
     "start": "ts-node src/index.ts",
-    "fund":  "ts-node src/dev/seed.ts",
-    "test":  "echo \"Error: no test specified\" && exit 1"
+    "cli": "ts-node src/cli.ts",
+    "seed": "ts-node src/funding/seed.ts",
+    "test": "echo \"Error: no test specified\" && exit 1"
   },
   "ts-node": {
     "esm": false,
@@ -21,8 +25,12 @@
     "typescript": "^6.0.3"
   },
   "dependencies": {
-    "axios":  "^1.16.1",
+    "axios": "^1.16.1",
+    "cli-table3": "^0.6.5",
+    "commander": "^11.1.0",
     "dotenv": "^17.4.2",
-    "ethers": "^5.8.0"
+    "ethers": "^5.8.0",
+    "ora": "^5.4.1",
+    "picocolors": "^1.1.1"
   }
 }

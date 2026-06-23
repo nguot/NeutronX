@@ -1,0 +1,79 @@
+\documentclass[../DoAn.tex]{subfiles}
+\begin{document}
+
+Mục~\ref{subsection:1.2.2} đã xác định chiến lược lợi nhuận của filler nằm ngoài phạm vi đóng góp của đồ án. Phụ lục này mô tả cài đặt phiên bản đơn giản hóa của filler đi kèm hệ thống, dùng để vận hành các luồng giao dịch đầu-cuối trong môi trường thử nghiệm. Nội dung tập trung vào quy tắc quyết định khớp lệnh; cài đặt không nhằm tái hiện thuật toán của một bên giao dịch trên thực tế.
+
+\section{Quy tắc quyết định khớp lệnh}
+
+Hợp đồng chỉ thực hiện việc chuyển tài sản giữa hai địa chỉ ví. Yếu tố quyết định hành vi của filler do đó là quy tắc triển khai vốn: thời điểm khớp, biên lợi nhuận yêu cầu, và khối lượng khớp. Lợi nhuận của một lần khớp được tính theo công thức:
+\begin{equation}
+    \texttt{profit} = \texttt{fillAmount} \times (\texttt{marketPrice} - \texttt{auctionPrice}) - \texttt{gas}
+    \label{eq:filler-profit}
+\end{equation}
+trong đó \texttt{auctionPrice} là giá đấu giá Hà Lan hiện tại mà filler trả cho người dùng, và \texttt{marketPrice} là giá filler bán lại tài sản nhận được ra thị trường. Filler có lợi nhuận khi \texttt{auctionPrice} thấp hơn \texttt{marketPrice}.
+
+Vì lợi nhuận tỉ lệ thuận với \texttt{fillAmount}, khối lượng khớp được chọn là giá trị lớn nhất trong phạm vi cho phép, tức giá trị nhỏ nhất giữa phần đã cam kết, phần còn lại của lệnh, và năng lực vốn của filler. Quy tắc quyết định tổng hợp các đặc điểm triển khai vốn đã được trình bày trong các nghiên cứu về nhà tạo lập thị trường và bên khai thác chênh lệch giá:
+
+\begin{enumerate}
+    \item Filler chỉ khớp khi chênh lệch giá vượt chi phí giao dịch gồm phí và gas, tương ứng với vùng không giao dịch trong~\cite{milionis2023fees}.
+    \item Filler yêu cầu một biên tối thiểu để bù rủi ro biến động giá của tài sản đang nắm giữ. Mô hình lợi nhuận này được trình bày dưới tên loss-versus-rebalancing trong~\cite{milionis2022lvr}.
+    \item Biên yêu cầu tăng theo mức biến động giá~\cite{milionis2022lvr}.
+    \item Khi nhiều filler cùng tham gia, cạnh tranh thu hẹp biên lợi nhuận về chi phí biên~\cite{daian2020flashboys}.
+    \item Khối lượng khớp tỉ lệ với quy mô cơ hội; mức giá trị các bên này khai thác được trên thực tế được đo trong~\cite{qin2022quantifying}.
+\end{enumerate}
+
+\section{Hai cài đặt filler}
+
+Hệ thống đi kèm hai filler khác nhau về nguồn cung cấp năng lực vốn, qua đó đại diện cho hai mô hình cung cấp thanh khoản trên cùng một lệnh (Bảng~\ref{table:filler_compare}).
+
+\begin{table}[H]
+    \centering
+    \caption{So sánh hai cài đặt filler.}
+    \label{table:filler_compare}
+    \begin{tabular}{|>{\raggedright\arraybackslash}p{3.8cm}|>{\raggedright\arraybackslash}p{5.0cm}|>{\raggedright\arraybackslash}p{5.0cm}|}
+        \hline
+        & \textbf{WhaleFiller} & \textbf{CoWFiller} \\
+        \hline
+        Mô hình cung cấp thanh khoản & Dựa trên tồn kho của filler & Dựa trên sổ lệnh đối ứng \\
+        \hline
+        Cơ sở năng lực vốn & Số dư tồn kho của chính filler & Độ sâu dòng lệnh đối ứng trong sổ lệnh \\
+        \hline
+        Điều kiện lợi nhuận & Chênh lệch giá đạt ngưỡng \mbox{\texttt{MIN\_SPREAD\_BPS}} & Lợi nhuận khớp đạt ngưỡng \mbox{\texttt{MIN\_PROFIT\_RAW}} \\
+        \hline
+        Đặc điểm khớp lệnh & Khớp ổn định khi chênh lệch giá đủ lớn; giới hạn bởi khối lượng tồn kho & Khối lượng khớp phụ thuộc độ sâu sổ lệnh tại từng thời điểm \\
+        \hline
+    \end{tabular}
+\end{table}
+
+\section{Mã giả hàm quyết định}
+
+\begin{lstlisting}[caption={Quy tắc quyết định khớp lệnh của filler.},numbers=none]
+decide(order, currentBlock):
+    if blocksLeft <= cutoff:           return SKIP
+    auctionPrice = startPrice - decay*(currentBlock - anchor)
+    if auctionPrice == 0:              return SKIP
+
+    margin = marketPrice - auctionPrice
+    if margin < minMargin:             return SKIP
+
+    capacity   = usableCapital * 1e18 / auctionPrice
+    fillAmount = min(capacity, remaining, committed)
+    if fillAmount < minFill:           return SKIP
+
+    return FILL(fillAmount)
+\end{lstlisting}
+
+Tham số \texttt{usableCapital} lấy từ số dư tồn kho đối với WhaleFiller, và từ độ sâu sổ lệnh đối ứng đối với CoWFiller.
+
+\section{Phạm vi đơn giản hóa}
+
+Là cài đặt phục vụ thử nghiệm, mô hình không bao gồm một số đặc điểm của filler trên thực tế:
+\begin{itemize}
+    \item Mức biến động giá không được ước lượng; filler sử dụng một giá tham chiếu cố định, nên đặc điểm thứ ba ở phần trên không được cài đặt.
+    \item Cạnh tranh giữa các filler không được mô hình hóa tường minh; nó phát sinh từ việc các filler cùng cập nhật biến phần còn lại trên chuỗi, bên khớp trước làm giảm phần còn lại và bên khớp sau bị từ chối.
+    \item Vốn được cấp qua công cụ phát triển trên mạng giả lập thay vì vốn thực.
+\end{itemize}
+
+Trong phạm vi đó, mô hình đủ để kiểm chứng đặc tính chính của cơ chế: với các filler hành xử theo lợi nhuận, việc đặt cọc và phạt làm cho hành vi nhận lệnh rồi không hoàn tất trở nên bất lợi về kinh tế, trong khi việc giao đúng cam kết được hoàn cọc.
+
+\end{document}

@@ -244,8 +244,8 @@
       \strng{authornamehash}{7ce153cbcf9fe4d00b9e06666f55de7a}
       \strng{authorfullhash}{7ce153cbcf9fe4d00b9e06666f55de7a}
       \strng{authorfullhashraw}{7ce153cbcf9fe4d00b9e06666f55de7a}
-      \field{sortinit}{1}
-      \field{sortinithash}{4f6aaa89bab872aa0999fec09ff8e98a}
+      \field{sortinit}{2}
+      \field{sortinithash}{8b555b3791beccb63322c22f3320aa9a}
       \field{labelnamesource}{author}
       \field{labeltitlesource}{title}
       \field{booktitle}{Advances in Cryptology --- CRYPTO '87}
@@ -280,8 +280,8 @@
       \strng{authornamehash}{086a15ff647aff5f7d586a0367662f10}
       \strng{authorfullhash}{4ea7dca23884b01cbe51e0c2be84ba17}
       \strng{authorfullhashraw}{4ea7dca23884b01cbe51e0c2be84ba17}
-      \field{sortinit}{1}
-      \field{sortinithash}{4f6aaa89bab872aa0999fec09ff8e98a}
+      \field{sortinit}{2}
+      \field{sortinithash}{8b555b3791beccb63322c22f3320aa9a}
       \field{labelnamesource}{author}
       \field{labeltitlesource}{title}
       \field{booktitle}{2022 IEEE Symposium on Security and Privacy (SP)}
@@ -289,6 +289,81 @@
       \field{year}{2022}
       \field{pages}{198\bibrangedash 214}
       \range{pages}{17}
+    \endentry
+    \entry{milionis2022lvr}{misc}{}{}
+      \name{author}{4}{}{%
+        {{hash=2dd55d43a427b82e4df1aa0fbe7c0755}{%
+           family={Milionis},
+           familyi={M\bibinitperiod},
+           given={Jason},
+           giveni={J\bibinitperiod}}}%
+        {{hash=47e41cac00b979891e55cd49f01df1de}{%
+           family={Moallemi},
+           familyi={M\bibinitperiod},
+           given={Ciamac\bibnamedelima C.},
+           giveni={C\bibinitperiod\bibinitdelim C\bibinitperiod}}}%
+        {{hash=efce6f6d496cdcc1bb07fb47dfecb3aa}{%
+           family={Roughgarden},
+           familyi={R\bibinitperiod},
+           given={Tim},
+           giveni={T\bibinitperiod}}}%
+        {{hash=388881dcbb28c4ad6cd0641d7d904165}{%
+           family={Zhang},
+           familyi={Z\bibinitperiod},
+           given={Anthony\bibnamedelima Lee},
+           giveni={A\bibinitperiod\bibinitdelim L\bibinitperiod}}}%
+      }
+      \strng{namehash}{0f151eb7b19f8eb5a521a64659088109}
+      \strng{fullhash}{6f6775017524b04b6e411479192f57a7}
+      \strng{fullhashraw}{6f6775017524b04b6e411479192f57a7}
+      \strng{bibnamehash}{6f6775017524b04b6e411479192f57a7}
+      \strng{authorbibnamehash}{6f6775017524b04b6e411479192f57a7}
+      \strng{authornamehash}{0f151eb7b19f8eb5a521a64659088109}
+      \strng{authorfullhash}{6f6775017524b04b6e411479192f57a7}
+      \strng{authorfullhashraw}{6f6775017524b04b6e411479192f57a7}
+      \field{extraname}{1}
+      \field{sortinit}{2}
+      \field{sortinithash}{8b555b3791beccb63322c22f3320aa9a}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{howpublished}{arXiv preprint arXiv:2208.06046}
+      \field{title}{Automated Market Making and Loss-Versus-Rebalancing}
+      \field{year}{2022}
+    \endentry
+    \entry{milionis2023fees}{misc}{}{}
+      \name{author}{3}{}{%
+        {{hash=2dd55d43a427b82e4df1aa0fbe7c0755}{%
+           family={Milionis},
+           familyi={M\bibinitperiod},
+           given={Jason},
+           giveni={J\bibinitperiod}}}%
+        {{hash=47e41cac00b979891e55cd49f01df1de}{%
+           family={Moallemi},
+           familyi={M\bibinitperiod},
+           given={Ciamac\bibnamedelima C.},
+           giveni={C\bibinitperiod\bibinitdelim C\bibinitperiod}}}%
+        {{hash=efce6f6d496cdcc1bb07fb47dfecb3aa}{%
+           family={Roughgarden},
+           familyi={R\bibinitperiod},
+           given={Tim},
+           giveni={T\bibinitperiod}}}%
+      }
+      \strng{namehash}{0f151eb7b19f8eb5a521a64659088109}
+      \strng{fullhash}{65d1199762724d994615775039c60b22}
+      \strng{fullhashraw}{65d1199762724d994615775039c60b22}
+      \strng{bibnamehash}{65d1199762724d994615775039c60b22}
+      \strng{authorbibnamehash}{65d1199762724d994615775039c60b22}
+      \strng{authornamehash}{0f151eb7b19f8eb5a521a64659088109}
+      \strng{authorfullhash}{65d1199762724d994615775039c60b22}
+      \strng{authorfullhashraw}{65d1199762724d994615775039c60b22}
+      \field{extraname}{2}
+      \field{sortinit}{2}
+      \field{sortinithash}{8b555b3791beccb63322c22f3320aa9a}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{howpublished}{arXiv preprint}
+      \field{title}{Automated Market Making and Arbitrage Profits in the Presence of Fees}
+      \field{year}{2023}
     \endentry
     \entry{ethereum_docs}{misc}{}{}
       \name{author}{1}{}{%
@@ -436,8 +511,8 @@
       \strng{authorfullhash}{a9cfce9e9e42c35cf8dae5eac78cb0bd}
       \strng{authorfullhashraw}{a9cfce9e9e42c35cf8dae5eac78cb0bd}
       \field{extraname}{1}
-      \field{sortinit}{2}
-      \field{sortinithash}{8b555b3791beccb63322c22f3320aa9a}
+      \field{sortinit}{3}
+      \field{sortinithash}{ad6fe7482ffbd7b9f99c9e8b5dccd3d7}
       \field{labelnamesource}{author}
       \field{labeltitlesource}{title}
       \field{howpublished}{\url{https://docs.uniswap.org/contracts/uniswapx/overview}}
@@ -481,8 +556,8 @@
       \strng{authornamehash}{3391f90016a7e9166cecb75f6e6cb375}
       \strng{authorfullhash}{230705245b8487a883a33baec6cf21c7}
       \strng{authorfullhashraw}{230705245b8487a883a33baec6cf21c7}
-      \field{sortinit}{2}
-      \field{sortinithash}{8b555b3791beccb63322c22f3320aa9a}
+      \field{sortinit}{3}
+      \field{sortinithash}{ad6fe7482ffbd7b9f99c9e8b5dccd3d7}
       \field{labelnamesource}{author}
       \field{labeltitlesource}{title}
       \field{howpublished}{\url{https://uniswap.org/whitepaper-v3.pdf}}
@@ -505,8 +580,8 @@
       \strng{authorfullhash}{a9cfce9e9e42c35cf8dae5eac78cb0bd}
       \strng{authorfullhashraw}{a9cfce9e9e42c35cf8dae5eac78cb0bd}
       \field{extraname}{2}
-      \field{sortinit}{2}
-      \field{sortinithash}{8b555b3791beccb63322c22f3320aa9a}
+      \field{sortinit}{3}
+      \field{sortinithash}{ad6fe7482ffbd7b9f99c9e8b5dccd3d7}
       \field{labelnamesource}{author}
       \field{labeltitlesource}{title}
       \field{howpublished}{\url{https://github.com/Uniswap/permit2}}
@@ -529,8 +604,8 @@
       \strng{authorfullhash}{a9cfce9e9e42c35cf8dae5eac78cb0bd}
       \strng{authorfullhashraw}{a9cfce9e9e42c35cf8dae5eac78cb0bd}
       \field{extraname}{3}
-      \field{sortinit}{2}
-      \field{sortinithash}{8b555b3791beccb63322c22f3320aa9a}
+      \field{sortinit}{3}
+      \field{sortinithash}{ad6fe7482ffbd7b9f99c9e8b5dccd3d7}
       \field{labelnamesource}{author}
       \field{labeltitlesource}{title}
       \field{howpublished}{\url{https://docs.uniswap.org/concepts/protocol/oracle}}

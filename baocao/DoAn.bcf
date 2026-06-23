@@ -2388,7 +2388,12 @@
     <bcf:citekey order="12" intorder="1">daian2020flashboys</bcf:citekey>
     <bcf:citekey order="12" intorder="2">qin2022quantifying</bcf:citekey>
     <bcf:citekey order="13" intorder="1">openzeppelin_contracts</bcf:citekey>
-    <bcf:citekey order="14" intorder="1">trufy2026</bcf:citekey>
+    <bcf:citekey order="14" intorder="1">milionis2023fees</bcf:citekey>
+    <bcf:citekey order="15" intorder="1">milionis2022lvr</bcf:citekey>
+    <bcf:citekey order="16" intorder="1">milionis2022lvr</bcf:citekey>
+    <bcf:citekey order="17" intorder="1">daian2020flashboys</bcf:citekey>
+    <bcf:citekey order="18" intorder="1">qin2022quantifying</bcf:citekey>
+    <bcf:citekey order="19" intorder="1">trufy2026</bcf:citekey>
   </bcf:section>
   <!-- SORTING TEMPLATES -->
   <bcf:sortingtemplate name="none">

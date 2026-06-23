@@ -72,5 +72,10 @@
 \contentsline {section}{\numberline {D.7}MEV và tấn công chèn lệnh}{51}{section.1.D.7}%
 \contentsline {section}{\numberline {D.8}CREATE2}{52}{section.1.D.8}%
 \contentsline {section}{\numberline {D.9}Các thư viện OpenZeppelin sử dụng}{52}{section.1.D.9}%
-\contentsline {chapter}{\numberline {E}BÁO CÁO RÀ SOÁT BẢO MẬT (TRUFY)}{53}{appendix.1.E}%
+\contentsline {chapter}{\numberline {E}CÀI ĐẶT FILLER}{53}{appendix.1.E}%
+\contentsline {section}{\numberline {E.1}Quy tắc quyết định khớp lệnh}{53}{section.1.E.1}%
+\contentsline {section}{\numberline {E.2}Hai cài đặt filler}{54}{section.1.E.2}%
+\contentsline {section}{\numberline {E.3}Mã giả hàm quyết định}{54}{section.1.E.3}%
+\contentsline {section}{\numberline {E.4}Phạm vi đơn giản hóa}{54}{section.1.E.4}%
+\contentsline {chapter}{\numberline {F}BÁO CÁO RÀ SOÁT BẢO MẬT (TRUFY)}{56}{appendix.1.F}%
 \contentsfinish 

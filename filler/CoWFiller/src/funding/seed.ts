@@ -2,8 +2,8 @@ import { ethers } from 'ethers'
 import { provider, wallet } from '../contract/contracts'
 import { SUPPORTED_TOKENS, CHAIN_B_RPC } from '../config'
 
-// Dev-mode inventory seeder.
-// Run once at startup (auto, in DEV_MODE) or manually: `npm run fund`.
+// Dev-only inventory seeder.
+// Run once at startup (auto, in DEV_MODE) or manually: `npm run seed`.
 // Gives the filler wallet "infinite-ish" money on a mainnet Anvil fork so it can
 // fill any order regardless of size: a big ETH balance (gas + stake collateral),
 // WETH wrapped from ETH, and major ERC-20s pulled from a Binance hot wallet.
@@ -45,16 +45,16 @@ async function fundEth(provider: ethers.providers.JsonRpcProvider, wallet: ether
     wallet.address,
     ethers.utils.hexValue(ethers.utils.parseEther(ETH_BALANCE)),
   ])
-  console.log(`[Seed:${label}] ETH balance → ${ETH_BALANCE} ETH`)
+  console.log(`[seed:${label}] ETH balance → ${ETH_BALANCE} ETH`)
 }
 
 async function wrapWeth(provider: ethers.providers.JsonRpcProvider, wallet: ethers.Wallet, target: bigint, label: string): Promise<void> {
   const weth = new ethers.Contract(WETH, WETH_ABI, wallet)
   const bal  = (await weth.balanceOf(wallet.address)).toBigInt()
-  if (bal >= target) { console.log(`[Seed:${label}] WETH already funded`); return }
+  if (bal >= target) { console.log(`[seed:${label}] WETH already funded`); return }
   const tx = await weth.deposit({ value: target - bal })
   await tx.wait()
-  console.log(`[Seed:${label}] WETH → ${ethers.utils.formatEther(target)}`)
+  console.log(`[seed:${label}] WETH → ${ethers.utils.formatEther(target)}`)
 }
 
 async function fundFromWhale(
@@ -63,7 +63,7 @@ async function fundFromWhale(
 ): Promise<void> {
   const erc = new ethers.Contract(token, ERC20_ABI, provider)
   const bal = (await erc.balanceOf(wallet.address)).toBigInt()
-  if (bal >= target) { console.log(`[Seed:${label}] ${symbol} already funded`); return }
+  if (bal >= target) { console.log(`[seed:${label}] ${symbol} already funded`); return }
   const need = target - bal
 
   for (const whale of WHALES) {
@@ -79,17 +79,17 @@ async function fundFromWhale(
       const tx = await new ethers.Contract(token, ERC20_ABI, signer).transfer(wallet.address, need)
       await tx.wait()
       await provider.send('anvil_stopImpersonatingAccount', [whale])
-      console.log(`[Seed:${label}] ${symbol} → ${ethers.utils.formatUnits(target, decimals)} (from ${whale.slice(0, 8)}…)`)
+      console.log(`[seed:${label}] ${symbol} → ${ethers.utils.formatUnits(target, decimals)} (from ${whale.slice(0, 8)}…)`)
       return
     } catch {
       await provider.send('anvil_stopImpersonatingAccount', [whale]).catch(() => {})
     }
   }
-  console.warn(`[Seed:${label}] ⚠ could not fund ${symbol} from any whale — continuing`)
+  console.warn(`[seed:${label}] ⚠ could not fund ${symbol} from any whale — continuing`)
 }
 
 async function seedChain(provider: ethers.providers.JsonRpcProvider, wallet: ethers.Wallet, label: string): Promise<void> {
-  console.log(`[Seed:${label}] funding ${wallet.address} …`)
+  console.log(`[seed:${label}] funding ${wallet.address} …`)
   await fundEth(provider, wallet, label)
   for (const [addr, meta] of Object.entries(SUPPORTED_TOKENS)) {
     const human = TARGETS[meta.symbol]
@@ -98,7 +98,7 @@ async function seedChain(provider: ethers.providers.JsonRpcProvider, wallet: eth
     if (meta.symbol === 'WETH') await wrapWeth(provider, wallet, target, label)
     else                        await fundFromWhale(provider, wallet, addr, target, meta.symbol, meta.decimals, label)
   }
-  console.log(`[Seed:${label}] done.`)
+  console.log(`[seed:${label}] done.`)
 }
 
 export async function seedInventory(): Promise<void> {
@@ -110,9 +110,9 @@ export async function seedInventory(): Promise<void> {
   }
 }
 
-// Allow running standalone: `npm run fund`
+// Allow running standalone: `npm run seed`
 if (require.main === module) {
   seedInventory()
     .then(() => process.exit(0))
-    .catch((e) => { console.error('[Seed] failed:', e); process.exit(1) })
+    .catch((e) => { console.error('[seed] failed:', e); process.exit(1) })
 }

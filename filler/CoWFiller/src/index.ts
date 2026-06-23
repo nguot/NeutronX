@@ -5,7 +5,7 @@ import { Executor } from './execution/executor'
 import { startQuoteServer } from './quote/quoteServer'
 import { logOrderbook, getOrderbook } from './orderbook/mockOrderbook'
 import { DEV_MODE } from './config'
-import { seedInventory } from './dev/seed'
+import { seedInventory } from './funding/seed'
 import type { OrderInfo } from './types'
 
 const listener = new OrderListener()

@@ -1,7 +1,7 @@
 import { ethers } from 'ethers'
 import axios from 'axios'
 import { BACKEND_URL, DEV_MODE, INVENTORY } from '../config'
-import { devEnsureOutputToken } from '../dev/devFund'
+import { ensureOutputToken } from '../funding/inventory'
 import { wallet, fillAuction, reactor, erc20 } from '../contract/contracts'
 import { decide } from '../strategy/strategy'
 import type { OrderInfo } from '../types'
@@ -189,7 +189,7 @@ export class Executor {
 
       // Expected output: fillAmount * currentPrice / 1e18 (reactor will demand this from filler)
       const expectedOutput = (fillAmount * decision.currentPrice) / 10n**18n
-      if (DEV_MODE) await devEnsureOutputToken(order.outputToken, expectedOutput)
+      if (DEV_MODE) await ensureOutputToken(order.outputToken, expectedOutput)
       await ensureApproval(order.outputToken, expectedOutput)
 
       console.log(`${tag} calling executePartialChunk  fillAmount=${fillAmount}  tx pending…`)

@@ -271,7 +271,7 @@ backend/src/
 filler/{CoWFiller,WhaleFiller}/src/
 ├── config.ts          ← ESCROW_SRC_FACTORY, CHAIN_B_RPC, CHAIN_B_FACTORY (written by setup_cc.sh)
 ├── contract/abis.ts   ← ESCROW_SRC_FACTORY_ABI, ESCROW_SRC_ABI, ESCROW_FACTORY_ABI, ESCROW_DST_ABI
-└── dev/ccFill.ts      ← ccFill() / ccClaimSlot() — drives fillSlot() → Chain B → withdraw()
+└── fill/crossChainFill.ts ← crossChainFill() / crossChainClaim() — drives fillSlot() → Chain B → withdraw()
 ```
 
 ## backend/.env — what changed
