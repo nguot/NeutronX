@@ -155,8 +155,8 @@
 \newlabel{chapter:Methodology}{{4}{26}{KIỂM THỬ VÀ RÀ SOÁT BẢO MẬT}{chapter.4}{}}
 \@writefile{toc}{\contentsline {section}{\numberline {4.1}Phương pháp và môi trường kiểm thử}{26}{section.4.1}\protected@file@percent }
 \newlabel{sec:test-env}{{4.1}{26}{Phương pháp và môi trường kiểm thử}{section.4.1}{}}
-\@writefile{lot}{\contentsline {table}{\numberline {4.1}{\ignorespaces Tổng hợp kết quả \texttt  {forge test}: 149/149 trường hợp đạt, nhóm theo thành phần.}}{26}{table.caption.27}\protected@file@percent }
-\newlabel{table:forge}{{4.1}{26}{Tổng hợp kết quả \texttt {forge test}: 149/149 trường hợp đạt, nhóm theo thành phần}{table.caption.27}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {4.1}{\ignorespaces Tổng hợp kết quả \texttt  {forge test}: 154/154 trường hợp đạt, nhóm theo thành phần.}}{26}{table.caption.27}\protected@file@percent }
+\newlabel{table:forge}{{4.1}{26}{Tổng hợp kết quả \texttt {forge test}: 154/154 trường hợp đạt, nhóm theo thành phần}{table.caption.27}{}}
 \@writefile{toc}{\contentsline {section}{\numberline {4.2}Các tính chất đã chứng minh}{27}{section.4.2}\protected@file@percent }
 \newlabel{sec:test-proof}{{4.2}{27}{Các tính chất đã chứng minh}{section.4.2}{}}
 \@writefile{toc}{\contentsline {subsection}{\numberline {4.2.1}Khớp lệnh từng phần luôn đúng và không bị kẹt}{27}{subsection.4.2.1}\protected@file@percent }
@@ -165,60 +165,67 @@
 \@writefile{toc}{\contentsline {subsection}{\numberline {4.2.4}Chống trích xuất giá trị bằng MEV}{30}{subsection.4.2.4}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsection}{\numberline {4.2.5}Ngăn khớp trùng và bảo đảm hoàn tất lệnh}{31}{subsection.4.2.5}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsection}{\numberline {4.2.6}Xuyên chuỗi: chống griefing và an toàn về thời gian}{31}{subsection.4.2.6}\protected@file@percent }
-\abx@aux@cite{0}{trufy2026}
-\abx@aux@segm{0}{0}{trufy2026}
 \@writefile{toc}{\contentsline {section}{\numberline {4.3}Độ phủ và phạm vi kiểm thử}{32}{section.4.3}\protected@file@percent }
 \newlabel{sec:test-coverage}{{4.3}{32}{Độ phủ và phạm vi kiểm thử}{section.4.3}{}}
-\@writefile{toc}{\contentsline {section}{\numberline {4.4}Rà soát bảo mật bởi Trufy}{32}{section.4.4}\protected@file@percent }
-\newlabel{sec:audit}{{4.4}{32}{Rà soát bảo mật bởi Trufy}{section.4.4}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {4.4.1}Tổng quan phát hiện}{32}{subsection.4.4.1}\protected@file@percent }
-\@writefile{lot}{\contentsline {table}{\numberline {4.2}{\ignorespaces Tám phát hiện từ báo cáo Trufy và trạng thái xử lý.}}{33}{table.caption.28}\protected@file@percent }
-\newlabel{tab:trufy}{{4.2}{33}{Tám phát hiện từ báo cáo Trufy và trạng thái xử lý}{table.caption.28}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {4.4.2}Phát hiện đã khắc phục}{33}{subsection.4.4.2}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {4.4.3}Các phát hiện cần môi trường production để kiểm chứng}{34}{subsection.4.4.3}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {4.5}Kết luận chương}{35}{section.4.5}\protected@file@percent }
-\newlabel{sec:test-concl}{{4.5}{35}{Kết luận chương}{section.4.5}{}}
-\@writefile{toc}{\contentsline {chapter}{\numberline {5}KẾT LUẬN VÀ HƯỚNG PHÁT TRIỂN}{36}{chapter.5}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {4.4}Phân tích tĩnh và đánh giá chất lượng kiểm thử}{32}{section.4.4}\protected@file@percent }
+\newlabel{sec:static-mutation}{{4.4}{32}{Phân tích tĩnh và đánh giá chất lượng kiểm thử}{section.4.4}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.4.1}Phân tích tĩnh với Slither}{32}{subsection.4.4.1}\protected@file@percent }
+\abx@aux@cite{0}{trufy2026}
+\abx@aux@segm{0}{0}{trufy2026}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.4.2}Mutation testing}{33}{subsection.4.4.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.4.3}Thí nghiệm định lượng oracle TWAP}{33}{subsection.4.4.3}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {4.2}{\ignorespaces Mức sụt cọc yêu cầu dưới tấn công thao túng pool, theo độ dài cửa sổ TWAP (lệnh 3\,000~USDC, giữ giá 120 giây).}}{33}{table.caption.28}\protected@file@percent }
+\newlabel{tab:twap}{{4.2}{33}{Mức sụt cọc yêu cầu dưới tấn công thao túng pool, theo độ dài cửa sổ TWAP (lệnh 3\,000~USDC, giữ giá 120 giây)}{table.caption.28}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {4.5}Rà soát bảo mật bởi Trufy}{33}{section.4.5}\protected@file@percent }
+\newlabel{sec:audit}{{4.5}{33}{Rà soát bảo mật bởi Trufy}{section.4.5}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.5.1}Tổng quan phát hiện}{33}{subsection.4.5.1}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {4.3}{\ignorespaces Tám phát hiện từ báo cáo Trufy và trạng thái xử lý.}}{34}{table.caption.29}\protected@file@percent }
+\newlabel{tab:trufy}{{4.3}{34}{Tám phát hiện từ báo cáo Trufy và trạng thái xử lý}{table.caption.29}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.5.2}Phát hiện đã khắc phục}{34}{subsection.4.5.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.5.3}Các phát hiện cần môi trường production để kiểm chứng}{35}{subsection.4.5.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {4.6}Kết luận chương}{36}{section.4.6}\protected@file@percent }
+\newlabel{sec:test-concl}{{4.6}{36}{Kết luận chương}{section.4.6}{}}
+\@writefile{toc}{\contentsline {chapter}{\numberline {5}KẾT LUẬN VÀ HƯỚNG PHÁT TRIỂN}{37}{chapter.5}\protected@file@percent }
 \@writefile{lof}{\addvspace {10\p@ }}
 \@writefile{lot}{\addvspace {10\p@ }}
 \@writefile{loa}{\addvspace {10\p@ }}
-\newlabel{chapter:conclusion}{{5}{36}{KẾT LUẬN VÀ HƯỚNG PHÁT TRIỂN}{chapter.5}{}}
-\@writefile{toc}{\contentsline {section}{\numberline {5.1}Kết luận}{36}{section.5.1}\protected@file@percent }
-\newlabel{sec:concl}{{5.1}{36}{Kết luận}{section.5.1}{}}
-\@writefile{lot}{\contentsline {table}{\numberline {5.1}{\ignorespaces Đối chiếu kết quả với các mục tiêu ban đầu.}}{36}{table.caption.29}\protected@file@percent }
-\newlabel{table:goals}{{5.1}{36}{Đối chiếu kết quả với các mục tiêu ban đầu}{table.caption.29}{}}
-\@writefile{toc}{\contentsline {section}{\numberline {5.2}Hạn chế}{36}{section.5.2}\protected@file@percent }
-\newlabel{sec:limitations}{{5.2}{36}{Hạn chế}{section.5.2}{}}
-\@writefile{toc}{\contentsline {section}{\numberline {5.3}Hướng phát triển}{37}{section.5.3}\protected@file@percent }
-\newlabel{sec:future}{{5.3}{37}{Hướng phát triển}{section.5.3}{}}
+\newlabel{chapter:conclusion}{{5}{37}{KẾT LUẬN VÀ HƯỚNG PHÁT TRIỂN}{chapter.5}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {5.1}Kết luận}{37}{section.5.1}\protected@file@percent }
+\newlabel{sec:concl}{{5.1}{37}{Kết luận}{section.5.1}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {5.1}{\ignorespaces Đối chiếu kết quả với các mục tiêu ban đầu.}}{37}{table.caption.30}\protected@file@percent }
+\newlabel{table:goals}{{5.1}{37}{Đối chiếu kết quả với các mục tiêu ban đầu}{table.caption.30}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {5.2}Hạn chế}{37}{section.5.2}\protected@file@percent }
+\newlabel{sec:limitations}{{5.2}{37}{Hạn chế}{section.5.2}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {5.3}Hướng phát triển}{38}{section.5.3}\protected@file@percent }
+\newlabel{sec:future}{{5.3}{38}{Hướng phát triển}{section.5.3}{}}
 \abx@aux@nociteall
-\@writefile{toc}{\contentsline {chapter}{TÀI LIỆU THAM KHẢO}{39}{section*.31}\protected@file@percent }
-\@writefile{toc}{\contentsline {chapter}{PHỤ LỤC}{41}{section*.32}\protected@file@percent }
+\@writefile{toc}{\contentsline {chapter}{TÀI LIỆU THAM KHẢO}{40}{section*.32}\protected@file@percent }
+\@writefile{toc}{\contentsline {chapter}{PHỤ LỤC}{42}{section*.33}\protected@file@percent }
 \@writefile{toc}{\ttl@change@i {\@ne }{chapter}{0.0cm}{\bfseries \vspace {0.3cm}}{{\bfseries {\scshape } \thecontentslabel .\ }}{}{\titlerule *[0.3pc]{.}\contentspage }\relax }
 \@writefile{toc}{\ttl@change@v {chapter}{}{}{}\relax }
-\@writefile{toc}{\contentsline {chapter}{\numberline {A}MỘT SỐ USE CASE KHÁC}{41}{appendix.1.A}\protected@file@percent }
+\@writefile{toc}{\contentsline {chapter}{\numberline {A}MỘT SỐ USE CASE KHÁC}{42}{appendix.1.A}\protected@file@percent }
 \@writefile{lof}{\addvspace {10\p@ }}
 \@writefile{lot}{\addvspace {10\p@ }}
 \@writefile{loa}{\addvspace {10\p@ }}
-\@writefile{toc}{\contentsline {section}{\numberline {A.1}Cấp quyền chi tiêu một lần qua Permit2}{41}{section.1.A.1}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {A.2}Kiểm tra đăng ký hợp lệ của filler}{41}{section.1.A.2}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {A.3}Truy vấn giá thị trường}{42}{section.1.A.3}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {A.4}Gợi ý tham số lệnh tự động}{43}{section.1.A.4}\protected@file@percent }
-\@writefile{toc}{\contentsline {chapter}{\numberline {B}CƠ SỞ DỮ LIỆU}{45}{appendix.1.B}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {A.1}Cấp quyền chi tiêu một lần qua Permit2}{42}{section.1.A.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {A.2}Kiểm tra đăng ký hợp lệ của filler}{42}{section.1.A.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {A.3}Truy vấn giá thị trường}{43}{section.1.A.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {A.4}Gợi ý tham số lệnh tự động}{44}{section.1.A.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {chapter}{\numberline {B}CƠ SỞ DỮ LIỆU}{46}{appendix.1.B}\protected@file@percent }
 \@writefile{lof}{\addvspace {10\p@ }}
 \@writefile{lot}{\addvspace {10\p@ }}
 \@writefile{loa}{\addvspace {10\p@ }}
-\@writefile{toc}{\contentsline {section}{\numberline {B.1}Bảng \texttt  {orders} (lệnh trong cùng chuỗi)}{45}{section.1.B.1}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {B.2}Bảng \texttt  {fills} (các lần khớp)}{45}{section.1.B.2}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {B.3}Các bảng cho giao dịch xuyên chuỗi}{45}{section.1.B.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {B.1}Bảng \texttt  {orders} (lệnh trong cùng chuỗi)}{46}{section.1.B.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {B.2}Bảng \texttt  {fills} (các lần khớp)}{46}{section.1.B.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {B.3}Các bảng cho giao dịch xuyên chuỗi}{46}{section.1.B.3}\protected@file@percent }
 \gdef \LT@i {\LT@entry 
     {1}{189.20699pt}\LT@entry 
     {1}{228.6411pt}}
-\@writefile{toc}{\contentsline {chapter}{\numberline {C}DANH SÁCH TRƯỜNG HỢP KIỂM THỬ}{47}{appendix.1.C}\protected@file@percent }
+\@writefile{toc}{\contentsline {chapter}{\numberline {C}DANH SÁCH TRƯỜNG HỢP KIỂM THỬ}{48}{appendix.1.C}\protected@file@percent }
 \@writefile{lof}{\addvspace {10\p@ }}
 \@writefile{lot}{\addvspace {10\p@ }}
 \@writefile{loa}{\addvspace {10\p@ }}
-\newlabel{apdx:testcases}{{C}{47}{DANH SÁCH TRƯỜNG HỢP KIỂM THỬ}{appendix.1.C}{}}
+\newlabel{apdx:testcases}{{C}{48}{DANH SÁCH TRƯỜNG HỢP KIỂM THỬ}{appendix.1.C}{}}
 \abx@aux@cite{0}{wood2014ethereum}
 \abx@aux@segm{0}{0}{wood2014ethereum}
 \abx@aux@cite{0}{merkle1987digital}
@@ -227,36 +234,36 @@
 \abx@aux@segm{0}{0}{openzeppelin_contracts}
 \abx@aux@cite{0}{herlihy2018atomic}
 \abx@aux@segm{0}{0}{herlihy2018atomic}
-\@writefile{toc}{\contentsline {chapter}{\numberline {D}KIẾN THỨC NỀN TẢNG}{50}{appendix.1.D}\protected@file@percent }
+\@writefile{toc}{\contentsline {chapter}{\numberline {D}KIẾN THỨC NỀN TẢNG}{51}{appendix.1.D}\protected@file@percent }
 \@writefile{lof}{\addvspace {10\p@ }}
 \@writefile{lot}{\addvspace {10\p@ }}
 \@writefile{loa}{\addvspace {10\p@ }}
-\@writefile{toc}{\contentsline {section}{\numberline {D.1}Blockchain và hợp đồng thông minh}{50}{section.1.D.1}\protected@file@percent }
-\newlabel{apdx:blockchain}{{D.1}{50}{Blockchain và hợp đồng thông minh}{section.1.D.1}{}}
-\@writefile{toc}{\contentsline {section}{\numberline {D.2}Nonce}{50}{section.1.D.2}\protected@file@percent }
-\newlabel{apdx:nonce}{{D.2}{50}{Nonce}{section.1.D.2}{}}
-\@writefile{toc}{\contentsline {section}{\numberline {D.3}Cây Merkle}{50}{section.1.D.3}\protected@file@percent }
-\newlabel{apdx:merkle}{{D.3}{50}{Cây Merkle}{section.1.D.3}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {D.1}Blockchain và hợp đồng thông minh}{51}{section.1.D.1}\protected@file@percent }
+\newlabel{apdx:blockchain}{{D.1}{51}{Blockchain và hợp đồng thông minh}{section.1.D.1}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {D.2}Nonce}{51}{section.1.D.2}\protected@file@percent }
+\newlabel{apdx:nonce}{{D.2}{51}{Nonce}{section.1.D.2}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {D.3}Cây Merkle}{51}{section.1.D.3}\protected@file@percent }
+\newlabel{apdx:merkle}{{D.3}{51}{Cây Merkle}{section.1.D.3}{}}
 \abx@aux@cite{0}{daian2020flashboys}
 \abx@aux@segm{0}{0}{daian2020flashboys}
 \abx@aux@cite{0}{qin2022quantifying}
 \abx@aux@segm{0}{0}{qin2022quantifying}
-\@writefile{toc}{\contentsline {section}{\numberline {D.4}Hợp đồng khóa thời gian theo mã băm (HTLC)}{51}{section.1.D.4}\protected@file@percent }
-\newlabel{apdx:htlc}{{D.4}{51}{Hợp đồng khóa thời gian theo mã băm (HTLC)}{section.1.D.4}{}}
-\@writefile{toc}{\contentsline {section}{\numberline {D.5}Chuẩn ký EIP-712 và Permit2}{51}{section.1.D.5}\protected@file@percent }
-\newlabel{apdx:eip712}{{D.5}{51}{Chuẩn ký EIP-712 và Permit2}{section.1.D.5}{}}
-\@writefile{toc}{\contentsline {section}{\numberline {D.6}Đấu giá kiểu Hà Lan}{51}{section.1.D.6}\protected@file@percent }
-\newlabel{apdx:dutch}{{D.6}{51}{Đấu giá kiểu Hà Lan}{section.1.D.6}{}}
-\@writefile{toc}{\contentsline {section}{\numberline {D.7}MEV và tấn công chèn lệnh}{51}{section.1.D.7}\protected@file@percent }
-\newlabel{apdx:mev}{{D.7}{51}{MEV và tấn công chèn lệnh}{section.1.D.7}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {D.4}Hợp đồng khóa thời gian theo mã băm (HTLC)}{52}{section.1.D.4}\protected@file@percent }
+\newlabel{apdx:htlc}{{D.4}{52}{Hợp đồng khóa thời gian theo mã băm (HTLC)}{section.1.D.4}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {D.5}Chuẩn ký EIP-712 và Permit2}{52}{section.1.D.5}\protected@file@percent }
+\newlabel{apdx:eip712}{{D.5}{52}{Chuẩn ký EIP-712 và Permit2}{section.1.D.5}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {D.6}Đấu giá kiểu Hà Lan}{52}{section.1.D.6}\protected@file@percent }
+\newlabel{apdx:dutch}{{D.6}{52}{Đấu giá kiểu Hà Lan}{section.1.D.6}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {D.7}MEV và tấn công chèn lệnh}{52}{section.1.D.7}\protected@file@percent }
+\newlabel{apdx:mev}{{D.7}{52}{MEV và tấn công chèn lệnh}{section.1.D.7}{}}
 \abx@aux@cite{0}{openzeppelin_contracts}
 \abx@aux@segm{0}{0}{openzeppelin_contracts}
-\@writefile{toc}{\contentsline {section}{\numberline {D.8}CREATE2}{52}{section.1.D.8}\protected@file@percent }
-\newlabel{apdx:create2}{{D.8}{52}{CREATE2}{section.1.D.8}{}}
-\@writefile{toc}{\contentsline {section}{\numberline {D.9}Các thư viện OpenZeppelin sử dụng}{52}{section.1.D.9}\protected@file@percent }
-\newlabel{apdx:openzeppelin}{{D.9}{52}{Các thư viện OpenZeppelin sử dụng}{section.1.D.9}{}}
-\@writefile{lot}{\contentsline {table}{\numberline {D.1}{\ignorespaces Các thư viện OpenZeppelin được sử dụng trong đồ án.}}{52}{table.caption.36}\protected@file@percent }
-\newlabel{table:oz_libs}{{D.1}{52}{Các thư viện OpenZeppelin được sử dụng trong đồ án}{table.caption.36}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {D.8}CREATE2}{53}{section.1.D.8}\protected@file@percent }
+\newlabel{apdx:create2}{{D.8}{53}{CREATE2}{section.1.D.8}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {D.9}Các thư viện OpenZeppelin sử dụng}{53}{section.1.D.9}\protected@file@percent }
+\newlabel{apdx:openzeppelin}{{D.9}{53}{Các thư viện OpenZeppelin sử dụng}{section.1.D.9}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {D.1}{\ignorespaces Các thư viện OpenZeppelin được sử dụng trong đồ án.}}{53}{table.caption.37}\protected@file@percent }
+\newlabel{table:oz_libs}{{D.1}{53}{Các thư viện OpenZeppelin được sử dụng trong đồ án}{table.caption.37}{}}
 \abx@aux@cite{0}{milionis2023fees}
 \abx@aux@segm{0}{0}{milionis2023fees}
 \abx@aux@cite{0}{milionis2022lvr}
@@ -267,26 +274,26 @@
 \abx@aux@segm{0}{0}{daian2020flashboys}
 \abx@aux@cite{0}{qin2022quantifying}
 \abx@aux@segm{0}{0}{qin2022quantifying}
-\@writefile{toc}{\contentsline {chapter}{\numberline {E}CÀI ĐẶT FILLER}{53}{appendix.1.E}\protected@file@percent }
+\@writefile{toc}{\contentsline {chapter}{\numberline {E}CÀI ĐẶT FILLER}{54}{appendix.1.E}\protected@file@percent }
 \@writefile{lof}{\addvspace {10\p@ }}
 \@writefile{lot}{\addvspace {10\p@ }}
 \@writefile{loa}{\addvspace {10\p@ }}
-\newlabel{apdx:filler}{{E}{53}{CÀI ĐẶT FILLER}{appendix.1.E}{}}
-\@writefile{toc}{\contentsline {section}{\numberline {E.1}Quy tắc quyết định khớp lệnh}{53}{section.1.E.1}\protected@file@percent }
-\newlabel{eq:filler-profit}{{E.1}{53}{Quy tắc quyết định khớp lệnh}{equation.1.E.1}{}}
-\@writefile{toc}{\contentsline {section}{\numberline {E.2}Hai cài đặt filler}{54}{section.1.E.2}\protected@file@percent }
-\@writefile{lot}{\contentsline {table}{\numberline {E.1}{\ignorespaces So sánh hai cài đặt filler.}}{54}{table.caption.37}\protected@file@percent }
-\newlabel{table:filler_compare}{{E.1}{54}{So sánh hai cài đặt filler}{table.caption.37}{}}
-\@writefile{toc}{\contentsline {section}{\numberline {E.3}Mã giả hàm quyết định}{54}{section.1.E.3}\protected@file@percent }
-\@writefile{lol}{\contentsline {lstlisting}{\numberline {E.1}{\ignorespaces Quy tắc quyết định khớp lệnh của filler.}}{54}{lstlisting.1.E.1}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {E.4}Phạm vi đơn giản hóa}{54}{section.1.E.4}\protected@file@percent }
+\newlabel{apdx:filler}{{E}{54}{CÀI ĐẶT FILLER}{appendix.1.E}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {E.1}Quy tắc quyết định khớp lệnh}{54}{section.1.E.1}\protected@file@percent }
+\newlabel{eq:filler-profit}{{E.1}{54}{Quy tắc quyết định khớp lệnh}{equation.1.E.1}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {E.2}Hai cài đặt filler}{55}{section.1.E.2}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {E.1}{\ignorespaces So sánh hai cài đặt filler.}}{55}{table.caption.38}\protected@file@percent }
+\newlabel{table:filler_compare}{{E.1}{55}{So sánh hai cài đặt filler}{table.caption.38}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {E.3}Mã giả hàm quyết định}{55}{section.1.E.3}\protected@file@percent }
+\@writefile{lol}{\contentsline {lstlisting}{\numberline {E.1}{\ignorespaces Quy tắc quyết định khớp lệnh của filler.}}{55}{lstlisting.1.E.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {E.4}Phạm vi đơn giản hóa}{55}{section.1.E.4}\protected@file@percent }
 \abx@aux@cite{0}{trufy2026}
 \abx@aux@segm{0}{0}{trufy2026}
-\@writefile{toc}{\contentsline {chapter}{\numberline {F}BÁO CÁO RÀ SOÁT BẢO MẬT (TRUFY)}{56}{appendix.1.F}\protected@file@percent }
+\@writefile{toc}{\contentsline {chapter}{\numberline {F}BÁO CÁO RÀ SOÁT BẢO MẬT (TRUFY)}{57}{appendix.1.F}\protected@file@percent }
 \@writefile{lof}{\addvspace {10\p@ }}
 \@writefile{lot}{\addvspace {10\p@ }}
 \@writefile{loa}{\addvspace {10\p@ }}
-\newlabel{apdx:trufy}{{F}{56}{BÁO CÁO RÀ SOÁT BẢO MẬT (TRUFY)}{appendix.1.F}{}}
+\newlabel{apdx:trufy}{{F}{57}{BÁO CÁO RÀ SOÁT BẢO MẬT (TRUFY)}{appendix.1.F}{}}
 \ttl@finishall
 \abx@aux@read@bbl@mdfivesum{F0E69D6042B43087E6041E0872EA5084}
 \abx@aux@defaultrefcontext{0}{werner2022sok}{none/global//global/global/global}
@@ -313,4 +320,4 @@
 \abx@aux@defaultrefcontext{0}{usdc_docs}{none/global//global/global/global}
 \abx@aux@defaultrefcontext{0}{usdt_docs}{none/global//global/global/global}
 \abx@aux@defaultrefcontext{0}{dai_docs}{none/global//global/global/global}
-\gdef \@abspage@last{84}
+\gdef \@abspage@last{85}

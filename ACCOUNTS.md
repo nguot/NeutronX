@@ -11,12 +11,13 @@ knowledge for any local Anvil instance, safe only on local forks.
 |---|------|---------|-------------|
 | 0 | Swapper / deployer | `0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266` | `0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80` |
 | 1 | Filler A (CoWFiller)   — fills slot 0 | `0x70997970C51812dc3A010C7d01b50e0d17dc79C8` | `0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d` |
-| 2 | Filler B (WhaleFiller) — fills slot 1 | `0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC` | `0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a` |
+| 2 | Filler B (WhaleFiller) — fills slot 1 | `0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC` | `0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a` | private key khac gi address => so luong bit cho address va private key
 
 - Account 0 is the dev "MetaMask" account — import its private key into
-  MetaMask to act as the swapper on the frontend. It's also hardcoded as
-  `DEV_SWAPPER_PK` in `filler/*/src/fill/crossChainFill.ts` and as `PK0` in
-  `tests/crosschain/run_cc.sh`.
+  MetaMask to act as the swapper on the frontend. It's also used as `PK0` in
+  `tests/crosschain/run_cc.sh` to produce the swapper's signature headlessly.
+  (The filler no longer holds any swapper key — it relays the swapper's
+  signature from the backend via `order.swapperSig`.)
 - All three are deployed/funded by `tests/demo/setup.sh` and
   `tests/crosschain/setup_cc.sh`.
 

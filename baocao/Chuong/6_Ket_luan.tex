@@ -32,26 +32,11 @@ Như vậy, cả năm mục tiêu đều đã đạt được ở mức cài đ�
 \section{Hạn chế}
 \label{sec:limitations}
 
-Đồ án có một số hạn chế:
-
-\begin{itemize}
-    \item \textbf{Chưa lên mainnet.} Hệ thống hiện được chạy trên mạng giả lập, chưa được triển khai lên mạng thử nghiệm hay mạng chính thức.
-    \item \textbf{Chưa mô phỏng cạnh tranh kinh tế thực tế.} Các filler trong kiểm thử được cấp vốn không giới hạn, do đó kết quả kiểm chứng giới hạn ở tính đúng của luồng, chưa phản ánh hành vi khi vốn có hạn; cũng chưa có thanh khoản và người dùng thực.
-    \item \textbf{Cosigner tập trung.} Khóa đồng ký (cosigner) hiện do một bên duy nhất nắm giữ, tạo ra điểm tin tưởng tập trung trong hệ thống.
-    \item \textbf{Phạm vi hỗ trợ hẹp.} Phần xuyên chuỗi hiện hỗ trợ các chuỗi tương thích EVM; cơ chế dự phòng hiện tích hợp Uniswap và KyberSwap.
-\end{itemize}
+Hệ thống hiện mới được kiểm thử trên mạng giả lập, chưa triển khai lên mạng thử nghiệm hay mainnet. Trong môi trường kiểm thử, các filler được cấp vốn không giới hạn và không có mempool cạnh tranh thực, nên kết quả chỉ xác nhận tính đúng của các luồng và cơ chế, chưa phản ánh hành vi khi vốn hữu hạn và nhiều filler tranh nhau trên mainnet. Về kiến trúc, khóa đồng ký (cosigner) hiện do một bên duy nhất nắm giữ, tạo ra điểm tập trung. Phạm vi hỗ trợ cũng còn hẹp: phần xuyên chuỗi giới hạn ở các chuỗi tương thích EVM, cơ chế dự phòng tích hợp hai sàn là Uniswap và KyberSwap.
 
 \section{Hướng phát triển}
 \label{sec:future}
 
-Từ các hạn chế trên, đồ án có thể được phát triển tiếp theo các hướng sau:
-
-\begin{itemize}
-    \item \textbf{Triển khai và kiểm toán.} Đưa hệ thống lên mạng thử nghiệm rồi tiến tới mainnet, kèm theo một đợt kiểm toán bảo mật do chuyên gia thực hiện.
-    \item \textbf{Phi tập trung hóa cosigner.} Chạy module backend ký lệnh trong môi trường thực thi tin cậy (TEE --- Trusted Execution Environment), để phần ký chạy trong một vùng cô lập không thể can thiệp từ bên ngoài mà không cần tin vào một bên duy nhất.
-    \item \textbf{Tăng độ bền cơ chế tính cọc.} Kéo dài cửa sổ lấy giá trung bình (TWAP) và kết hợp thêm nguồn giá độc lập để khó thao túng hơn.
-    \item \textbf{Mở rộng dự phòng.} Thêm bộ chuyển đổi cho các sàn khác như 1inch và 0x.
-    \item \textbf{Mở rộng xuyên chuỗi.} Hỗ trợ nhiều hơn hai chuỗi EVM, tiến tới các chuỗi không tương thích EVM.
-\end{itemize}
+Hướng trước mắt là đưa hệ thống lên mạng thử nghiệm, kèm theo một đợt kiểm toán bảo mật do chuyên gia thực hiện trước khi tiến lên mainnet. Song song, có thể phi tập trung hóa cosigner bằng cách chạy module ký lệnh trong môi trường thực thi tin cậy (TEE --- Trusted Execution Environment), loại bỏ sự phụ thuộc vào một bên duy nhất mà không cần thêm giao thức đồng thuận. Về bảo mật oracle, kéo dài cửa sổ TWAP và kết hợp thêm nguồn giá độc lập sẽ giảm rủi ro thao túng được phân tích ở phát hiện~3.5. Phía tích hợp, bổ sung bộ chuyển đổi cho 1inch và 0x sẽ mở rộng khả năng dự phòng; hỗ trợ nhiều chuỗi EVM hơn rồi tiến tới các chuỗi không tương thích EVM là hướng dài hạn cho phần xuyên chuỗi.
 
 \end{document}

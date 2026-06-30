@@ -39,10 +39,10 @@ contract DeployCrossChain is Script {
     // pulling the swapper's WETH via Permit2 redirect.
     // Requires env: PRIVATE_KEY, COSIGNER_ADDRESS
     function runChainA() external {
-        uint256 deployerKey = vm.envUint("PRIVATE_KEY");
-        address cosigner    = vm.envAddress("COSIGNER_ADDRESS");
+        // Broadcaster from CLI (--private-key); avoids the contract/.env anvil PRIVATE_KEY.
+        address cosigner = vm.envAddress("COSIGNER_ADDRESS");
 
-        vm.startBroadcast(deployerKey);
+        vm.startBroadcast();
         EscrowSrc        impl    = new EscrowSrc();
         EscrowSrcFactory factory = new EscrowSrcFactory(address(impl), PERMIT2, cosigner);
         vm.stopBroadcast();
@@ -55,9 +55,8 @@ contract DeployCrossChain is Script {
     // clone per filler slot fill.  Only the factory address is needed in .env.
     // Requires env: PRIVATE_KEY
     function runChainB() external {
-        uint256 deployerKey = vm.envUint("PRIVATE_KEY");
-
-        vm.startBroadcast(deployerKey);
+        // Broadcaster from CLI (--private-key); avoids the contract/.env anvil PRIVATE_KEY.
+        vm.startBroadcast();
         EscrowDst        impl    = new EscrowDst();
         EscrowDstFactory factory = new EscrowDstFactory(address(impl));
         vm.stopBroadcast();
@@ -70,10 +69,10 @@ contract DeployCrossChain is Script {
     // here via Permit2, fillers pull it out after revealing S_i on Chain A.
     // Requires env: PRIVATE_KEY, COSIGNER_ADDRESS
     function runChainB_Src() external {
-        uint256 deployerKey = vm.envUint("PRIVATE_KEY");
-        address cosigner    = vm.envAddress("COSIGNER_ADDRESS");
+        // Broadcaster from CLI (--private-key); avoids the contract/.env anvil PRIVATE_KEY.
+        address cosigner = vm.envAddress("COSIGNER_ADDRESS");
 
-        vm.startBroadcast(deployerKey);
+        vm.startBroadcast();
         EscrowSrc        impl    = new EscrowSrc();
         EscrowSrcFactory factory = new EscrowSrcFactory(address(impl), PERMIT2, cosigner);
         vm.stopBroadcast();
@@ -86,9 +85,8 @@ contract DeployCrossChain is Script {
     // WETH escrow clones here, claimed by the backend's chainAWatcher.
     // Requires env: PRIVATE_KEY
     function runChainA_Dst() external {
-        uint256 deployerKey = vm.envUint("PRIVATE_KEY");
-
-        vm.startBroadcast(deployerKey);
+        // Broadcaster from CLI (--private-key); avoids the contract/.env anvil PRIVATE_KEY.
+        vm.startBroadcast();
         EscrowDst        impl    = new EscrowDst();
         EscrowDstFactory factory = new EscrowDstFactory(address(impl));
         vm.stopBroadcast();

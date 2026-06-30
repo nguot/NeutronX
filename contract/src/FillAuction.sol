@@ -81,6 +81,11 @@ contract FillAuction is IFillAuction, ReentrancyGuard {
     event StakeReturned(address indexed filler, bytes32 indexed orderHash, uint256 refund);
     event StakeForfeited(address indexed filler, bytes32 indexed orderHash, uint256 amount);
     event StakeReleased(address indexed filler, bytes32 indexed orderHash, uint256 amount);
+    // Slither (events-access / events-maths): emit on critical admin state changes so
+    // off-chain watchers/indexers can track the one-time reactor wiring and the
+    // collateral-floor parameter without polling.
+    event ReactorSet(address indexed reactor);
+    event MinCollateralSet(uint256 minCollateral);
 
     modifier onlyOwner() {
         require(msg.sender == owner, "not owner");
@@ -139,6 +144,7 @@ contract FillAuction is IFillAuction, ReentrancyGuard {
         require(reactor  == address(0), "already set");
         require(_reactor != address(0), "zero reactor");
         reactor = _reactor;
+        emit ReactorSet(_reactor);
     }
 
     function setCollateralRate(uint8 sBucket, uint32 value) external onlyOwner {
@@ -156,6 +162,7 @@ contract FillAuction is IFillAuction, ReentrancyGuard {
     // Trufy 3.1: set the absolute collateral floor (wei). Owner-only.
     function setMinCollateral(uint256 value) external onlyOwner {
         minCollateral = value;
+        emit MinCollateralSet(value);
     }
 
     /// D-1: exact ETH collateral a filler must stake for `fillAmount` of an order

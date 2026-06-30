@@ -3,7 +3,7 @@ import { provider, wallet } from '../contract/contracts'
 import { SUPPORTED_TOKENS, CHAIN_B_RPC } from '../config'
 
 // Dev-only inventory seeder.
-// Run once at startup (auto, in DEV_MODE) or manually: `npm run seed`.
+// Run once at startup (auto) or manually: `npm run seed`.
 // Gives the filler wallet "infinite-ish" money on a mainnet Anvil fork so it can
 // fill any order regardless of size: a big ETH balance (gas + stake collateral),
 // WETH wrapped from ETH, and major ERC-20s pulled from a Binance hot wallet.

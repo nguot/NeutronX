@@ -7,12 +7,6 @@ import {
 import { ESCROW_SRC_FACTORY_ABI, ESCROW_SRC_ABI, ESCROW_FACTORY_ABI, ESCROW_DST_ABI, ERC20_ABI } from '../contract/abis'
 import { wallet } from '../contract/contracts'
 
-// DEV ONLY — Anvil Account 0 (swapper) default private key, public knowledge for
-// every local Anvil instance. The real flow would have the swapper's wallet
-// (e.g. MetaMask) produce this signature; here we sign on their behalf so the
-// cross-chain fill can be exercised end-to-end without a browser.
-const DEV_SWAPPER_PK = '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80'
-
 const SAFETY_DEPOSIT = ethers.utils.parseEther('0.01')
 
 // Anvil forks both chains at this block. Querying below it forwards to Alchemy,
@@ -45,6 +39,16 @@ const CLAIM_SCAN_WINDOW_BLOCKS = 30
 // was deployed (e.g. retried in a later session), so it needs a much wider
 // lookback than the live poll above.
 const RECOVERY_SCAN_WINDOW_BLOCKS = 2000
+
+// Translate an absolute block number from the source chain's clock to the
+// destination chain's. The two chains count blocks independently, so the only
+// thing meaningful across them is "how far in the future" the moment is:
+//   Δ (blocks from now) = srcBlock - srcNow         // measured on the src chain
+//   same moment on dst  = dstNow + Δ                // re-anchored on the dst chain
+// Assumes both chains mine at the same rate (true for paired Anvil forks).
+function rebaseBlockNumber(srcBlock: number, srcNow: number, dstNow: number): number {
+  return dstNow + (srcBlock - srcNow)
+}
 
 interface ChainLegs {
   srcProvider:    ethers.providers.Provider
@@ -147,7 +151,16 @@ export async function crossChainFill(orderHash: string, slotIndex: number): Prom
     merkleRoot:  order.merkleRoot,
     numSlots:    order.numSlots,
   }
-  const swapperSig = await signOrderHash(orderHash, srcFactory)
+  // The swapper authorizes the order off-chain (wallet_signTypedData → backend
+  // PATCH /cc/orders/:hash/swapperSig); the filler just relays that signature.
+  // It works for ANY swapper — the filler never holds a swapper's key.
+  const swapperSig: string = order.swapperSig
+  if (!swapperSig) {
+    throw new Error(
+      `Order ${orderHash.slice(0, 10)}… has no swapperSig — the swapper hasn't signed it yet ` +
+      `(PATCH /cc/orders/:hash/swapperSig). The filler cannot sign on their behalf.`
+    )
+  }
 
   // ── Step 1: fillSlot on the source chain ────────────────────────────────────
   const escrowAddrSrc = await fillSlotOnSrc(
@@ -250,13 +263,14 @@ async function ensureDstEscrowDeployed(
   await transferTx.wait()
 
   // ── Step 4: deploy the escrow clone on the dst chain ────────────────────────
-  // t2Expiry stored in the backend is (T1 - t2Buffer) in src-chain block terms.
-  // Adjust to the dst chain's current block so EscrowDst.initialize() doesn't revert.
+  // t2Expiry from the backend is a SOURCE-chain block number (T2 = T1 - t2Buffer).
+  // EscrowDst.initialize() checks `expiry > block.number` against the DST chain's
+  // own (independent) height, so rebase the absolute src block onto the dst clock.
   const [blockSrc, blockDst] = await Promise.all([
     srcProvider.getBlockNumber(),
     dstProvider.getBlockNumber(),
   ])
-  const t2ExpiryDst = blockDst + (t2ExpirySrc - blockSrc)
+  const t2ExpiryDst = rebaseBlockNumber(t2ExpirySrc, blockSrc, blockDst)
 
   console.log(`[crossChainFill] 4/6 factory.deploy  H=${hashlock.slice(0,10)}… T2=${t2ExpiryDst} (dst chain)`)
   const deployTx = await dstFactory.deploy(hashlock, swapper, outputToken, slotAmount, t2ExpiryDst)
@@ -279,17 +293,6 @@ async function withdrawOnSrc(
   await withdrawTx.wait()
   console.log(`[crossChainFill] ✔ output token + safety deposit withdrawn on src chain  tx=${withdrawTx.hash}`)
   return withdrawTx
-}
-
-// Sign keccak256("\x19\x01" || DOMAIN_SEPARATOR || orderHash) with the dev
-// swapper key — this is what the contract verifies as `swapperSig`.
-async function signOrderHash(orderHash: string, srcFactory: ethers.Contract): Promise<string> {
-  const domainSeparator: string = await srcFactory.DOMAIN_SEPARATOR()
-  const digest = ethers.utils.keccak256(
-    ethers.utils.solidityPack(['string', 'bytes32', 'bytes32'], ['\x19\x01', domainSeparator, orderHash])
-  )
-  const swapperWallet = new ethers.Wallet(DEV_SWAPPER_PK)
-  return ethers.utils.joinSignature(swapperWallet._signingKey().signDigest(digest))
 }
 
 // Recovery: filler timed out before calling withdraw() on the src chain after

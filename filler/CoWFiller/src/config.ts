@@ -16,8 +16,6 @@ export const CHAIN_B_FACTORY    = process.env.CHAIN_B_FACTORY    || ''
 export const CHAIN_B_ESCROW_SRC_FACTORY = process.env.ESCROW_SRC_FACTORY_B  || ''
 export const CHAIN_A_DST_FACTORY        = process.env.CHAIN_A_DST_FACTORY  || ''
 
-export const DEV_MODE = process.env.DEV_MODE === 'true'
-
 // ── CoW filler strategy knobs ─────────────────────────────────────────────────
 export const INVENTORY = {
   // Register for a fill this many blocks before deadline.

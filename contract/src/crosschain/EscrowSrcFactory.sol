@@ -329,14 +329,16 @@ contract EscrowSrcFactory is ReentrancyGuard {
         uint64 slotBit = uint64(1) << slotIndex;
         require(order.filledBitmap & slotBit != 0, "slot not filled");
 
-        uint32 attempt = _attempt[orderHash][slotIndex];
-        address escrow = Clones.predictDeterministicAddress(implementation, _salt(orderHash, slotIndex, attempt));
+        // Slither (shadowing-local): renamed from `attempt` so the local no longer
+        // shadows the public `attempt(bytes32,uint8)` getter.
+        uint32 attemptNum = _attempt[orderHash][slotIndex];
+        address escrow = Clones.predictDeterministicAddress(implementation, _salt(orderHash, slotIndex, attemptNum));
         require(EscrowSrc(escrow).cancelled(), "escrow not cancelled");
 
         order.filledBitmap &= ~slotBit;
-        _attempt[orderHash][slotIndex] = attempt + 1;
+        _attempt[orderHash][slotIndex] = attemptNum + 1;
 
-        emit SlotReopened(orderHash, slotIndex, attempt + 1);
+        emit SlotReopened(orderHash, slotIndex, attemptNum + 1);
     }
 
     // ─── View helpers ─────────────────────────────────────────────────────────

@@ -14,7 +14,7 @@ Bộ kiểm thử dùng ba kiểu bổ trợ nhau, tất cả viết bằng Foun
     \item \textbf{Kiểm thử bất biến (invariant)}: sinh chuỗi thao tác ngẫu nhiên và sau mỗi bước kiểm một tính chất quan trọng không được vi phạm.
 \end{itemize}
 
-Môi trường chạy là mạng giả lập Anvil: một mạng fork từ Ethereum mainnet (có sẵn token và pool Uniswap thật để tính cọc theo giá), và hai mạng riêng cho kịch bản xuyên chuỗi. Một lưu ý quan trọng: filler trong kiểm thử được cấp vốn lớn và không tốn phí gas thật, nên kết quả chứng minh \emph{tính đúng của các luồng và cơ chế}, không phản ánh cạnh tranh kinh tế khi vốn hữu hạn. Khi chạy lại toàn bộ bằng \texttt{forge test}, cả 149 trường hợp kiểm thử trên 24 bộ test đều đạt; kết quả tổng hợp theo thành phần như Bảng~\ref{table:forge}.
+Môi trường chạy là mạng giả lập Anvil: một mạng fork từ Ethereum mainnet (có sẵn token và pool Uniswap thật để tính cọc theo giá), và hai mạng riêng cho kịch bản xuyên chuỗi. Một lưu ý quan trọng: filler trong kiểm thử được cấp vốn lớn và không tốn phí gas thật, nên kết quả chứng minh \emph{tính đúng của các luồng và cơ chế}, không phản ánh cạnh tranh kinh tế khi vốn hữu hạn. Khi chạy lại toàn bộ bằng \texttt{forge test}, cả 154 trường hợp kiểm thử trên 25 bộ test đều đạt; kết quả tổng hợp theo thành phần như Bảng~\ref{table:forge}.
 
 % ─────────────────────────────────────────────────────────────────────────────
 % HÌNH 4.1 — KẾT QUẢ CHẠY FORGE TEST
@@ -23,7 +23,7 @@ Môi trường chạy là mạng giả lập Anvil: một mạng fork từ Ether
 % ─────────────────────────────────────────────────────────────────────────────
 \begin{table}[H]
     \centering
-    \caption{Tổng hợp kết quả \texttt{forge test}: 149/149 trường hợp đạt, nhóm theo thành phần.}
+    \caption{Tổng hợp kết quả \texttt{forge test}: 154/154 trường hợp đạt, nhóm theo thành phần.}
     \label{table:forge}
     \begin{tabular}{|p{8.5cm}|c|}
         \hline
@@ -39,9 +39,9 @@ Môi trường chạy là mạng giả lập Anvil: một mạng fork từ Ether
         \hline
         Hợp đồng xuyên chuỗi (escrow theo slot, ràng buộc thời gian) & 13 \\
         \hline
-        Thư viện tính giá/cọc và oracle TWAP & 43 \\
+        Thư viện tính giá/cọc và oracle TWAP & 48 \\
         \hline
-        \textbf{Tổng cộng} & \textbf{149} \\
+        \textbf{Tổng cộng} & \textbf{154} \\
         \hline
     \end{tabular}
 \end{table}
@@ -186,9 +186,45 @@ Toàn bộ còn được chạy đầu cuối với hai filler khớp hai slot k
 \section{Độ phủ và phạm vi kiểm thử}
 \label{sec:test-coverage}
 
-Tổng cộng 149 trường hợp kiểm thử trên 24 bộ test đều đạt khi chạy lại bằng \texttt{forge test} (Bảng~\ref{table:forge}). Độ phủ dòng lệnh đo bằng \texttt{forge coverage}: \texttt{FallbackExecutor} 100\% (41/41), \texttt{FillAuction} 98\% (112/114), \texttt{PartialFillReactor} 95\% (93/98); các thư viện \texttt{DecayCursorLib} và \texttt{ScaledOutputLib} đạt 100\%. Nhóm hợp đồng xuyên chuỗi có độ phủ thấp hơn (\texttt{EscrowSrcFactory} 97\%, các hợp đồng ký quỹ theo slot 74--83\%), do một số nhánh hoàn tiền và hủy yêu cầu điều kiện môi trường thực để kích hoạt. Danh sách đầy đủ được liệt kê ở Phụ lục~\ref{apdx:testcases}.
+Tổng cộng 154 trường hợp kiểm thử trên 25 bộ test đều đạt khi chạy lại bằng \texttt{forge test} (Bảng~\ref{table:forge}). Độ phủ dòng lệnh đo bằng \texttt{forge coverage}: \texttt{FallbackExecutor} 100\% (41/41), \texttt{FillAuction} 98\% (112/114), \texttt{PartialFillReactor} 95\% (93/98); các thư viện \texttt{DecayCursorLib} và \texttt{ScaledOutputLib} đạt 100\%. Nhóm hợp đồng xuyên chuỗi có độ phủ thấp hơn (\texttt{EscrowSrcFactory} 97\%, các hợp đồng ký quỹ theo slot 74--83\%), do một số nhánh hoàn tiền và hủy yêu cầu điều kiện môi trường thực để kích hoạt. Danh sách đầy đủ được liệt kê ở Phụ lục~\ref{apdx:testcases}.
 
 Bộ kiểm thử không bao phủ một số điều kiện thực tế. Anvil fork không có mempool thật và filler được cấp vốn không giới hạn, nên kết quả mới chứng minh các cơ chế đúng, chưa phản ánh cạnh tranh kinh tế khi nhiều filler vốn hữu hạn cùng tham gia trên mainnet. Một số rủi ro bảo mật như thao túng TWAP hay grief-lock xuyên chuỗi cũng cần vốn thật và môi trường production mới khai thác được --- đây là những thứ nằm ngoài tầm của local fork và được bàn kỹ hơn ở mục~\ref{sec:audit}. Backend và frontend được chạy thử thủ công để minh họa luồng; tối ưu gas không phải trọng tâm nên không được đo hệ thống.
+
+\section{Phân tích tĩnh và đánh giá chất lượng kiểm thử}
+\label{sec:static-mutation}
+
+Ngoài kiểm thử động, đồ án áp dụng thêm ba phương pháp: phân tích tĩnh, mutation testing, và thí nghiệm định lượng oracle TWAP.
+
+\subsection{Phân tích tĩnh với Slither}
+
+Slither\footnote{\url{https://github.com/crytic/slither} --- công cụ phân tích tĩnh Solidity của Trail of Bits.} chạy 101 detector trên 34 hợp đồng trong \texttt{src/}, ghi nhận 32 cảnh báo. Bốn mục đã sửa: thiếu sự kiện emit, thiếu kiểm tra địa chỉ 0, biến cục bộ che tên getter. Hai mươi tám mục còn lại là lựa chọn thiết kế đã có phòng vệ hoặc cảnh báo về phong cách đặt tên không phù hợp với codebase. Hai cảnh báo mức Cao không thực chất: ``reentrancy'' đã chặn bằng \texttt{nonReentrant}, và ``biến chưa khởi tạo'' là cảnh báo sai của công cụ --- biến được ghi thông qua con trỏ \texttt{storage} mà Slither không lần theo được. Không phát hiện lỗ hổng nào có thể khai thác.
+
+\subsection{Mutation testing}
+
+Vertigo-rs chèn lỗi đơn vào mã nguồn (đổi toán tử, xóa \texttt{require}) rồi chạy lại bộ test; mutant nào qua được bộ test là điểm bộ test chưa bao phủ. Thực hiện trên bốn thư viện thuần (\texttt{DynamicStakeLib}, \texttt{DecayCursorLib}, \texttt{RemainingLib}, \texttt{ScaledOutputLib}): 20 mutant hợp lệ sau khi loại các trường hợp không biên dịch được; ban đầu bộ test phát hiện 8/20 (40\%). Mười hai mutant còn lại đều tập trung vào các hàm phân loại giá trị thành mức (nhỏ/vừa/lớn), cụ thể là đổi dấu so sánh ngay tại giá trị ranh giới giữa hai mức --- những thay đổi này không ảnh hưởng đến phép tính tài sản hay tiền cọc. Bổ sung 4 kiểm thử kiểm trực tiếp các giá trị ranh giới đó, kết quả cuối 20/20 (100\%).
+
+\subsection{Thí nghiệm định lượng oracle TWAP}
+
+Thí nghiệm đo mức ảnh hưởng của phát hiện~3.5, không chứng minh đã khắc phục. Trên fork mainnet, kẻ tấn công bơm USDC vào pool \texttt{(USDC, WETH, 0.05\%)} và giữ giá lệch 120 giây; đo mức sụt cọc yêu cầu với ba độ dài cửa sổ và hai quy mô tấn công (Bảng~\ref{tab:twap}).
+
+\begin{table}[H]
+\centering
+\caption{Mức sụt cọc yêu cầu dưới tấn công thao túng pool, theo độ dài cửa sổ TWAP (lệnh 3\,000~USDC, giữ giá 120 giây).}
+\label{tab:twap}
+\begin{tabular}{|c|c|c|}
+\hline
+\textbf{Cửa sổ TWAP} & \textbf{Tấn công 30M USDC} & \textbf{Tấn công 300M USDC} \\
+\hline
+60 giây   & $-21.1\%$ & $-100.0\%$ \\
+\hline
+600 giây  & $-4.6\%$  & $-95.8\%$ \\
+\hline
+1\,800 giây & $-1.5\%$  & $-81.1\%$ \\
+\hline
+\end{tabular}
+\end{table}
+
+Cửa sổ dài giảm mức sụt với tấn công vừa (60 giây: $-21\%$, 1\,800 giây: $-1.5\%$), nhưng với tấn công quy mô lớn thì mọi cửa sổ đều sụt trên 80\%. Phòng vệ hiện tại là sàn tuyệt đối \texttt{minCollateral}; nới cửa sổ và thêm oracle độc lập là hướng phát triển theo phát hiện~3.1 và~3.5.
 
 \section{Rà soát bảo mật bởi Trufy}
 \label{sec:audit}
@@ -262,6 +298,6 @@ Năm phát hiện còn lại không thể tái hiện đầy đủ trên Anvil f
 \section{Kết luận chương}
 \label{sec:test-concl}
 
-Bộ kiểm thử xác nhận các tính chất an toàn cốt lõi hoạt động đúng trên môi trường giả lập: lệnh không bị kẹt, người dùng không bị trả thiếu, cơ chế cọc không bị khai thác, MEV bị giới hạn trong ngưỡng người dùng chấp nhận, và giao dịch xuyên chuỗi an toàn trước griefing. Audit từ Trufy ghi nhận 8 phát hiện: ba đã sửa, năm còn lại cần điều kiện production để kiểm chứng đầy đủ. Chi tiết ở Phụ lục~\ref{apdx:testcases} và~\ref{apdx:trufy}.
+Bộ kiểm thử xác nhận các tính chất an toàn cốt lõi hoạt động đúng trên môi trường giả lập: lệnh không bị kẹt, người dùng không bị trả thiếu, cơ chế cọc không bị khai thác, MEV bị giới hạn trong ngưỡng người dùng chấp nhận, và giao dịch xuyên chuỗi an toàn trước griefing. Phân tích tĩnh Slither không phát hiện lỗ hổng khai thác được, và mutation testing trên các thư viện lõi đạt điểm hợp lệ 100\% sau khi bổ sung kiểm thử biên (mục~\ref{sec:static-mutation}). Audit từ Trufy ghi nhận 8 phát hiện: ba đã sửa, năm còn lại cần điều kiện production để kiểm chứng đầy đủ. Chi tiết ở Phụ lục~\ref{apdx:testcases} và~\ref{apdx:trufy}.
 
 \end{document}

@@ -140,6 +140,22 @@ async function getContracts() {
   }
 }
 
+// Estimate the order's current Dutch-auction price, mirroring the on-chain
+// DecayCursorLib.getCurrentPrice: price decays by `decayPerBlock` wei each block
+// since the cursor's last reset. The contract resets that cursor to the current
+// block on EVERY partial fill, so the reference point is the LAST fill's block.
+// For an as-yet-unfilled order we fall back to `currentBlock` (→ ~startPrice);
+// that can only over-estimate the price, so the filler over-funds, never under.
+function estimateAuctionPrice(order: OrderInfo, currentBlock: number): bigint {
+  const lastResetBlock = order.fills.length > 0
+    ? (order.fills[order.fills.length - 1].blockNumber ?? currentBlock)
+    : currentBlock
+  const blocksSinceReset = BigInt(Math.max(0, currentBlock - lastResetBlock))
+  const startPrice = BigInt(order.startPrice)
+  const decayed    = blocksSinceReset * BigInt(order.decayPerBlock)
+  return startPrice > decayed ? startPrice - decayed : 1n
+}
+
 // Register (if needed) + executePartialChunk for `fillBps` (in 1/100 of a
 // percent of the order's *remaining* input) on the given backend order hash.
 // Returns the settlement tx hash. Throws with an actionable message on revert.
@@ -164,13 +180,7 @@ export async function fill(orderBackendHash: string, fillBps: number): Promise<s
   let fillAmount   = requested < minFill ? minFill : requested
   if (fillAmount > remaining) fillAmount = remaining
 
-  const firstFillBlock = order.fills.length > 0
-    ? (order.fills[order.fills.length - 1].blockNumber ?? currentBlock)
-    : currentBlock
-  const blocksPassed = BigInt(Math.max(0, currentBlock - firstFillBlock))
-  const startPrice   = BigInt(order.startPrice)
-  const decay        = blocksPassed * BigInt(order.decayPerBlock)
-  const currentPrice = startPrice > decay ? startPrice - decay : 1n
+  const currentPrice = estimateAuctionPrice(order, currentBlock)
 
   const outputAmount = (fillAmount * currentPrice) / 10n**18n
   const withBuffer   = outputAmount + outputAmount / 10n

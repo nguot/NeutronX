@@ -3,7 +3,6 @@ import { provider, wallet, fillAuction } from './contract/contracts'
 import { OrderListener } from './listener/orderListener'
 import { Executor } from './execution/executor'
 import { startQuoteServer } from './quote/quoteServer'
-import { DEV_MODE } from './config'
 import { seedInventory } from './funding/seed'
 import type { OrderInfo } from './types'
 
@@ -19,11 +18,9 @@ provider.on('block', async (blockNumber: number) => {
 })
 
 async function bootstrap() {
-  // DEV_MODE: refill the wallet with inventory on every (re)start so it can
-  // fill any order. Non-fatal if a token can't be sourced.
-  if (DEV_MODE) {
-    try { await seedInventory() } catch (e) { console.error('[Seed] failed:', e) }
-  }
+  // Refill the wallet with inventory on every (re)start so it can fill any
+  // order. Non-fatal if a token can't be sourced.
+  try { await seedInventory() } catch (e) { console.error('[Seed] failed:', e) }
 
   listener.start()
   startQuoteServer()

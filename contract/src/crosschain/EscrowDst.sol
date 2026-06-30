@@ -82,6 +82,9 @@ contract EscrowDst {
     ) external {
         require(!_initialized,                                        "already init");
         require(_recipient != address(0),                            "zero recipient");
+        // Slither (missing-zero-check): parity with EscrowSrc.initialize. The factory
+        // always passes msg.sender as _filler (never zero), so this is defence-in-depth.
+        require(_filler    != address(0),                            "zero filler");
         require(_amount    >  0,                                      "zero amount");
         require(_expiry    >  block.number,                          "expiry in past");
         require(_hashlock  != bytes32(0),                            "zero hashlock");

@@ -1,4 +1,4 @@
-import { DEV_MODE, INVENTORY, REFERENCE_PRICES, SUPPORTED_TOKENS } from '../config'
+import { INVENTORY, SUPPORTED_TOKENS } from '../config'
 import { erc20, wallet } from '../contract/contracts'
 import type { OrderInfo, FillDecision } from '../types'
 
@@ -37,34 +37,12 @@ export async function decide(order: OrderInfo, currentBlock: number): Promise<Fi
     `  auctionPrice=${auctionPriceHuman.toFixed(4)}  blocksLeft=${blocksLeft}`
   )
 
-  // ── DEV_MODE: skip spread checks, but still size by real capacity ────────
-  // so a large order no single filler can afford is filled across fillers in
-  // partial chunks (instead of blindly attempting 100% and reverting on payout).
-  if (DEV_MODE) {
-    const inputAmount   = BigInt(order.inputAmount)
-    const outputBalance = (await erc20(order.outputToken).balanceOf(wallet.address)).toBigInt()
-    const usable        = (outputBalance * BigInt(INVENTORY.MAX_INVENTORY_USE_BPS)) / 10_000n
-    const capacity      = (usable * 10n ** 18n) / currentPrice
-    const fillAmount    = capacity < inputAmount ? capacity : inputAmount
-    if (fillAmount === 0n) return no('zero inventory of outputToken (dev)')
-
-    // Honor the order's minimum chunk even in dev mode: a filler whose capacity
-    // can't cover one minFill would revert on-chain, so it bows out here. Without
-    // this gate coverage is flat across minFillBps and the parameter suggester
-    // degenerates (snaps between 100% and 1%).
-    const minFill = (inputAmount * BigInt(order.minFillBps)) / 10_000n
-    if (fillAmount < minFill) {
-      return no(`capacity ${fillAmount} < minFill ${minFill} (dev)`)
-    }
-
-    const pct = (Number(fillAmount) / Number(inputAmount) * 100).toFixed(1)
-    console.log(`${tag} ✔ FILL [DEV]  fill=${pct}% (capacity-capped)  price=${auctionPriceHuman.toFixed(4)}`)
-    return { shouldFill: true, fillAmount, currentPrice, reason: 'dev mode (capacity-capped)' }
-  }
-
   // ── Market spread check ───────────────────────────────────────────────────
-  const refPrice = REFERENCE_PRICES[order.inputToken]?.[order.outputToken]
-  if (!refPrice) return no(`no reference price for ${sym(order.inputToken)}→${sym(order.outputToken)}`)
+  // Fake market reference (dev): no real price feed, so treat "market" as a small
+  // premium above the order's own start price. The frontend sets startPrice from
+  // the live market estimate, so this is a per-order proxy that works for ANY pair
+  // with no hardcoded price table — the filler always perceives a spread and fills.
+  const refPrice = (BigInt(order.startPrice) * BigInt(10_000 + INVENTORY.FAKE_MARKET_PREMIUM_BPS)) / 10_000n
 
   const refPriceHuman = Number(refPrice) / 10 ** outMeta.decimals
   if (currentPrice >= refPrice) {

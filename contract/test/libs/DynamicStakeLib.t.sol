@@ -81,4 +81,44 @@ contract DynamicStakeLibTest is Test {
         uint256 deadline = block.number; // đúng block hiện tại
         assertEq(DynamicStakeLib.getTimeBucket(deadline), 3);
     }
+
+    // ── Boundary tests (added 2026-06-30 to kill mutation-testing survivors) ──
+    // Mutation testing left boundary mutants alive (`<`→`<=`, `==`→`!=`, `<`→`>=`)
+    // on the bucket-classification helpers: the suite probed representative values
+    // but never the EXACT tier edges or the per-bucket constants. These pin every
+    // edge so an off-by-one shift or constant change now fails a test.
+
+    // _getTimeMultiplier — exact per-bucket constants. Kills `tBucket == n`→`!= n`.
+    function test_timeMultiplier_exactValues() public pure {
+        assertEq(DynamicStakeLib._getTimeMultiplier(0), 10000);
+        assertEq(DynamicStakeLib._getTimeMultiplier(1), 15000);
+        assertEq(DynamicStakeLib._getTimeMultiplier(2), 30000);
+        assertEq(DynamicStakeLib._getTimeMultiplier(3), 50000);
+    }
+
+    // getFillRatioBucket — exact pct edges. Kills `pct < 2/10/30`→`<= 2/10/30`.
+    function test_fillRatio_exactBoundaries() public pure {
+        assertEq(DynamicStakeLib.getFillRatioBucket(2, 100), 1);  // pct==2 is NOT bucket 0
+        assertEq(DynamicStakeLib.getFillRatioBucket(10, 100), 2); // pct==10 is NOT bucket 1
+        assertEq(DynamicStakeLib.getFillRatioBucket(30, 100), 3); // pct==30 is NOT bucket 2
+        assertEq(DynamicStakeLib.getFillRatioBucket(70, 100), 4); // pct==70 is NOT bucket 3
+    }
+
+    // getOrderSizeBucketETH — exact ETH-notional edges (this ETH variant was only
+    // exercised indirectly before; the legacy USDC getOrderSizeBucket has its own
+    // tests above). Kills `notionalEth < 1/10/100 ether`→`<=` and →`>=`.
+    function test_orderSizeETH_exactBoundaries() public pure {
+        assertEq(DynamicStakeLib.getOrderSizeBucketETH(0),         0);
+        assertEq(DynamicStakeLib.getOrderSizeBucketETH(1 ether),   1); // ==1 ether → bucket 1
+        assertEq(DynamicStakeLib.getOrderSizeBucketETH(10 ether),  2); // ==10 ether → bucket 2
+        assertEq(DynamicStakeLib.getOrderSizeBucketETH(100 ether), 3); // ==100 ether → bucket 3
+    }
+
+    // getOrderSizeBucketETH — representative mid-tier values (direct ETH-path coverage).
+    function test_orderSizeETH_midTiers() public pure {
+        assertEq(DynamicStakeLib.getOrderSizeBucketETH(0.5 ether), 0);
+        assertEq(DynamicStakeLib.getOrderSizeBucketETH(5 ether),   1);
+        assertEq(DynamicStakeLib.getOrderSizeBucketETH(50 ether),  2);
+        assertEq(DynamicStakeLib.getOrderSizeBucketETH(500 ether), 3);
+    }
 }

@@ -16,9 +16,6 @@ export const CHAIN_B_FACTORY    = process.env.CHAIN_B_FACTORY    || ''
 export const CHAIN_B_ESCROW_SRC_FACTORY = process.env.ESCROW_SRC_FACTORY_B  || ''
 export const CHAIN_A_DST_FACTORY        = process.env.CHAIN_A_DST_FACTORY  || ''
 
-// DEV_MODE=true: skip spread/inventory checks, fund wallet via whale impersonation before each fill.
-export const DEV_MODE = process.env.DEV_MODE === 'true'
-
 // ── Inventory strategy knobs ──────────────────────────────────────────────────
 export const INVENTORY = {
   // Register for a fill this many blocks before deadline.
@@ -27,6 +24,11 @@ export const INVENTORY = {
   // Minimum spread (bps) between market price and auction price required to fill.
   // 10 bps = 0.1%. Covers gas + stake opportunity cost for local Anvil testing.
   MIN_SPREAD_BPS: 10,
+
+  // Dev fake-market premium (bps). With no real price feed, the filler treats
+  // "market" as this many bps above each order's own start price — so it always
+  // perceives a spread and can quote/fill ANY pair with no hardcoded price table.
+  FAKE_MARKET_PREMIUM_BPS: 100,
 
   // Max fraction of outputToken inventory to risk on a single fill (in bps).
   // 5000 = 50%: never put more than half your USDC into one order.
@@ -51,28 +53,4 @@ export const SUPPORTED_TOKENS: Record<string, { symbol: string; decimals: number
   [WBTC]: { symbol: 'WBTC', decimals: 8  },
   [LINK]: { symbol: 'LINK', decimals: 18 },
   [UNI]:  { symbol: 'UNI',  decimals: 18 },
-}
-
-// ── Reference market prices ───────────────────────────────────────────────────
-// Format: raw outputToken per 1 raw inputToken, scaled the same way as order.startPrice.
-// Formula: humanPrice * 10^outDecimals
-// e.g. WETH→USDC at $2500: 2500 * 10^6 = 2_500_000_000n
-//
-// The filler fills when auctionPrice < refPrice (swapper accepts less than market → spread for filler).
-// For Anvil testing: set refPrice BELOW the order's startPrice so fills are triggered.
-export const REFERENCE_PRICES: Record<string, Record<string, bigint>> = {
-  [WETH]: {
-    [USDC]: 2_500n * 10n**6n,
-    [USDT]: 2_500n * 10n**6n,
-    [DAI]:  2_500n * 10n**18n,
-  },
-  [USDC]: {
-    [WETH]: 10n**18n / (2_500n * 10n**6n),
-  },
-  [USDT]: {
-    [WETH]: 10n**18n / (2_500n * 10n**6n),
-  },
-  [DAI]: {
-    [WETH]: 10n**18n / (2_500n * 10n**18n),
-  },
 }

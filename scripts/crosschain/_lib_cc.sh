@@ -4,7 +4,6 @@
 #  two RPCs means the single-RPC helpers like check_anvil/mine don't apply here)
 
 PROJECT_ROOT="/mnt/c/Users/vutie/Documents/DATN/dex-aggregator"
-LOG_DIR="$PROJECT_ROOT/tests/crosschain/logs"
 
 # ── colours ──────────────────────────────────────────────────────────────────
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'

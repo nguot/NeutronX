@@ -79,9 +79,25 @@ async function renderBalances(): Promise<void> {
   console.log('')
 }
 
+// ── strategy verdict (runs decide(): profit/loss the filler sees) ──────────────
+async function renderStrategy(order: OrderInfo, block: number): Promise<void> {
+  const d  = await decide(order, block)
+  const ex = (d.extras ?? {}) as Record<string, unknown>
+  const verdict = d.shouldFill ? c.green('✓ profitable') : c.yellow('✗ no fill')
+  console.log(`  ${c.bold('strategy')}  ${verdict}  ${c.dim(d.reason ?? '')}`)
+  if (ex.estimatedProfit !== undefined) console.log(`    est. profit   ${c.green('+' + String(ex.estimatedProfit))} ${sym(order.outputToken)}`)
+  if (ex.spreadBps       !== undefined) console.log(`    spread        ${c.bold(String(ex.spreadBps))} bps`)
+  if (ex.matchedLevels   !== undefined) console.log(`    matched lvls  ${String(ex.matchedLevels)}`)
+  if (ex.inventoryHuman  !== undefined) console.log(`    inventory     ${String(ex.inventoryHuman)} ${sym(order.outputToken)}`)
+}
+
 // ── sim (dry-run preview of a fill, no tx) ─────────────────────────────────────
 async function renderSim(hash: string, pct: number): Promise<void> {
   const [detail, block] = await Promise.all([fetchOrder(hash), currentBlock()])
+  console.log(banner(FILLER_NAME, `sim ${shortHash(hash)} @ ${pct}%`) + '\n')
+  await renderStrategy(detail, block)
+  console.log('')
+
   const v = orderView(detail, block)
   if (v.remaining === 0n) { console.log(c.red('  order already fully filled')); return }
   if (v.price === 0n)     { console.log(c.red('  price decayed to zero')); return }
@@ -98,17 +114,16 @@ async function renderSim(hash: string, pct: number): Promise<void> {
   const requiredOut = inputAmt > 0n ? (actualFill * minOutput) / inputAmt : 0n
 
   const inS = sym(detail.inputToken), outS = sym(detail.outputToken)
-  console.log(banner(FILLER_NAME, `sim ${shortHash(hash)} @ ${pct}%`))
   if (outputNeeded < requiredOut) {
     console.log(c.red(
-      `\n  ✗ would REVERT — provides ${human(outputNeeded, detail.outputToken)} ${outS}` +
+      `  ✗ would REVERT — provides ${human(outputNeeded, detail.outputToken)} ${outS}` +
       ` < swapper minimum ${human(requiredOut, detail.outputToken)} ${outS} (auction price below floor)\n`
     ))
     return
   }
   const filledPctAfter = inputAmt > 0n ? Number(((v.filled + actualFill) * 100n) / inputAmt) : 0
   console.log(
-    `\n  ${c.green('✓ fillable')}\n` +
+    `  ${c.green('✓ fillable')} @ ${pct}% of remaining\n` +
     `    receive   ${c.bold(human(actualFill, detail.inputToken))} ${inS}\n` +
     `    provide   ${c.bold(human(outputNeeded, detail.outputToken))} ${outS}\n` +
     `    price     ${priceHuman(v.price, detail.inputToken, detail.outputToken)} ${outS}/${inS}\n` +
@@ -118,6 +133,10 @@ async function renderSim(hash: string, pct: number): Promise<void> {
 
 // ── fill (executes the partial fill) ───────────────────────────────────────────
 async function runFill(hash: string, pct: number): Promise<void> {
+  // Show the strategy's profit/loss read before committing the fill.
+  const order = await fetchOrder(hash).catch(() => null)
+  if (order) { await renderStrategy(order, await currentBlock().catch(() => 0)); console.log('') }
+
   const spin = ora(`fill ${shortHash(hash)} @ ${pct}% — register → approve → execute`).start()
   try {
     const tx = await fill(hash, pct * 100)

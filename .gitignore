@@ -3,6 +3,7 @@ node_modules/
 dist/
 build/
 .env
+.env.*
 *.log
 
 # Foundry / Forge
@@ -18,3 +19,12 @@ frontend/out/
 # OS
 .DS_Store
 Thumbs.db
+
+# Thesis / local tooling
+baocao/
+.claude/
+graphify-out/
+
+# E2E test runtime artifacts
+scripts/crosschain/logs/
+scripts/race/logs/
