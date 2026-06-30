@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
-# _lib_cc.sh — shared functions sourced by crosschain test scripts
-# (local copy of tests/demo/_lib.sh, trimmed to what crosschain scripts use —
-#  two RPCs means the single-RPC helpers like check_anvil/mine don't apply here)
+# _lib_cc.sh — shared helpers sourced by scripts/crosschain/ scripts
+# (two RPCs — single-RPC helpers like check_anvil/mine don't apply here)
 
 PROJECT_ROOT="/mnt/c/Users/vutie/Documents/DATN/dex-aggregator"
 

@@ -7,7 +7,7 @@
 # Port 8545 and chainId 31337 distinguish it from Chain B (port 8546, chainId 31338).
 #
 # Usage (WSL, separate terminal):
-#   bash tests/crosschain/chaina_anvil.sh
+#   bash chaina_anvil.sh
 
 ALCHEMY_URL="https://eth-mainnet.g.alchemy.com/v2/NqceSkD9a9GU5a-EbT9wp"
 FORK_BLOCK="20500000"   # same block as Chain B so token balances match
@@ -21,8 +21,8 @@ echo "║  Fork block : $FORK_BLOCK (~Sep 2024)                ║"
 echo "╚══════════════════════════════════════════════════════════╝"
 echo ""
 echo "Chain A is the source chain where the swapper locks WETH."
-echo "EscrowSrcFactory is deployed here. Run this instead of"
-echo "tests/demo/v1_neutral_anvil.sh for crosschain testing — no"
+echo "EscrowSrcFactory is deployed here. Run this instead of the single-chain anvil"
+echo "for crosschain testing — no"
 echo "fixed --block-time, since the E2E script drives blocks via cast send."
 echo ""
 echo "Leave this terminal open while running setup_cc.sh and run_cc.sh."

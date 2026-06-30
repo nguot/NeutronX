@@ -14,7 +14,7 @@
 #   bash setup.sh stop     # stop both Anvil forks
 #
 # After this: start backend (cd backend && npm start), then the fillers and frontend.
-# For cross-chain (EscrowSrc/EscrowDst), run tests/crosschain/setup_cc.sh once the
+# For cross-chain (EscrowSrc/EscrowDst), run scripts/crosschain/setup_cc.sh once the
 # backend is up — see ACCOUNTS.md.
 
 set -euo pipefail
@@ -153,5 +153,5 @@ printf "    cd backend && npm start\n"
 printf "    cd filler/WhaleFiller && npm start\n"
 printf "    cd filler/CoWFiller && npm start\n"
 printf "    cd frontend && npm run dev\n"
-printf "\n  Cross-chain (optional): bash tests/crosschain/setup_cc.sh (after backend is up)\n"
+printf "\n  Cross-chain (optional): bash scripts/crosschain/setup_cc.sh (after backend is up)\n"
 printf "  Stop chains: bash setup.sh stop\n"

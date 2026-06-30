@@ -12,7 +12,7 @@
 # port/chainId, no --block-time, and add a confirmations:0 entry to chains.json.
 #
 # Usage (WSL, separate terminal):
-#   bash tests/crosschain/chainb_anvil.sh
+#   bash chainb_anvil.sh
 
 ALCHEMY_URL="https://eth-mainnet.g.alchemy.com/v2/NqceSkD9a9GU5a-EbT9wp"
 FORK_BLOCK="20500000"   # same block as Chain A so token balances match

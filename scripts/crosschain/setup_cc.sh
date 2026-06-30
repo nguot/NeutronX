@@ -15,8 +15,8 @@
 #   So we do NOT set a USDC approval for the filler here.
 #
 # Prerequisites (each in a separate terminal):
-#   Terminal 1: bash tests/crosschain/chaina_anvil.sh
-#   Terminal 2: bash tests/crosschain/chainb_anvil.sh
+#   Terminal 1: bash chaina_anvil.sh
+#   Terminal 2: bash chainb_anvil.sh
 #   Terminal 3: cd backend && npm start
 #
 # After setup finishes: RESTART backend so its watchers pick up CHAIN_B_FACTORY
@@ -118,12 +118,12 @@ log STEP "NeutronX Cross-Chain Setup (Escrow clone approach)"
 log STEP "Step 1 — Checking services"
 
 if ! cast block-number --rpc-url "$RPC_A" &>/dev/null; then
-  log ERROR "Chain A not running at $RPC_A — start: bash tests/crosschain/chaina_anvil.sh"; exit 1
+  log ERROR "Chain A not running at $RPC_A — start: bash chaina_anvil.sh"; exit 1
 fi
 log OK "Chain A — block $(cast block-number --rpc-url $RPC_A)"
 
 if ! cast block-number --rpc-url "$RPC_B" &>/dev/null; then
-  log ERROR "Chain B not running at $RPC_B — start: bash tests/crosschain/chainb_anvil.sh"; exit 1
+  log ERROR "Chain B not running at $RPC_B — start: bash chainb_anvil.sh"; exit 1
 fi
 log OK "Chain B — block $(cast block-number --rpc-url $RPC_B)"
 
@@ -234,7 +234,7 @@ for FILLER_DIR in "filler/WhaleFiller" "filler/CoWFiller"; do
     update_env_var "$ENV_FILE" "CHAIN_A_DST_FACTORY"  "$CHAIN_A_DST_FACTORY"
     log OK "$FILLER_DIR/.env updated with CC vars"
   else
-    log WARN "$ENV_FILE not found — skipping (run tests/demo/setup.sh first)"
+    log WARN "$ENV_FILE not found — skipping (run setup.sh first)"
   fi
 done
 
@@ -339,6 +339,6 @@ log WARN "  ⚠  RESTART backend — needs CHAIN_B_FACTORY/CHAIN_B_RPC (A→B wa
 log WARN "     CHAIN_A_DST_FACTORY/CHAIN_A_RPC (B→A watcher):"
 log RAW "       Ctrl-C in backend terminal, then: cd backend && npm start"
 log RAW ""
-log RAW "  Then run: bash tests/crosschain/run_cc.sh          (A→B)"
-log RAW "        or: bash tests/crosschain/run_cc_reverse.sh  (B→A)"
+log RAW "  Then run: bash scripts/crosschain/run_cc.sh          (A→B)"
+log RAW "        or: bash scripts/crosschain/run_cc_reverse.sh  (B→A)"
 log RAW "  Log: $LOG_FILE"

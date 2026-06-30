@@ -18,8 +18,8 @@
 #   3. factory.deploy(H_i, swapper, USDC, ...)   (deploys clone, verifies balance)
 #
 # Prerequisites:
-#   Chain A running:  bash tests/crosschain/chaina_anvil.sh
-#   Chain B running:  bash tests/crosschain/chainb_anvil.sh
+#   Chain A running:  bash chaina_anvil.sh
+#   Chain B running:  bash chainb_anvil.sh
 #   Backend running:  cd backend && npm start  (restarted after setup_cc.sh)
 #   setup_cc.sh done: logs/.cc_addresses exists
 
@@ -61,7 +61,7 @@ fi
 log OK "Chain A — block $(cast block-number --rpc-url $RPC_A)"
 
 if ! cast block-number --rpc-url "$RPC_B" &>/dev/null; then
-  log ERROR "Chain B not running at $RPC_B — start: bash tests/crosschain/chainb_anvil.sh"; exit 1
+  log ERROR "Chain B not running at $RPC_B — start: bash chainb_anvil.sh"; exit 1
 fi
 log OK "Chain B — block $(cast block-number --rpc-url $RPC_B)"
 
