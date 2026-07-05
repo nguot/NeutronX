@@ -1,4 +1,5 @@
 import { AlphaRouter, SwapType } from '@uniswap/smart-order-router'
+import { Protocol } from '@uniswap/router-sdk'
 import { TradeType, CurrencyAmount, Token, Percent } from '@uniswap/sdk-core'
 import { ethers } from 'ethers'
 
@@ -35,7 +36,7 @@ async function quoteFromAlphaRouter(
     recipient:         DUMMY_RECIPIENT,
     slippageTolerance: new Percent(50, 10000),
     deadline:          Math.floor(Date.now() / 1000) + 300,
-  })
+  }, { protocols: [Protocol.V2, Protocol.V3] })
   if (!route) throw new Error('No route found')
 
   const estOut   = BigInt(route.trade.outputAmount.quotient.toString())

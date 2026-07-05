@@ -4,6 +4,7 @@ pragma solidity ^0.8.20;
 import "forge-std/Test.sol";
 import "../../src/PartialFillReactor.sol";
 import "../../src/FillAuction.sol";
+import { DynamicStakeLib } from "../../src/libs/DynamicStakeLib.sol";
 import "../mocks/MockERC20.sol";
 import "../mocks/MockPermit2.sol";
 
@@ -40,12 +41,63 @@ abstract contract AdversarialBase is Test {
         auction = new FillAuction(treasury, address(0), address(0), 0, true); // oracle-disabled (notional == fill)
         reactor = new PartialFillReactor(address(permit2), address(auction), cosigner);
         auction.setReactor(address(reactor));
+        // B1: this contract deployed `auction` (holds DEFAULT_ADMIN_ROLE) but stake-param
+        // setters now require PARAM_ADMIN_ROLE — grant it so existing direct-setter-call
+        // tests (CoreGuards) keep working without standing up a separate admin address.
+        auction.grantRole(auction.PARAM_ADMIN_ROLE(), address(this));
         reactor.setFallbackExecutor(fallbackExec);
 
         weth = new MockERC20("WETH", "WETH");
         usdc = new MockERC20("USDC", "USDC");
 
         vm.roll(100);
+    }
+
+    /// B2/B3: a shape-valid StakeConfig matching FillAuction's own constructor
+    /// defaults (4 size buckets x 5 fill-ratio buckets), for tests that need to
+    /// clone-and-mutate one field to probe a single `_validate` invariant via
+    /// `setStakeConfig`.
+    function _defaultStakeConfig() internal pure returns (DynamicStakeLib.StakeConfig memory c) {
+        c.sizeThresholds = new uint256[](3);
+        c.sizeThresholds[0] = 1 ether;
+        c.sizeThresholds[1] = 10 ether;
+        c.sizeThresholds[2] = 100 ether;
+
+        c.collateralRate = new uint32[](4);
+        c.collateralRate[0] = 2000;
+        c.collateralRate[1] = 5000;
+        c.collateralRate[2] = 10000;
+        c.collateralRate[3] = 30000;
+
+        c.timeThresholds = new uint256[](3);
+        c.timeThresholds[0] = 50;
+        c.timeThresholds[1] = 20;
+        c.timeThresholds[2] = 5;
+
+        c.timeMult = new uint32[](4);
+        c.timeMult[0] = 10000;
+        c.timeMult[1] = 15000;
+        c.timeMult[2] = 30000;
+        c.timeMult[3] = 50000;
+
+        c.ratioThresholds = new uint256[](4);
+        c.ratioThresholds[0] = 200;
+        c.ratioThresholds[1] = 1000;
+        c.ratioThresholds[2] = 3000;
+        c.ratioThresholds[3] = 7000;
+
+        uint32[5][4] memory t = [
+            [uint32(500), 1000, 2500, 5000, 10000],
+            [uint32(333), 1000, 2000, 5000, 10000],
+            [uint32(100),  333, 1000, 3333, 10000],
+            [uint32(100),  200,  667, 2000, 10000]
+        ];
+        c.refundTable = new uint32[](20);
+        for (uint256 s = 0; s < 4; s++) {
+            for (uint256 r = 0; r < 5; r++) {
+                c.refundTable[s * 5 + r] = t[s][r];
+            }
+        }
     }
 
     // ── order construction ──

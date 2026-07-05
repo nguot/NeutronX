@@ -1,812 +1,163 @@
-Mutation testing report:
-Number of mutations:    75
-Killed:                 8 / 75
-
-Mutations:
-Mutation:
-    File: /mnt/c/Users/vutie/Documents/DATN/dex-aggregator/contract/src/libs/DecayCursorLib.sol
-    Line nr: 27
-    Result: Error
-    Original line:
-                 if (decayed >= uint256(cursor.currentStartPrice)) return 0;
-
-    Mutated line:
-                 if (decayed >= uint256(curs < urrentStartPrice)) return 0;
-
-
-Mutation:
-    File: /mnt/c/Users/vutie/Documents/DATN/dex-aggregator/contract/src/libs/DecayCursorLib.sol
-    Line nr: 25
-    Result: Error
-    Original line:
-                 uint256 blocksPassed = block.number - uint256(cursor.lastResetBlock);
-
-    Mutated line:
-                 uint256 blocksPassed = block.number - uint256(curso + astResetBlock);
-
-
-Mutation:
-    File: /mnt/c/Users/vutie/Documents/DATN/dex-aggregator/contract/src/libs/DecayCursorLib.sol
-    Line nr: 26
-    Result: Error
-    Original line:
-                 uint256 decayed      = blocksPassed * uint256(cursor.decayPerBlock);
-
-    Mutated line:
-                 uint256 decayed      = blocksPassed * uint256(curso / ecayPerBlock);
-
-
-Mutation:
-    File: /mnt/c/Users/vutie/Documents/DATN/dex-aggregator/contract/src/libs/DecayCursorLib.sol
-    Line nr: 29
-    Result: Error
-    Original line:
-                 return cursor.currentStartPrice - uint128(decayed);
-
-    Mutated line:
-                 return cursor.currentStartPrice - uint128(decay + ;
-
-
-Mutation:
-    File: /mnt/c/Users/vutie/Documents/DATN/dex-aggregator/contract/src/libs/DynamicStakeLib.sol
-    Line nr: 13
-    Result: Lived
-    Original line:
-                 if (tBucket == 0) return 10000;
-
-    Mutated line:
-                 if (tBucket != 0) return 10000;
-
-
-Mutation:
-    File: /mnt/c/Users/vutie/Documents/DATN/dex-aggregator/contract/src/libs/DynamicStakeLib.sol
-    Line nr: 14
-    Result: Lived
-    Original line:
-                 if (tBucket == 1) return 15000;
-
-    Mutated line:
-                 if (tBucket != 1) return 15000;
-
-
-Mutation:
-    File: /mnt/c/Users/vutie/Documents/DATN/dex-aggregator/contract/src/libs/DynamicStakeLib.sol
-    Line nr: 15
-    Result: Lived
-    Original line:
-                 if (tBucket == 2) return 30000;
-
-    Mutated line:
-                 if (tBucket != 2) return 30000;
-
-
-Mutation:
-    File: /mnt/c/Users/vutie/Documents/DATN/dex-aggregator/contract/src/libs/DynamicStakeLib.sol
-    Line nr: 24
-    Result: Lived
-    Original line:
-                 if (pct < 2) return 0;
-
-    Mutated line:
-                 if (pct <= 2) return 0;
-
-
-Mutation:
-    File: /mnt/c/Users/vutie/Documents/DATN/dex-aggregator/contract/src/libs/DynamicStakeLib.sol
-    Line nr: 25
-    Result: Lived
-    Original line:
-                 if (pct < 10) return 1;
-
-    Mutated line:
-                 if (pct <= 10) return 1;
-
-
-Mutation:
-    File: /mnt/c/Users/vutie/Documents/DATN/dex-aggregator/contract/src/libs/DynamicStakeLib.sol
-    Line nr: 26
-    Result: Lived
-    Original line:
-                 if (pct < 30) return 2;
-
-    Mutated line:
-                 if (pct <= 30) return 2;
-
-
-Mutation:
-    File: /mnt/c/Users/vutie/Documents/DATN/dex-aggregator/contract/src/libs/DynamicStakeLib.sol
-    Line nr: 27
-    Result: Killed
-    Original line:
-                 if (pct < 70) return 3;
-
-    Mutated line:
-                 if (pct <= 70) return 3;
-
-
-Mutation:
-    File: /mnt/c/Users/vutie/Documents/DATN/dex-aggregator/contract/src/libs/DynamicStakeLib.sol
-    Line nr: 35
-    Result: Lived
-    Original line:
-                 if (notionalEth < 1 ether)   return 0;
-
-    Mutated line:
-                 if (notionalEth <= 1 ether)   return 0;
-
-
-Mutation:
-    File: /mnt/c/Users/vutie/Documents/DATN/dex-aggregator/contract/src/libs/DynamicStakeLib.sol
-    Line nr: 36
-    Result: Lived
-    Original line:
-                 if (notionalEth < 10 ether)  return 1;
-
-    Mutated line:
-                 if (notionalEth <= 10 ether)  return 1;
-
-
-Mutation:
-    File: /mnt/c/Users/vutie/Documents/DATN/dex-aggregator/contract/src/libs/DynamicStakeLib.sol
-    Line nr: 37
-    Result: Lived
-    Original line:
-                 if (notionalEth < 100 ether) return 2;
-
-    Mutated line:
-                 if (notionalEth <= 100 ether) return 2;
-
-
-Mutation:
-    File: /mnt/c/Users/vutie/Documents/DATN/dex-aggregator/contract/src/libs/DynamicStakeLib.sol
-    Line nr: 45
-    Result: Error
-    Original line:
-                 if (total < 10_000e6) return 0;
-
-    Mutated line:
-                 if (total < 1 <= 00e6) return 0;
-
-
-Mutation:
-    File: /mnt/c/Users/vutie/Documents/DATN/dex-aggregator/contract/src/libs/DynamicStakeLib.sol
-    Line nr: 46
-    Result: Error
-    Original line:
-                 if (total < 100_000e6) return 1;
-
-    Mutated line:
-                 if (total < 1 <= 000e6) return 1;
-
-
-Mutation:
-    File: /mnt/c/Users/vutie/Documents/DATN/dex-aggregator/contract/src/libs/DynamicStakeLib.sol
-    Line nr: 47
-    Result: Error
-    Original line:
-                 if (total < 1_000_000e6) return 2;
-
-    Mutated line:
-                 if (total < 1 <= 0_000e6) return 2;
-
-
-Mutation:
-    File: /mnt/c/Users/vutie/Documents/DATN/dex-aggregator/contract/src/libs/DynamicStakeLib.sol
-    Line nr: 66
-    Result: Error
-    Original line:
-                 if (uniV3Factory == address(0) || weth == address(0) || inputToken == weth) {
-
-    Mutated line:
-                 if (uniV3Factory == addr != 0) || weth == address(0) || inputToken == weth) {
-
-
-Mutation:
-    File: /mnt/c/Users/vutie/Documents/DATN/dex-aggregator/contract/src/libs/DynamicStakeLib.sol
-    Line nr: 66
-    Result: Error
-    Original line:
-                 if (uniV3Factory == address(0) || weth == address(0) || inputToken == weth) {
-
-    Mutated line:
-                 if (uniV3Factory == address(0) || weth == addr != 0) || inputToken == weth) {
-
-
-Mutation:
-    File: /mnt/c/Users/vutie/Documents/DATN/dex-aggregator/contract/src/libs/DynamicStakeLib.sol
-    Line nr: 66
-    Result: Error
-    Original line:
-                 if (uniV3Factory == address(0) || weth == address(0) || inputToken == weth) {
-
-    Mutated line:
-                 if (uniV3Factory == address(0) || weth == address(0) || inputToken == weth !=             return fillAmount;
-
-
-Mutation:
-    File: /mnt/c/Users/vutie/Documents/DATN/dex-aggregator/contract/src/libs/DynamicStakeLib.sol
-    Line nr: 80
-    Result: Error
-    Original line:
-                 if (delta < 0 && (delta % int56(uint56(twapWindow)) != 0)) meanTick--;
-
-    Mutated line:
-                 if (delta < 0 &&  <= lta % int56(uint56(twapWindow)) != 0)) meanTick--;
-
-
-Mutation:
-    File: /mnt/c/Users/vutie/Documents/DATN/dex-aggregator/contract/src/libs/DynamicStakeLib.sol
-    Line nr: 94
-    Result: Error
-    Original line:
-                 if (sqrtPriceX96 <= type(uint128).max) {
-
-    Mutated line:
-                 if (sqrtPriceX96 <= type < t128).max) {
-
-
-Mutation:
-    File: /mnt/c/Users/vutie/Documents/DATN/dex-aggregator/contract/src/libs/DynamicStakeLib.sol
-    Line nr: 102
-    Result: Error
-    Original line:
-                         ? FullMath.mulDiv(ratioX128, amountIn, 1 << 128)
-
-    Mutated line:
-          <=              ? FullMath.mulDiv(ratioX128, amountIn, 1 << 128)
-
-
-Mutation:
-    File: /mnt/c/Users/vutie/Documents/DATN/dex-aggregator/contract/src/libs/DynamicStakeLib.sol
-    Line nr: 97
-    Result: Error
-    Original line:
-                         ? FullMath.mulDiv(ratioX192, amountIn, 1 << 192)
-
-    Mutated line:
-          <=              ? FullMath.mulDiv(ratioX192, amountIn, 1 << 192)
-
-
-Mutation:
-    File: /mnt/c/Users/vutie/Documents/DATN/dex-aggregator/contract/src/libs/DynamicStakeLib.sol
-    Line nr: 110
-    Result: Error
-    Original line:
-                 if (left > 50) return 0;
-
-    Mutated line:
-                 if (left > 50) r >= rn 0;
-
-
-Mutation:
-    File: /mnt/c/Users/vutie/Documents/DATN/dex-aggregator/contract/src/libs/DynamicStakeLib.sol
-    Line nr: 111
-    Result: Error
-    Original line:
-                 if (left > 20) return 1;
-
-    Mutated line:
-                 if (left > 20) r >= rn 1;
-
-
-Mutation:
-    File: /mnt/c/Users/vutie/Documents/DATN/dex-aggregator/contract/src/libs/DynamicStakeLib.sol
-    Line nr: 112
-    Result: Error
-    Original line:
-                 if (left > 5) return 2;
-
-    Mutated line:
-                 if (left > 5) re >= n 2;
-
-
-Mutation:
-    File: /mnt/c/Users/vutie/Documents/DATN/dex-aggregator/contract/src/libs/DynamicStakeLib.sol
-    Line nr: 13
-    Result: Lived
-    Original line:
-                 if (tBucket == 0) return 10000;
-
-    Mutated line:
-                 if (tBucket != 0) return 10000;
-
-
-Mutation:
-    File: /mnt/c/Users/vutie/Documents/DATN/dex-aggregator/contract/src/libs/DynamicStakeLib.sol
-    Line nr: 14
-    Result: Lived
-    Original line:
-                 if (tBucket == 1) return 15000;
-
-    Mutated line:
-                 if (tBucket != 1) return 15000;
-
-
-Mutation:
-    File: /mnt/c/Users/vutie/Documents/DATN/dex-aggregator/contract/src/libs/DynamicStakeLib.sol
-    Line nr: 15
-    Result: Lived
-    Original line:
-                 if (tBucket == 2) return 30000;
-
-    Mutated line:
-                 if (tBucket != 2) return 30000;
-
-
-Mutation:
-    File: /mnt/c/Users/vutie/Documents/DATN/dex-aggregator/contract/src/libs/DynamicStakeLib.sol
-    Line nr: 22
-    Result: Killed
-    Original line:
-                 if (fill >= total) return 4;
-
-    Mutated line:
-                 if (fill < total) return 4;
-
-
-Mutation:
-    File: /mnt/c/Users/vutie/Documents/DATN/dex-aggregator/contract/src/libs/DynamicStakeLib.sol
-    Line nr: 24
-    Result: Killed
-    Original line:
-                 if (pct < 2) return 0;
-
-    Mutated line:
-                 if (pct >= 2) return 0;
-
-
-Mutation:
-    File: /mnt/c/Users/vutie/Documents/DATN/dex-aggregator/contract/src/libs/DynamicStakeLib.sol
-    Line nr: 25
-    Result: Killed
-    Original line:
-                 if (pct < 10) return 1;
-
-    Mutated line:
-                 if (pct >= 10) return 1;
-
-
-Mutation:
-    File: /mnt/c/Users/vutie/Documents/DATN/dex-aggregator/contract/src/libs/DynamicStakeLib.sol
-    Line nr: 26
-    Result: Killed
-    Original line:
-                 if (pct < 30) return 2;
-
-    Mutated line:
-                 if (pct >= 30) return 2;
-
-
-Mutation:
-    File: /mnt/c/Users/vutie/Documents/DATN/dex-aggregator/contract/src/libs/DynamicStakeLib.sol
-    Line nr: 27
-    Result: Killed
-    Original line:
-                 if (pct < 70) return 3;
-
-    Mutated line:
-                 if (pct >= 70) return 3;
-
-
-Mutation:
-    File: /mnt/c/Users/vutie/Documents/DATN/dex-aggregator/contract/src/libs/DynamicStakeLib.sol
-    Line nr: 35
-    Result: Lived
-    Original line:
-                 if (notionalEth < 1 ether)   return 0;
-
-    Mutated line:
-                 if (notionalEth >= 1 ether)   return 0;
-
-
-Mutation:
-    File: /mnt/c/Users/vutie/Documents/DATN/dex-aggregator/contract/src/libs/DynamicStakeLib.sol
-    Line nr: 36
-    Result: Lived
-    Original line:
-                 if (notionalEth < 10 ether)  return 1;
-
-    Mutated line:
-                 if (notionalEth >= 10 ether)  return 1;
-
-
-Mutation:
-    File: /mnt/c/Users/vutie/Documents/DATN/dex-aggregator/contract/src/libs/DynamicStakeLib.sol
-    Line nr: 37
-    Result: Lived
-    Original line:
-                 if (notionalEth < 100 ether) return 2;
-
-    Mutated line:
-                 if (notionalEth >= 100 ether) return 2;
-
-
-Mutation:
-    File: /mnt/c/Users/vutie/Documents/DATN/dex-aggregator/contract/src/libs/DynamicStakeLib.sol
-    Line nr: 45
-    Result: Error
-    Original line:
-                 if (total < 10_000e6) return 0;
-
-    Mutated line:
-                 if (total < 1 >= 00e6) return 0;
-
-
-Mutation:
-    File: /mnt/c/Users/vutie/Documents/DATN/dex-aggregator/contract/src/libs/DynamicStakeLib.sol
-    Line nr: 46
-    Result: Error
-    Original line:
-                 if (total < 100_000e6) return 1;
-
-    Mutated line:
-                 if (total < 1 >= 000e6) return 1;
-
-
-Mutation:
-    File: /mnt/c/Users/vutie/Documents/DATN/dex-aggregator/contract/src/libs/DynamicStakeLib.sol
-    Line nr: 47
-    Result: Error
-    Original line:
-                 if (total < 1_000_000e6) return 2;
-
-    Mutated line:
-                 if (total < 1 >= 0_000e6) return 2;
-
-
-Mutation:
-    File: /mnt/c/Users/vutie/Documents/DATN/dex-aggregator/contract/src/libs/DynamicStakeLib.sol
-    Line nr: 66
-    Result: Error
-    Original line:
-                 if (uniV3Factory == address(0) || weth == address(0) || inputToken == weth) {
-
-    Mutated line:
-                 if (uniV3Factory == addr != 0) || weth == address(0) || inputToken == weth) {
-
-
-Mutation:
-    File: /mnt/c/Users/vutie/Documents/DATN/dex-aggregator/contract/src/libs/DynamicStakeLib.sol
-    Line nr: 66
-    Result: Error
-    Original line:
-                 if (uniV3Factory == address(0) || weth == address(0) || inputToken == weth) {
-
-    Mutated line:
-                 if (uniV3Factory == address(0) || weth == addr != 0) || inputToken == weth) {
-
-
-Mutation:
-    File: /mnt/c/Users/vutie/Documents/DATN/dex-aggregator/contract/src/libs/DynamicStakeLib.sol
-    Line nr: 66
-    Result: Error
-    Original line:
-                 if (uniV3Factory == address(0) || weth == address(0) || inputToken == weth) {
-
-    Mutated line:
-                 if (uniV3Factory == address(0) || weth == address(0) || inputToken == weth !=             return fillAmount;
-
-
-Mutation:
-    File: /mnt/c/Users/vutie/Documents/DATN/dex-aggregator/contract/src/libs/DynamicStakeLib.sol
-    Line nr: 70
-    Result: Error
-    Original line:
-                 require(pool != address(0), "no twap pool");
-
-    Mutated line:
-                 require(pool != addr == 0), "no twap pool");
-
-
-Mutation:
-    File: /mnt/c/Users/vutie/Documents/DATN/dex-aggregator/contract/src/libs/DynamicStakeLib.sol
-    Line nr: 80
-    Result: Error
-    Original line:
-                 if (delta < 0 && (delta % int56(uint56(twapWindow)) != 0)) meanTick--;
-
-    Mutated line:
-                 if (delta < 0 &&  >= lta % int56(uint56(twapWindow)) != 0)) meanTick--;
-
-
-Mutation:
-    File: /mnt/c/Users/vutie/Documents/DATN/dex-aggregator/contract/src/libs/DynamicStakeLib.sol
-    Line nr: 80
-    Result: Error
-    Original line:
-                 if (delta < 0 && (delta % int56(uint56(twapWindow)) != 0)) meanTick--;
-
-    Mutated line:
-                 if (delta < 0 && (delta % int56(uint56(twapWindow)) != 0))  == Tick--;
-
-
-Mutation:
-    File: /mnt/c/Users/vutie/Documents/DATN/dex-aggregator/contract/src/libs/DynamicStakeLib.sol
-    Line nr: 94
-    Result: Error
-    Original line:
-                 if (sqrtPriceX96 <= type(uint128).max) {
-
-    Mutated line:
-                 if (sqrtPriceX96 <= type > t128).max) {
-
-
-Mutation:
-    File: /mnt/c/Users/vutie/Documents/DATN/dex-aggregator/contract/src/libs/DynamicStakeLib.sol
-    Line nr: 102
-    Result: Error
-    Original line:
-                         ? FullMath.mulDiv(ratioX128, amountIn, 1 << 128)
-
-    Mutated line:
-          >=              ? FullMath.mulDiv(ratioX128, amountIn, 1 << 128)
-
-
-Mutation:
-    File: /mnt/c/Users/vutie/Documents/DATN/dex-aggregator/contract/src/libs/DynamicStakeLib.sol
-    Line nr: 97
-    Result: Error
-    Original line:
-                         ? FullMath.mulDiv(ratioX192, amountIn, 1 << 192)
-
-    Mutated line:
-          >=              ? FullMath.mulDiv(ratioX192, amountIn, 1 << 192)
-
-
-Mutation:
-    File: /mnt/c/Users/vutie/Documents/DATN/dex-aggregator/contract/src/libs/DynamicStakeLib.sol
-    Line nr: 108
-    Result: Error
-    Original line:
-                 if (block.number >= deadline) return 3;
-
-    Mutated line:
-                 if (block.number >= dead < ) return 3;
-
-
-Mutation:
-    File: /mnt/c/Users/vutie/Documents/DATN/dex-aggregator/contract/src/libs/DynamicStakeLib.sol
-    Line nr: 110
-    Result: Error
-    Original line:
-                 if (left > 50) return 0;
-
-    Mutated line:
-                 if (left > 50) r <= rn 0;
-
-
-Mutation:
-    File: /mnt/c/Users/vutie/Documents/DATN/dex-aggregator/contract/src/libs/DynamicStakeLib.sol
-    Line nr: 111
-    Result: Error
-    Original line:
-                 if (left > 20) return 1;
-
-    Mutated line:
-                 if (left > 20) r <= rn 1;
-
-
-Mutation:
-    File: /mnt/c/Users/vutie/Documents/DATN/dex-aggregator/contract/src/libs/DynamicStakeLib.sol
-    Line nr: 112
-    Result: Error
-    Original line:
-                 if (left > 5) return 2;
-
-    Mutated line:
-                 if (left > 5) re <= n 2;
-
-
-Mutation:
-    File: /mnt/c/Users/vutie/Documents/DATN/dex-aggregator/contract/src/libs/DynamicStakeLib.sol
-    Line nr: 23
-    Result: Killed
-    Original line:
-                 uint256 pct = (fill * 100) / total;
-
-    Mutated line:
-                 uint256 pct = (fill * 100) * total;
-
-
-Mutation:
-    File: /mnt/c/Users/vutie/Documents/DATN/dex-aggregator/contract/src/libs/DynamicStakeLib.sol
-    Line nr: 23
-    Result: Killed
-    Original line:
-                 uint256 pct = (fill * 100) / total;
-
-    Mutated line:
-                 uint256 pct = (fill / 100) / total;
-
-
-Mutation:
-    File: /mnt/c/Users/vutie/Documents/DATN/dex-aggregator/contract/src/libs/DynamicStakeLib.sol
-    Line nr: 77
-    Result: Error
-    Original line:
-                 int56 delta = tickCumulatives[1] - tickCumulatives[0];
-
-    Mutated line:
-                 int56 delta = tickCumulatives[1] - tickC + latives[0];
-
-
-Mutation:
-    File: /mnt/c/Users/vutie/Documents/DATN/dex-aggregator/contract/src/libs/DynamicStakeLib.sol
-    Line nr: 78
-    Result: Error
-    Original line:
-                 int24 meanTick = int24(delta / int56(uint56(twapWindow)));
-
-    Mutated line:
-                 int24 meanTick = int24(delta / int56 * nt56(twapWindow)));
-
-
-Mutation:
-    File: /mnt/c/Users/vutie/Documents/DATN/dex-aggregator/contract/src/libs/DynamicStakeLib.sol
-    Line nr: 100
-    Result: Error
-    Original line:
-                     uint256 ratioX128 = FullMath.mulDiv(uint256(sqrtPriceX96), uint256(sqrtPriceX96), 1 << 64);
-
-    Mutated line:
-                     uint256 ratioX128 = FullMath.mulDiv(uint256(sqrtPriceX96), uint256(sqrtPriceX96), 1 << 64); >>          quote = inputToken < weth
-
-
-Mutation:
-    File: /mnt/c/Users/vutie/Documents/DATN/dex-aggregator/contract/src/libs/DynamicStakeLib.sol
-    Line nr: 103
-    Result: Error
-    Original line:
-                         : FullMath.mulDiv(1 << 128, amountIn, ratioX128);
-
-    Mutated line:
-                         : FullMath.mulDiv(1 << 128, >> untIn, ratioX128);
-
-
-Mutation:
-    File: /mnt/c/Users/vutie/Documents/DATN/dex-aggregator/contract/src/libs/DynamicStakeLib.sol
-    Line nr: 102
-    Result: Error
-    Original line:
-                         ? FullMath.mulDiv(ratioX128, amountIn, 1 << 128)
-
-    Mutated line:
-                         ? FullMath.mulDiv(ratioX128, amountIn, 1 << 128) >>              : FullMath.mulDiv(1 << 128, amountIn, ratioX128);
-
-
-Mutation:
-    File: /mnt/c/Users/vutie/Documents/DATN/dex-aggregator/contract/src/libs/DynamicStakeLib.sol
-    Line nr: 95
-    Result: Error
-    Original line:
-                     uint256 ratioX192 = uint256(sqrtPriceX96) * sqrtPriceX96;
-
-    Mutated line:
-                     uint256 ratioX192 = uint256(sqrtPriceX96) * sqrtP / eX96;
-
-
-Mutation:
-    File: /mnt/c/Users/vutie/Documents/DATN/dex-aggregator/contract/src/libs/DynamicStakeLib.sol
-    Line nr: 98
-    Result: Error
-    Original line:
-                         : FullMath.mulDiv(1 << 192, amountIn, ratioX192);
-
-    Mutated line:
-                         : FullMath.mulDiv(1 << 192, >> untIn, ratioX192);
-
-
-Mutation:
-    File: /mnt/c/Users/vutie/Documents/DATN/dex-aggregator/contract/src/libs/DynamicStakeLib.sol
-    Line nr: 97
-    Result: Error
-    Original line:
-                         ? FullMath.mulDiv(ratioX192, amountIn, 1 << 192)
-
-    Mutated line:
-                         ? FullMath.mulDiv(ratioX192, amountIn, 1 << 192) >>              : FullMath.mulDiv(1 << 192, amountIn, ratioX192);
-
-
-Mutation:
-    File: /mnt/c/Users/vutie/Documents/DATN/dex-aggregator/contract/src/libs/DynamicStakeLib.sol
-    Line nr: 109
-    Result: Error
-    Original line:
-                 uint256 left = deadline - block.number;
-
-    Mutated line:
-                 uint256 left = deadline - block + mber;
-
-
-Mutation:
-    File: /mnt/c/Users/vutie/Documents/DATN/dex-aggregator/contract/src/libs/DynamicStakeLib.sol
-    Line nr: 94
-    Result: Error
-    Original line:
-                 if (sqrtPriceX96 <= type(uint128).max) {
-
-    Mutated line:
-                 if (sqrtPriceX96 <= type(uin           uint256 ratioX192 = uint256(sqrtPriceX96) * sqrtPriceX96;
-
-
-Mutation:
-    File: /mnt/c/Users/vutie/Documents/DATN/dex-aggregator/contract/src/libs/RemainingLib.sol
-    Line nr: 11
-    Result: Error
-    Original line:
-                 if (raw == 0)                 return orderAmount;
-
-    Mutated line:
-                 if (raw == 0)                != turn orderAmount;
-
-
-Mutation:
-    File: /mnt/c/Users/vutie/Documents/DATN/dex-aggregator/contract/src/libs/RemainingLib.sol
-    Line nr: 12
-    Result: Error
-    Original line:
-                 if (raw == type(uint256).max) return 0;
-
-    Mutated line:
-                 if (raw == type(uint256).max != turn 0;
-
-
-
-
-Mutation:
-    File: /mnt/c/Users/vutie/Documents/DATN/dex-aggregator/contract/src/libs/RemainingLib.sol
-    Line nr: 11
-    Result: Error
-    Original line:
-                 if (raw == 0)                 return orderAmount;
-
-    Mutated line:
-                 if (raw == 0)                != turn orderAmount;
-
-
-Mutation:
-    File: /mnt/c/Users/vutie/Documents/DATN/dex-aggregator/contract/src/libs/RemainingLib.sol
-    Line nr: 12
-    Result: Error
-    Original line:
-                 if (raw == type(uint256).max) return 0;
-
-    Mutated line:
-                 if (raw == type(uint256).max != turn 0;
-
-
-
-
-Mutation:
-    File: /mnt/c/Users/vutie/Documents/DATN/dex-aggregator/contract/src/libs/RemainingLib.sol
-    Line nr: 12
-    Result: Error
-    Original line:
-                 if (raw == type(uint256).max) return 0;
-
-    Mutated line:
-                 if (raw == type(uint256).max) re  return ~raw;
-
-
-Mutation:
-    File: /mnt/c/Users/vutie/Documents/DATN/dex-aggregator/contract/src/libs/RemainingLib.sol
-    Line nr: 22
-    Result: Error
-    Original line:
-             }
-
-    Mutated line:
-           ion isNewOrder(uint256 raw) internal pure returns (bool) {
-
-
-Mutation:
-    File: /mnt/c/Users/vutie/Documents/DATN/dex-aggregator/contract/src/libs/ScaledOutputLib.sol
-    Line nr: 15
-    Result: Error
-    Original line:
-                     return totalOutput - alreadyPaid;
-
-    Mutated line:
-                     return totalOutput - alreadyPa + 
-
-
+Mutation testing report (regenerated) — NeutronX pure libs
+============================================================
+Targets       : src/libs/RemainingLib.sol, src/libs/ScaledOutputLib.sol, src/libs/DecayCursorLib.sol, src/libs/DynamicStakeLib.sol
+Test scope    : test/libs/*
+
+Total mutants : 45
+  Killed      : 28
+  Lived       : 13   (real test gaps)
+  Excluded    : 4   (did not compile — stillborn)
+
+Mutation score: 28/41 = 68.3%   (excludes stillborn)
+============================================================
+
+SURVIVORS (add tests to kill these):
+  [LIVED  ] src/libs/DynamicStakeLib.sol:67  '==' -> '!='
+  [LIVED  ] src/libs/DynamicStakeLib.sol:67  '==' -> '!='
+  [LIVED  ] src/libs/DynamicStakeLib.sol:67  '==' -> '!='
+  [LIVED  ] src/libs/DynamicStakeLib.sol:71  '!=' -> '=='
+  [LIVED  ] src/libs/DynamicStakeLib.sol:78  '-' -> '+'
+  [LIVED  ] src/libs/DynamicStakeLib.sol:79  '/' -> '*'
+  [LIVED  ] src/libs/DynamicStakeLib.sol:81  '<' -> '>'
+  [LIVED  ] src/libs/DynamicStakeLib.sol:81  '!=' -> '=='
+  [LIVED  ] src/libs/DynamicStakeLib.sol:95  '<=' -> '>='
+  [LIVED  ] src/libs/DynamicStakeLib.sol:96  '*' -> '/'
+  [LIVED  ] src/libs/DynamicStakeLib.sol:97  '<' -> '>'
+  [LIVED  ] src/libs/DynamicStakeLib.sol:102  '<' -> '>'
+  [LIVED  ] src/libs/DynamicStakeLib.sol:110  '-' -> '+'
+
+[KILLED ] src/libs/RemainingLib.sol:12  '==' -> '!='
+           if (raw == 0)                 return orderAmount;
+        => if (raw != 0)                 return orderAmount;
+[KILLED ] src/libs/RemainingLib.sol:13  '==' -> '!='
+           if (raw == type(uint256).max) return 0;
+        => if (raw != type(uint256).max) return 0;
+[KILLED ] src/libs/RemainingLib.sol:26  '==' -> '!='
+           return raw == 0;
+        => return raw != 0;
+[KILLED ] src/libs/ScaledOutputLib.sol:16  '-' -> '+'
+           return totalOutput - alreadyPaid;
+        => return totalOutput + alreadyPaid;
+[EXCLUDED] src/libs/DecayCursorLib.sol:6  '/' -> '*'
+           uint128 currentStartPrice;  // giá tại thời điểm reset gần nhất
+        => uint128 currentStartPrice;  */ giá tại thời điểm reset gần nhất
+[EXCLUDED] src/libs/DecayCursorLib.sol:8  '/' -> '*'
+           uint32  decayPerBlock;      // wei giảm mỗi block
+        => uint32  decayPerBlock;      */ wei giảm mỗi block
+[EXCLUDED] src/libs/DecayCursorLib.sol:10  '/' -> '*'
+           }   // = 32 bytes = 1 storage slot
+        => }   */ = 32 bytes = 1 storage slot
+[KILLED ] src/libs/DecayCursorLib.sol:26  '-' -> '+'
+           uint256 blocksPassed = block.number - uint256(cursor.lastResetBlock);
+        => uint256 blocksPassed = block.number + uint256(cursor.lastResetBlock);
+[KILLED ] src/libs/DecayCursorLib.sol:27  '*' -> '/'
+           uint256 decayed      = blocksPassed * uint256(cursor.decayPerBlock);
+        => uint256 decayed      = blocksPassed / uint256(cursor.decayPerBlock);
+[KILLED ] src/libs/DecayCursorLib.sol:28  '>=' -> '<='
+           if (decayed >= uint256(cursor.currentStartPrice)) return 0;
+        => if (decayed <= uint256(cursor.currentStartPrice)) return 0;
+[KILLED ] src/libs/DecayCursorLib.sol:30  '-' -> '+'
+           return cursor.currentStartPrice - uint128(decayed);
+        => return cursor.currentStartPrice + uint128(decayed);
+[KILLED ] src/libs/DynamicStakeLib.sol:14  '==' -> '!='
+           if (tBucket == 0) return 10000;
+        => if (tBucket != 0) return 10000;
+[KILLED ] src/libs/DynamicStakeLib.sol:15  '==' -> '!='
+           if (tBucket == 1) return 15000;
+        => if (tBucket != 1) return 15000;
+[KILLED ] src/libs/DynamicStakeLib.sol:16  '==' -> '!='
+           if (tBucket == 2) return 30000;
+        => if (tBucket != 2) return 30000;
+[KILLED ] src/libs/DynamicStakeLib.sol:23  '>=' -> '<='
+           if (fill >= total) return 4;
+        => if (fill <= total) return 4;
+[KILLED ] src/libs/DynamicStakeLib.sol:24  '*' -> '/'
+           uint256 pct = (fill * 100) / total;
+        => uint256 pct = (fill / 100) / total;
+[KILLED ] src/libs/DynamicStakeLib.sol:24  '/' -> '*'
+           uint256 pct = (fill * 100) / total;
+        => uint256 pct = (fill * 100) * total;
+[KILLED ] src/libs/DynamicStakeLib.sol:25  '<' -> '>'
+           if (pct < 2) return 0;
+        => if (pct > 2) return 0;
+[KILLED ] src/libs/DynamicStakeLib.sol:26  '<' -> '>'
+           if (pct < 10) return 1;
+        => if (pct > 10) return 1;
+[KILLED ] src/libs/DynamicStakeLib.sol:27  '<' -> '>'
+           if (pct < 30) return 2;
+        => if (pct > 30) return 2;
+[KILLED ] src/libs/DynamicStakeLib.sol:28  '<' -> '>'
+           if (pct < 70) return 3;
+        => if (pct > 70) return 3;
+[KILLED ] src/libs/DynamicStakeLib.sol:36  '<' -> '>'
+           if (notionalEth < 1 ether)   return 0;
+        => if (notionalEth > 1 ether)   return 0;
+[KILLED ] src/libs/DynamicStakeLib.sol:37  '<' -> '>'
+           if (notionalEth < 10 ether)  return 1;
+        => if (notionalEth > 10 ether)  return 1;
+[KILLED ] src/libs/DynamicStakeLib.sol:38  '<' -> '>'
+           if (notionalEth < 100 ether) return 2;
+        => if (notionalEth > 100 ether) return 2;
+[KILLED ] src/libs/DynamicStakeLib.sol:46  '<' -> '>'
+           if (total < 10_000e6) return 0;
+        => if (total > 10_000e6) return 0;
+[KILLED ] src/libs/DynamicStakeLib.sol:47  '<' -> '>'
+           if (total < 100_000e6) return 1;
+        => if (total > 100_000e6) return 1;
+[KILLED ] src/libs/DynamicStakeLib.sol:48  '<' -> '>'
+           if (total < 1_000_000e6) return 2;
+        => if (total > 1_000_000e6) return 2;
+[LIVED  ] src/libs/DynamicStakeLib.sol:67  '==' -> '!='
+           if (uniV3Factory == address(0) || weth == address(0) || inputToken == weth) {
+        => if (uniV3Factory != address(0) || weth == address(0) || inputToken == weth) {
+[LIVED  ] src/libs/DynamicStakeLib.sol:67  '==' -> '!='
+           if (uniV3Factory == address(0) || weth == address(0) || inputToken == weth) {
+        => if (uniV3Factory == address(0) || weth != address(0) || inputToken == weth) {
+[LIVED  ] src/libs/DynamicStakeLib.sol:67  '==' -> '!='
+           if (uniV3Factory == address(0) || weth == address(0) || inputToken == weth) {
+        => if (uniV3Factory == address(0) || weth == address(0) || inputToken != weth) {
+[LIVED  ] src/libs/DynamicStakeLib.sol:71  '!=' -> '=='
+           require(pool != address(0), "no twap pool");
+        => require(pool == address(0), "no twap pool");
+[LIVED  ] src/libs/DynamicStakeLib.sol:78  '-' -> '+'
+           int56 delta = tickCumulatives[1] - tickCumulatives[0];
+        => int56 delta = tickCumulatives[1] + tickCumulatives[0];
+[LIVED  ] src/libs/DynamicStakeLib.sol:79  '/' -> '*'
+           int24 meanTick = int24(delta / int56(uint56(twapWindow)));
+        => int24 meanTick = int24(delta * int56(uint56(twapWindow)));
+[LIVED  ] src/libs/DynamicStakeLib.sol:81  '<' -> '>'
+           if (delta < 0 && (delta % int56(uint56(twapWindow)) != 0)) meanTick--;
+        => if (delta > 0 && (delta % int56(uint56(twapWindow)) != 0)) meanTick--;
+[LIVED  ] src/libs/DynamicStakeLib.sol:81  '!=' -> '=='
+           if (delta < 0 && (delta % int56(uint56(twapWindow)) != 0)) meanTick--;
+        => if (delta < 0 && (delta % int56(uint56(twapWindow)) == 0)) meanTick--;
+[EXCLUDED] src/libs/DynamicStakeLib.sol:81  '-' -> '+'
+           if (delta < 0 && (delta % int56(uint56(twapWindow)) != 0)) meanTick--;
+        => if (delta < 0 && (delta % int56(uint56(twapWindow)) != 0)) meanTick+-;
+[LIVED  ] src/libs/DynamicStakeLib.sol:95  '<=' -> '>='
+           if (sqrtPriceX96 <= type(uint128).max) {
+        => if (sqrtPriceX96 >= type(uint128).max) {
+[LIVED  ] src/libs/DynamicStakeLib.sol:96  '*' -> '/'
+           uint256 ratioX192 = uint256(sqrtPriceX96) * sqrtPriceX96;
+        => uint256 ratioX192 = uint256(sqrtPriceX96) / sqrtPriceX96;
+[LIVED  ] src/libs/DynamicStakeLib.sol:97  '<' -> '>'
+           quote = inputToken < weth
+        => quote = inputToken > weth
+[LIVED  ] src/libs/DynamicStakeLib.sol:102  '<' -> '>'
+           quote = inputToken < weth
+        => quote = inputToken > weth
+[KILLED ] src/libs/DynamicStakeLib.sol:109  '>=' -> '<='
+           if (block.number >= deadline) return 3;
+        => if (block.number <= deadline) return 3;
+[LIVED  ] src/libs/DynamicStakeLib.sol:110  '-' -> '+'
+           uint256 left = deadline - block.number;
+        => uint256 left = deadline + block.number;
+[KILLED ] src/libs/DynamicStakeLib.sol:111  '>' -> '<'
+           if (left > 50) return 0;
+        => if (left < 50) return 0;
+[KILLED ] src/libs/DynamicStakeLib.sol:112  '>' -> '<'
+           if (left > 20) return 1;
+        => if (left < 20) return 1;
+[KILLED ] src/libs/DynamicStakeLib.sol:113  '>' -> '<'
+           if (left > 5) return 2;
+        => if (left < 5) return 2;

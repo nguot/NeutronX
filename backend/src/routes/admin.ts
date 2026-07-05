@@ -63,6 +63,7 @@ router.get('/config', (_req: Request, res: Response) => {
     chains:             loadChainRegistry(),
     partialFillReactor: get('PARTIAL_FILL_REACTOR'),
     fallbackExecutor:   get('FALLBACK_EXECUTOR'),
+    fillAuction:        get('FILL_AUCTION'),
   })
 })
 

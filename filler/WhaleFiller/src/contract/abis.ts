@@ -1,8 +1,7 @@
 export const FILL_AUCTION_ABI = [
-  'function collateralRate(uint256) view returns (uint32)',
   'function hasValidRegistration(bytes32, address, uint256) view returns (bool)',
   'function pendingReturns(address) view returns (uint256)',
-  'function withdraw() external',
+  'function withdraw(address payable to) external',
   // D-1: exact ETH collateral for a fill (handles the TWAP + token decimals)
   'function previewCollateral(address inputToken, uint24 feeTier, uint256 fillAmount, uint256 deadline) view returns (uint256)',
   'function releaseRegistration(bytes32 orderHash, address filler) external',

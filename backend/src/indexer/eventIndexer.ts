@@ -5,7 +5,8 @@ import * as dotenv from 'dotenv'
 dotenv.config()
 
 const REACTOR_ABI = [
-  'event PartialFillExecuted(bytes32 indexed orderHash, address indexed filler, uint256 fillAmount, uint256 outputAmount)'
+  'event PartialFillExecuted(bytes32 indexed orderHash, address indexed filler, uint256 fillAmount, uint256 outputAmount)',
+  'event NonceInvalidated(address indexed swapper, uint256 indexed nonce)'
 ]
 
 const FALLBACK_ABI = [
@@ -60,6 +61,22 @@ async function handlePartialFill(log: ethers.Event) {
   }
 }
 
+// Swapper cancelled via PartialFillReactor.invalidateNonce (their own signed tx) —
+// mirror that onto the order it belongs to so the UI/DB reflect the on-chain
+// cancellation instead of only the admin-token DELETE route.
+async function handleNonceInvalidated(log: ethers.Event) {
+  const { swapper, nonce } = log.args!
+  console.log(`Nonce invalidated: swapper=${swapper} nonce=${nonce}`)
+  try {
+    await db.query(`
+      UPDATE orders SET status = 'cancelled'
+      WHERE swapper = $1 AND nonce = $2 AND status IN ('pending', 'active')
+    `, [swapper, (nonce as ethers.BigNumber).toString()])
+  } catch (e) {
+    console.error('NonceInvalidated indexer error:', e)
+  }
+}
+
 async function handleFallbackExecuted(log: ethers.Event) {
   const { orderHash } = log.args!
   console.log(`Fallback detected: ${orderHash}`)
@@ -93,6 +110,7 @@ export async function startIndexer() {
   const currentBlock   = await provider.getBlockNumber()
   let lastFillBlock     = await resolveCheckpoint('reactor_partial_fill', currentBlock, 'Indexer')
   let lastFallbackBlock = await resolveCheckpoint('fallback_executed', currentBlock, 'Indexer')
+  let lastCancelBlock   = await resolveCheckpoint('reactor_nonce_invalidated', currentBlock, 'Indexer')
 
   console.log('Indexer started')
 
@@ -119,6 +137,17 @@ export async function startIndexer() {
         await setCheckpoint('fallback_executed', lastFallbackBlock)
       } catch (e) {
         console.error('Indexer poll error (FallbackExecuted):', e)
+      }
+    }
+
+    if (blockNumber > lastCancelBlock) {
+      try {
+        const logs = await queryFilterChunked(reactor, reactor.filters.NonceInvalidated(), lastCancelBlock + 1, blockNumber)
+        for (const log of logs) await handleNonceInvalidated(log)
+        lastCancelBlock = blockNumber
+        await setCheckpoint('reactor_nonce_invalidated', lastCancelBlock)
+      } catch (e) {
+        console.error('Indexer poll error (NonceInvalidated):', e)
       }
     }
   })

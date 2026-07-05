@@ -7,7 +7,8 @@ dotenv.config()
 const FALLBACK_WINDOW = 10 // blocks — phải khớp với contract
 
 const FALLBACK_ABI = [
-  'function executeFallback(tuple(tuple(address swapper, address inputToken, uint256 inputAmount, address outputToken, uint256 minOutputAmount, uint256 deadline, uint256 nonce, uint16 minFillBps, uint128 startPrice, uint32 decayPerBlock, uint24 feeTier) info, bytes sig) order, address router, bytes routeCalldata, uint256 minAmountOut)'
+  'function executeFallback(tuple(tuple(address swapper, address inputToken, uint256 inputAmount, address outputToken, uint256 minOutputAmount, uint256 deadline, uint256 nonce, uint16 minFillBps, uint128 startPrice, uint32 decayPerBlock, uint24 feeTier) info, bytes sig) order, address router, bytes routeCalldata, uint256 minAmountOut)',
+  'event FallbackExecuted(bytes32 indexed orderHash, uint256 amountIn, uint256 amountOut)'
 ]
 
 const REACTOR_ABI = [
@@ -105,6 +106,12 @@ export interface FallbackCheckResult {
   chainId:             number
   remainingInput:      string
   preferredAggregator: string | null
+  // Pro-rated floor FallbackExecutor.sol enforces on-chain (minOutputAmount *
+  // remainingInput / inputAmount, see FallbackExecutor.sol:111) — a quote's
+  // minAmountOut must be >= this or the real executeFallback() call reverts
+  // with "below signed min output". Lets the UI show ✓/✗ against the actual
+  // gate, not just "a route exists".
+  requiredMinOutput:   string
   results:             AggregatorCheckResult[]
 }
 
@@ -133,6 +140,9 @@ export async function checkFallbackRoute(hash: string): Promise<FallbackCheckRes
   const orderHash = computeOrderHash(order)
   const rem = (await reactor.remainingInput(orderHash, order.input_amount) as ethers.BigNumber).toBigInt()
 
+  // Same formula as FallbackExecutor.sol:111 — mirrors the actual on-chain gate.
+  const requiredMinOutput = (BigInt(order.min_output) * rem) / BigInt(order.input_amount)
+
   const params: QuoteParams = {
     chainId,
     rpcUrl:    process.env.ALCHEMY_RPC_URL!,
@@ -158,6 +168,7 @@ export async function checkFallbackRoute(hash: string): Promise<FallbackCheckRes
     chainId,
     remainingInput: rem.toString(),
     preferredAggregator: order.preferred_aggregator ?? null,
+    requiredMinOutput: requiredMinOutput.toString(),
     results,
   }
 }
@@ -258,14 +269,37 @@ export async function startFallbackWatcher() {
             quote.calldata,
             quote.minAmountOut
           )
-          await tx.wait()
+          const receipt = await tx.wait()
           console.log(`Fallback executed: ${tx.hash}`)
+
+          // Pull the real on-chain amountOut off the FallbackExecuted log rather
+          // than trusting the pre-trade quote — the actual fill can differ
+          // slightly from the quoted floor depending on execution.
+          const fallbackLog = receipt.logs
+            .map((l: ethers.providers.Log) => { try { return fallbackExecutor.interface.parseLog(l) } catch { return null } })
+            .find((p: ethers.utils.LogDescription | null): p is ethers.utils.LogDescription => p?.name === 'FallbackExecuted')
+          const actualAmountOut = fallbackLog ? (fallbackLog.args.amountOut as ethers.BigNumber).toString() : quote.minAmountOut.toString()
+          const logIndex = receipt.logs.find((l: ethers.providers.Log) => l.address.toLowerCase() === fallbackExecutor.address.toLowerCase())?.logIndex ?? 0
 
           // 8. update DB
           await db.query(
             'UPDATE orders SET status = $1, fallback_initiated = true WHERE hash = $2',
             ['filled', order.hash]
           )
+          await db.query(`
+            INSERT INTO fills (id, order_hash, filler, fill_amount, output_amount, tx_hash, block_number, source, aggregator)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, 'fallback', $8)
+            ON CONFLICT (id) DO NOTHING
+          `, [
+            tx.hash + '_' + logIndex,
+            order.hash,
+            process.env.FALLBACK_EXECUTOR,
+            rem.toString(),
+            actualAmountOut,
+            tx.hash,
+            receipt.blockNumber,
+            aggregator,
+          ])
 
         } catch (e) {
           console.error(`Fallback failed for ${order.hash}:`, e)

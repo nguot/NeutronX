@@ -43,10 +43,11 @@ contract FillAuctionHandler is Test {
     function _stakeFor(uint256 fillAmount, uint256 deadline) internal view returns (uint256) {
         // D-1: auction deployed oracle-disabled, so notional == fillAmount and the
         // size bucket is on the ETH-scale thresholds.
-        uint8 sBucket = DynamicStakeLib.getOrderSizeBucketETH(fillAmount);
-        uint8 tBucket = DynamicStakeLib.getTimeBucket(deadline);
-        uint32 rateBps  = auction.collateralRate(sBucket);
-        uint32 timeMult = DynamicStakeLib._getTimeMultiplier(tBucket);
+        DynamicStakeLib.StakeConfig memory cfg = auction.stakeConfig();
+        uint8 sBucket = DynamicStakeLib.getOrderSizeBucketETH(fillAmount, cfg.sizeThresholds);
+        uint8 tBucket = DynamicStakeLib.getTimeBucket(deadline, cfg.timeThresholds);
+        uint32 rateBps  = cfg.collateralRate[sBucket];
+        uint32 timeMult = cfg.timeMult[tBucket];
         return (fillAmount * rateBps / 10000) * timeMult / 10000;
     }
 

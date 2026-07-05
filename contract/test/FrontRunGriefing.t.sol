@@ -108,10 +108,11 @@ contract FrontRunGriefingTest is Test {
     /// Mirrors FillAuction.register()'s computeCollateral(): registration-time
     /// collateral for a given (fillAmount ceiling, orderTotal, deadline).
     function _collateral(uint256 fillAmount, uint256 orderTotal, uint256 deadline) internal view returns (uint256) {
+        DynamicStakeLib.StakeConfig memory cfg = auction.stakeConfig();
         uint8 sBucket = DynamicStakeLib.getOrderSizeBucket(orderTotal);
-        uint8 tBucket = DynamicStakeLib.getTimeBucket(deadline);
-        uint32 rate = auction.collateralRate(sBucket);
-        uint32 timeMult = DynamicStakeLib._getTimeMultiplier(tBucket);
+        uint8 tBucket = DynamicStakeLib.getTimeBucket(deadline, cfg.timeThresholds);
+        uint32 rate = cfg.collateralRate[sBucket];
+        uint32 timeMult = cfg.timeMult[tBucket];
         return (fillAmount * rate / 10000) * timeMult / 10000;
     }
 
@@ -119,9 +120,11 @@ contract FrontRunGriefingTest is Test {
     /// stakeAmount returned for delivering actualFillAmount of the filler's OWN
     /// commitment (D-2 — ratio is actual ÷ committed, not actual ÷ order).
     function _refund(uint256 stakeAmount, uint256 actualFillAmount, uint256 committedFill) internal view returns (uint256) {
-        uint8 sBucket = DynamicStakeLib.getOrderSizeBucketETH(committedFill);
-        uint8 rBucket = DynamicStakeLib.getFillRatioBucket(actualFillAmount, committedFill);
-        uint32 refundBps = auction.refundTable(sBucket, rBucket);
+        DynamicStakeLib.StakeConfig memory cfg = auction.stakeConfig();
+        uint8 sBucket = DynamicStakeLib.getOrderSizeBucketETH(committedFill, cfg.sizeThresholds);
+        uint8 rBucket = DynamicStakeLib.getFillRatioBucket(actualFillAmount, committedFill, cfg.ratioThresholds);
+        uint256 R = cfg.ratioThresholds.length + 1;
+        uint32 refundBps = cfg.refundTable[sBucket * R + rBucket];
         return stakeAmount * refundBps / 10000;
     }
 

@@ -8,7 +8,6 @@
 //
 // Bids are sorted descending (best price first) — matcher walks top-down.
 
-import { SUPPORTED_TOKENS } from '../config'
 import { fetchLiveOrderbook } from './liveOrderbook'
 
 export interface BidLevel {
@@ -88,20 +87,4 @@ export async function getOrderbook(inputToken: string, outputToken: string): Pro
     console.warn(`[Orderbook] live fetch failed (${(e as Error).message}) — using static book`)
   }
   return getStaticOrderbook(inputToken, outputToken)
-}
-
-export function logOrderbook(book: MockOrderbook): void {
-  const inMeta  = SUPPORTED_TOKENS[book.inputToken]
-  const outMeta = SUPPORTED_TOKENS[book.outputToken]
-  const inSym   = inMeta?.symbol  ?? book.inputToken.slice(0, 6)
-  const outSym  = outMeta?.symbol ?? book.outputToken.slice(0, 6)
-  const outDec  = outMeta?.decimals ?? 18
-  const inDec   = inMeta?.decimals  ?? 18
-
-  console.log(`[Orderbook] ${inSym}→${outSym} — ${book.bids.length} bid levels`)
-  for (const bid of book.bids) {
-    const priceHuman = (Number(bid.price) / 10 ** outDec).toFixed(2)
-    const sizeHuman  = (Number(bid.size)  / 10 ** inDec).toFixed(2)
-    console.log(`  bid ${priceHuman} ${outSym}  size=${sizeHuman} ${inSym}`)
-  }
 }

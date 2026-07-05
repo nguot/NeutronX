@@ -1,4 +1,5 @@
 import { fillerRegistry } from './fillerRegistry'
+import { listTokens } from './tokenService'
 
 export interface SimQuoteRequest {
   inputToken:    string
@@ -75,7 +76,13 @@ export async function simulateOrder(body: SimQuoteRequest): Promise<SimResult> {
   const totalFill    = totalFillRaw > inputAmount ? inputAmount : totalFillRaw
   const remaining    = inputAmount - totalFill
 
-  const inDecimals = 18
+  // Resolve the input token's real decimals/symbol from the canonical registry
+  // instead of assuming 18-decimal WETH — that assumption silently broke any
+  // non-18-decimal input (e.g. 8-decimal WBTC showed "0.0000 WETH").
+  const allTokens = await listTokens()
+  const inputMeta = allTokens.find(t => t.address.toLowerCase() === body.inputToken.toLowerCase())
+  const inDecimals = inputMeta?.decimals ?? 18
+  const inSymbol    = inputMeta?.symbol ?? ''
   const toHuman = (raw: bigint) => (Number(raw) / 10 ** inDecimals).toFixed(4)
 
   return {
@@ -84,9 +91,9 @@ export async function simulateOrder(body: SimQuoteRequest): Promise<SimResult> {
     inputAmount:            body.inputAmount,
     quotes,
     totalFillAmount:        totalFill.toString(),
-    totalFillHuman:         `${toHuman(totalFill)} WETH`,
+    totalFillHuman:         `${toHuman(totalFill)} ${inSymbol}`.trim(),
     remainingAmount:        remaining.toString(),
-    remainingHuman:         `${toHuman(remaining)} WETH`,
+    remainingHuman:         `${toHuman(remaining)} ${inSymbol}`.trim(),
     remainingWouldFallback: remaining > 0n,
     coverageBps:            inputAmount > 0n ? Number((totalFill * 10000n) / inputAmount) : 0,
   }

@@ -672,9 +672,11 @@ export default function Simulate({ wallet }: { wallet: WalletState }) {
               </div>
             </div>
             <div className="uni-input-box">
-              <div className="uni-input-label">Output token</div>
+              <div className="uni-input-label">
+                Output token <span className="uni-label-muted">(amount received is input × price, not entered directly)</span>
+              </div>
               <div className="uni-input-row">
-                <span style={{ flex: 1, color: '#94a3b8', fontSize: '0.85rem' }}>set via start price below</span>
+                <span style={{ flex: 1 }} />
                 <TokenPill tokens={tokens} value={custOut} exclude={custIn} onChange={setCustOut} />
               </div>
             </div>
@@ -686,7 +688,7 @@ export default function Simulate({ wallet }: { wallet: WalletState }) {
                 {suggesting ? 'Analysing fillers…' : '✨ Suggest parameters'}
               </button>
             </div>
-            {sugg && <SuggestPanel sugg={sugg} inSym={custIn} outSym={custOut} />}
+            {sugg && <SuggestPanel sugg={sugg} inSym={custIn} outSym={custOut} showPrice={false} />}
 
             <div className="uni-detail-row">
               <span className="uni-detail-label">Start price ({custOut} per {custIn})</span>
@@ -711,7 +713,7 @@ export default function Simulate({ wallet }: { wallet: WalletState }) {
                   onChange={e => setCustMinFillBps(e.target.value)} />
               </div>
               <div className="uni-detail-row">
-                <span className="uni-detail-label">Current block <span className="uni-label-muted">(what-if override)</span></span>
+                <span className="uni-detail-label">Pretend the starting block is <span className="uni-label-muted">(optional — blank uses the live block below)</span></span>
                 <input className="uni-detail-input" type="number" placeholder={String(currentBlock ?? '')} value={custCurrentBlock}
                   onChange={e => setCustCurrentBlock(e.target.value)} />
               </div>
@@ -743,6 +745,23 @@ export default function Simulate({ wallet }: { wallet: WalletState }) {
             inDec={eff.inDec} outDec={eff.outDec} inSym={eff.inSym} outSym={eff.outSym}
             curLabel={blockOffset === 0 ? 'now' : `+${blockOffset}`}
           />
+          {/* Single source of truth for the curve's numbers — always derived live
+              from the current form values, so it can never go stale like a
+              one-time "suggested" snapshot would once the user edits a field. */}
+          <div style={{ fontSize: '0.78rem', color: '#475569', textAlign: 'center', marginTop: 6 }}>
+            Price decays from{' '}
+            <strong>{contractToHumanPrice(chart.startPriceContract, eff.inDec, eff.outDec).toFixed(4)}</strong>
+            {' → '}
+            <strong>
+              {contractToHumanPrice(
+                chart.startPriceContract > chart.decayContract * BigInt(chartSpan)
+                  ? chart.startPriceContract - chart.decayContract * BigInt(chartSpan)
+                  : 0n,
+                eff.inDec, eff.outDec
+              ).toFixed(4)}
+            </strong>
+            {' '}{eff.outSym}/{eff.inSym} over {chartSpan} blocks
+          </div>
           <div style={{ marginTop: 10 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', color: '#64748b', marginBottom: 4 }}>
               <span>Blocks from now: <strong>{blockOffset}</strong> <span className="uni-label-muted">(block {chart.startBlock + blockOffset})</span></span>
@@ -766,7 +785,7 @@ export default function Simulate({ wallet }: { wallet: WalletState }) {
         <div className="card">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span style={{ fontSize: '0.82rem', color: '#475569' }}>
-              Current block (Chain A): <strong>{currentBlock ?? '—'}</strong>
+              Live block on Chain A right now: <strong>{currentBlock ?? '—'}</strong>
             </span>
             <button className="ghost sm" style={{ marginTop: 0 }} onClick={refreshBlock}>↻</button>
           </div>
@@ -877,18 +896,40 @@ export default function Simulate({ wallet }: { wallet: WalletState }) {
         <div className="card">
           <h2>Results</h2>
 
-          <div style={{ display: 'flex', gap: 24, marginBottom: 8, flexWrap: 'wrap' }}>
-            {directQuote && <Stat label="Direct swap" value={`${directQuote.estimatedOutputHuman} ${eff.outSym}`} />}
-            {comparison && <Stat label="Via Dutch auction" value={`≈ ${comparison.viaAuction.toFixed(4)} ${eff.outSym}`} accent />}
-            {comparison && (
-              <Stat label="Difference vs. direct"
-                value={`${comparison.delta >= 0 ? '+' : ''}${comparison.delta.toFixed(2)}%`}
-                good={comparison.delta >= 0} warn={comparison.delta < 0} />
-            )}
-            {result && <Stat label="Total willing to fill" value={result.totalFillHuman} />}
-            {result && <Stat label="Remaining" value={result.remainingHuman} />}
-            {result && <Stat label="Order filled" value={`${pctOfOrder(result.totalFillAmount, result.inputAmount).toFixed(1)}%`} accent />}
-          </div>
+          {result && (
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', color: '#64748b', marginBottom: 4 }}>
+                <span>Order filled by fillers</span>
+                <strong style={{ color: '#0f172a' }}>{pctOfOrder(result.totalFillAmount, result.inputAmount).toFixed(1)}%</strong>
+              </div>
+              <div style={{ height: 8, borderRadius: 999, background: '#e2e8f0', overflow: 'hidden' }}>
+                <div style={{
+                  height: '100%',
+                  width: `${pctOfOrder(result.totalFillAmount, result.inputAmount)}%`,
+                  background: result.remainingWouldFallback ? '#d97706' : '#16a34a',
+                }} />
+              </div>
+              <div style={{ fontSize: '0.72rem', color: '#94a3b8', marginTop: 4 }}>
+                {result.totalFillHuman} filled directly
+                {result.remainingWouldFallback && <> · {result.remainingHuman} left over, would route through the fallback aggregator</>}
+              </div>
+            </div>
+          )}
+
+          {(directQuote || comparison) && (
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ fontSize: '0.78rem', color: '#64748b', marginBottom: 6 }}>Compared to swapping directly right now (no auction)</div>
+              <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
+                {directQuote && <Stat label="Direct swap" value={`${directQuote.estimatedOutputHuman} ${eff.outSym}`} />}
+                {comparison && <Stat label="Via Dutch auction" value={`≈ ${comparison.viaAuction.toFixed(4)} ${eff.outSym}`} accent />}
+                {comparison && (
+                  <Stat label="Difference"
+                    value={`${comparison.delta >= 0 ? '+' : ''}${comparison.delta.toFixed(2)}%`}
+                    good={comparison.delta >= 0} warn={comparison.delta < 0} />
+                )}
+              </div>
+            </div>
+          )}
 
           {directError && <div className="status bad">Direct-swap quote unavailable: {directError}</div>}
           {result && !unitsOk && (
@@ -897,26 +938,28 @@ export default function Simulate({ wallet }: { wallet: WalletState }) {
             </div>
           )}
 
+          <div style={{ fontSize: '0.78rem', color: '#64748b', margin: '10px 0 6px' }}>Would each filler take this order?</div>
           {result?.quotes.map(q => (
             <div key={q.filler} className={`slot-card ${q.wouldFill ? 'claimed' : ''}`}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
                 <span className={`tag ${q.wouldFill ? 'claimed' : 'available'}`}>
-                  {q.wouldFill ? 'would fill' : 'would skip'}
+                  {q.wouldFill ? '✓ would fill' : '— would skip'}
                 </span>
                 <strong style={{ fontSize: '0.88rem' }}>{q.filler}</strong>
+                {q.wouldFill && (
+                  <span style={{ marginLeft: 'auto', fontSize: '0.78rem', color: '#475569' }}>
+                    {q.fillAmountHuman} ({pctOfOrder(q.fillAmount, result?.inputAmount ?? '0').toFixed(1)}% of order) @ {q.auctionPrice} {eff.outSym}/{eff.inSym}
+                  </span>
+                )}
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '4px 16px', fontSize: '0.78rem' }}>
-                <div><span style={{ color: '#64748b' }}>fill amount: </span>{q.fillAmountHuman}</div>
-                <div><span style={{ color: '#64748b' }}>% of order: </span>{pctOfOrder(q.fillAmount, result?.inputAmount ?? '0').toFixed(1)}%</div>
-                <div><span style={{ color: '#64748b' }}>auction price: </span>{q.auctionPrice}</div>
-                <div><span style={{ color: '#64748b' }}>reason: </span>{q.reason}</div>
-              </div>
-              {Object.keys(q.metadata).length > 0 && (
-                <div style={{ marginTop: 6, fontSize: '0.72rem', color: '#64748b' }}>
-                  metadata: <code>{JSON.stringify(q.metadata)}</code>
-                </div>
-              )}
+              <div style={{ fontSize: '0.78rem', color: '#64748b' }}>{q.reason}</div>
               {q.error && <div style={{ color: '#dc2626', fontSize: '0.75rem', marginTop: 4 }}>error: {q.error}</div>}
+              {Object.keys(q.metadata).length > 0 && (
+                <details style={{ marginTop: 6 }}>
+                  <summary style={{ fontSize: '0.72rem', color: '#94a3b8', cursor: 'pointer' }}>details</summary>
+                  <code style={{ fontSize: '0.72rem', color: '#64748b' }}>{JSON.stringify(q.metadata)}</code>
+                </details>
+              )}
             </div>
           ))}
         </div>

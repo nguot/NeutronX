@@ -301,7 +301,9 @@ export async function getOrder(hash: string): Promise<OrderDetail | null> {
       txHash: f.tx_hash,
       path: f.path ?? null,
       blockNumber: f.block_number ? parseInt(f.block_number) : null,
-      createdAt: f.created_at.toISOString()
+      createdAt: f.created_at.toISOString(),
+      source: f.source ?? 'filler',
+      aggregator: f.aggregator ?? null
     }))
   }
 }

@@ -7,8 +7,9 @@ import Explore      from './pages/Explore'
 import Simulate     from './pages/Simulate'
 import Orders       from './pages/Orders'
 import Fillers      from './pages/Fillers'
+import StakeConfig  from './pages/StakeConfig'
 
-type Tab = 'swap' | 'crosschain' | 'orders' | 'explore' | 'simulate' | 'fillers'
+type Tab = 'swap' | 'crosschain' | 'orders' | 'explore' | 'simulate' | 'fillers' | 'stakeconfig'
 
 const NAV: { id: Tab; label: string }[] = [
   { id: 'swap',       label: 'Swap' },
@@ -17,6 +18,7 @@ const NAV: { id: Tab; label: string }[] = [
   { id: 'explore',    label: 'Explore' },
   { id: 'simulate',   label: 'Simulate' },
   { id: 'fillers',    label: 'Fillers' },
+  { id: 'stakeconfig', label: 'Stake Config' },
 ]
 
 function Inner() {
@@ -65,6 +67,7 @@ function Inner() {
         {tab === 'explore'    && <Explore wallet={wallet} />}
         {tab === 'simulate'   && <Simulate      wallet={wallet} />}
         {tab === 'fillers'    && <Fillers />}
+        {tab === 'stakeconfig' && <StakeConfig wallet={wallet} switchNetwork={switchNetwork} />}
       </main>
     </div>
   )

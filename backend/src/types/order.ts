@@ -51,6 +51,12 @@ export interface FillSummary {
   path:         PathStep[] | null
   blockNumber:  number | null
   createdAt:    string
+  /** 'filler' = a normal partial fill; 'fallback' = executed by FallbackExecutor
+   *  via an off-chain aggregator route near the order's deadline. */
+  source:       'filler' | 'fallback'
+  /** Aggregator key that supplied the route (e.g. 'uniswap'); set only when
+   *  source === 'fallback'. */
+  aggregator:   string | null
 }
 
 export interface PathStep {

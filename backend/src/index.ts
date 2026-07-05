@@ -11,8 +11,11 @@ import suggestRouter     from './routes/suggest'
 import tokensRouter      from './routes/tokens'
 import aggregatorsRouter from './routes/aggregators'
 import fallbackRouter    from './routes/fallback'
+import stakeConfigRouter from './routes/stakeConfig'
 import { startFallbackWatcher }   from './watcher/fallbackWatcher'
+import { startExpiryWatcher }     from './watcher/expiryWatcher'
 import { startIndexer }           from './indexer/eventIndexer'
+import { startStakeConfigIndexer } from './indexer/stakeConfigIndexer'
 import { startEscrowDstWatcher }  from './chain/escrowDstWatcher'
 import { startEscrowSrcWatcher }  from './chain/escrowSrcWatcher'
 import { initCrossChainSchema }   from './services/crosschainService'
@@ -35,6 +38,7 @@ app.use('/suggest-params', suggestRouter)
 app.use('/tokens',   tokensRouter)
 app.use('/aggregators', aggregatorsRouter)
 app.use('/fallback', fallbackRouter)
+app.use('/stake-config', stakeConfigRouter)
 
 app.get('/health', (_, res) => res.json({ ok: true }))
 
@@ -45,7 +49,9 @@ app.listen(PORT, async () => {
     await initCrossChainSchema()
     await initFillerSchema()
     startIndexer()
+    startStakeConfigIndexer()
     startFallbackWatcher()
+    startExpiryWatcher()
     // One watcher per registry chain, watching that chain's EscrowDstFactory —
     // fillers settle here whenever this chain is an order's destination.
     for (const chain of loadChainRegistry()) {

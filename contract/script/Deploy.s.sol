@@ -28,11 +28,29 @@ contract Deploy is Script {
         uint256 deployerKey = vm.envUint("PRIVATE_KEY");
         address deployer    = vm.addr(deployerKey);
 
+        // B1/B5: FillAuction's 3 economic roles (PARAM_ADMIN calls setStakeConfig,
+        // GUARDIAN calls rollback/cancelPendingConfig, KEEPER only moves
+        // sizeThresholds — B6, not wired yet). Each defaults to the deployer if
+        // its env var is unset, so a bare `forge script` still works, but
+        // demoing "tam quyền phân lập" (role separation) means setting these to
+        // 3 DIFFERENT addresses in .env — see ACCOUNTS.md.
+        address paramAdmin = vm.envOr("PARAM_ADMIN_ADDR", deployer);
+        address guardian   = vm.envOr("GUARDIAN_ADDR", deployer);
+        address keeper     = vm.envOr("KEEPER_ADDR", deployer);
+
         vm.startBroadcast(deployerKey);
 
         // 1. Deploy FillAuction
         FillAuction fillAuction = new FillAuction(deployer, WETH, UNIV3_FACTORY, TWAP_WINDOW, false);
         console.log("FillAuction:        ", address(fillAuction));
+
+        // 1b. Wire the 3 roles (deployer keeps DEFAULT_ADMIN_ROLE to grant/revoke later).
+        fillAuction.grantRole(fillAuction.PARAM_ADMIN_ROLE(), paramAdmin);
+        fillAuction.grantRole(fillAuction.GUARDIAN_ROLE(), guardian);
+        fillAuction.grantRole(fillAuction.KEEPER_ROLE(), keeper);
+        console.log("PARAM_ADMIN_ROLE -> ", paramAdmin);
+        console.log("GUARDIAN_ROLE    -> ", guardian);
+        console.log("KEEPER_ROLE      -> ", keeper);
 
         // 2. Deploy PartialFillReactor
         PartialFillReactor reactor = new PartialFillReactor(

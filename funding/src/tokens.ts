@@ -17,8 +17,18 @@ export const TOKENS: Record<string, { address: string; decimals: number; target:
   UNI:  { address: UNI,  decimals: 18, target: '10000'   },
 }
 
-// Binance hot wallets — deep balances of major tokens on a mainnet fork.
+// Deep-balance addresses on a mainnet fork, tried in order per token until one
+// has enough. Binance 14 covers WBTC/LINK/UNI/USDT comfortably, but its
+// stablecoin balances (esp. USDC/DAI) drift a lot over time — exchange hot
+// wallets move funds around, unlike protocol reserves that get refilled by
+// usage. The last two entries are stablecoin-specific fallbacks:
+//   - Curve 3pool: deep DAI + USDC + USDT reserve (all three in one contract)
+//   - Aave V3 aUSDC reserve: extra-deep USDC backup
+// Re-verify with `cast call <token> "balanceOf(address)(uint256)" <whale>
+// --rpc-url <RPC>` if funding starts failing again.
 export const WHALES = [
   '0x28C6c06298d514Db089934071355E5743bf21d60', // Binance 14
   '0xF977814e90dA44bFA03b6295A0616a897441aceC', // Binance 8 (fallback)
+  '0xbEbc44782C7dB0a1A60Cb6fe97d0b483032FF1C7', // Curve 3pool (DAI/USDC/USDT fallback)
+  '0x98C23E9d8f34FEFb1B7BD6a91B7FF122F4e16F5c', // Aave V3 aUSDC reserve (USDC fallback)
 ]

@@ -1,6 +1,6 @@
 import { INVENTORY, SUPPORTED_TOKENS } from '../config'
 import { erc20, wallet } from '../contract/contracts'
-import { getOrderbook, logOrderbook } from '../orderbook/mockOrderbook'
+import { getOrderbook } from '../orderbook/mockOrderbook'
 import { match } from '../matching/matcher'
 import type { OrderInfo, FillDecision } from '../types'
 
@@ -33,9 +33,11 @@ export async function decide(order: OrderInfo, currentBlock: number): Promise<Fi
   const inMeta  = SUPPORTED_TOKENS[order.inputToken]
   if (!outMeta || !inMeta) return no('unsupported token pair')
 
-  const auctionPriceHuman = Number(currentPrice) / 10 ** outMeta.decimals
+  const inputAmount        = BigInt(order.inputAmount)
+  const auctionPriceHuman  = Number(currentPrice) / 10 ** outMeta.decimals
+  const inputAmountHuman   = (Number(inputAmount) / 10 ** inMeta.decimals).toFixed(4)
   console.log(
-    `${tag} ${sym(order.inputToken)}→${sym(order.outputToken)}` +
+    `${tag} swapper selling ${inputAmountHuman} ${sym(order.inputToken)} → ${sym(order.outputToken)}` +
     `  auctionPrice=${auctionPriceHuman.toFixed(4)}  blocksLeft=${blocksLeft}`
   )
 
@@ -47,23 +49,27 @@ export async function decide(order: OrderInfo, currentBlock: number): Promise<Fi
   const outputBalance   = (await erc20(order.outputToken).balanceOf(wallet.address)).toBigInt()
   if (outputBalance === 0n) return no('zero inventory of outputToken')
 
-  const usableBalance        = (outputBalance * BigInt(INVENTORY.MAX_INVENTORY_USE_BPS)) / 10_000n
-  const inventoryCapacity    = (usableBalance * 10n**18n) / currentPrice
-  const inputAmount          = BigInt(order.inputAmount)
-  const available            = inventoryCapacity < inputAmount ? inventoryCapacity : inputAmount
+  const usableBalance     = (outputBalance * BigInt(INVENTORY.MAX_INVENTORY_USE_BPS)) / 10_000n
+  const inventoryCapacity = (usableBalance * 10n**18n) / currentPrice
+  const available         = inventoryCapacity < inputAmount ? inventoryCapacity : inputAmount
+  const availableHuman    = (Number(available) / 10 ** inMeta.decimals).toFixed(4)
 
-  const minFill = (inputAmount * BigInt(order.minFillBps)) / 10_000n
-
-  // ── Greedy match against orderbook ────────────────────────────────────────
+  // ── Match against orderbook — 100% fill only ──────────────────────────────
+  // This filler no longer takes a partial slice of the book: either the bids
+  // fully cover `available` (the whole order, or as much of it as inventory
+  // allows) profitably, or it skips the order entirely. That supersedes the
+  // old minFillBps partial-fill floor — a 100% match always clears it.
   const result = match(currentPrice, available, book.bids)
 
   if (!result) {
-    logOrderbook(book)
-    return no(`no profitable bids — best bid must be above auction price ${auctionPriceHuman.toFixed(4)}`)
+    const bestBid = book.bids[0]
+    const bestBidHuman = bestBid ? (Number(bestBid.price) / 10 ** outMeta.decimals).toFixed(4) : 'none'
+    return no(`best bid ${bestBidHuman} <= auction price ${auctionPriceHuman.toFixed(4)} — not profitable`)
   }
 
-  if (result.fillAmount < minFill) {
-    return no(`match fills ${result.fillAmount} < minFill ${minFill}`)
+  if (result.fillAmount < available) {
+    const gotHuman = (Number(result.fillAmount) / 10 ** inMeta.decimals).toFixed(4)
+    return no(`book depth covers only ${gotHuman} of ${availableHuman} ${inMeta.symbol} — need a 100% fill`)
   }
 
   if (result.estimatedProfit < BigInt(INVENTORY.MIN_PROFIT_RAW)) {
@@ -75,7 +81,7 @@ export async function decide(order: OrderInfo, currentBlock: number): Promise<Fi
   const balHuman    = (Number(outputBalance)           / 10 ** outMeta.decimals).toFixed(2)
 
   console.log(
-    `${tag} ✔ FILL  fill=${fillHuman} ${inMeta.symbol}` +
+    `${tag} ✔ FILL (100%)  fill=${fillHuman} ${inMeta.symbol}` +
     `  profit=${profitHuman} ${outMeta.symbol}` +
     `  levels=${result.matchedLevels}  inventory=${balHuman} ${outMeta.symbol}`
   )

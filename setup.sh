@@ -25,13 +25,20 @@ mkdir -p "$LOG_DIR"
 export PATH="$HOME/.foundry/bin:$PATH"
 
 ALCHEMY_URL="https://eth-mainnet.g.alchemy.com/v2/NqceSkD9a9GU5a-EbT9wp"
-FORK_BLOCK="20500000"
+FORK_BLOCK="25450000"  # ~Jul 2026 — see the NOTE in chaina_anvil.sh before re-bumping
 RPC_A="http://127.0.0.1:8545"
 RPC_B="http://127.0.0.1:8546"
 CHAIN_A_ID=31337
 CHAIN_B_ID=31338
 
 PK0="0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80" # Account 0 — deployer/swapper
+
+# FillAuction's 3 economic roles (see ACCOUNTS.md) — Deploy.s.sol falls back to
+# the deployer for any of these left unset, so export them explicitly here or
+# the frontend's Guardian/ParamAdmin pages can only be tested with account 0.
+PARAM_ADMIN_ADDR="0x90F79bf6EB2c4f870365E785982E1f101E93b906" # account 3
+GUARDIAN_ADDR="0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65"   # account 4
+KEEPER_ADDR="0x9965507D1a55bcC2695C58ba16FB37d819B0A4dc"     # account 5
 
 # ── colours / logging ────────────────────────────────────────────────────────
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; CYAN='\033[0;36m'; BOLD='\033[1m'; NC='\033[0m'
@@ -74,13 +81,32 @@ start_chain "$RPC_B" 8546 "$CHAIN_B_ID" "Chain B" "$LOG_DIR/anvil_b.log"
 step "Step 2 — deploying core contracts to Chain A"
 
 DEPLOY_OUT=$(cd "$ROOT/contract" && PRIVATE_KEY="$PK0" \
-  forge script script/Deploy.s.sol:Deploy --rpc-url "$RPC_A" --broadcast 2>&1) || true
+  PARAM_ADMIN_ADDR="$PARAM_ADMIN_ADDR" GUARDIAN_ADDR="$GUARDIAN_ADDR" KEEPER_ADDR="$KEEPER_ADDR" \
+  forge script script/Deploy.s.sol:Deploy --rpc-url "$RPC_A" --broadcast --legacy 2>&1) || true
 echo "$DEPLOY_OUT" > "$LOG_DIR/deploy.log"
+
+# --legacy bypasses this Alchemy fork's eth_feeHistory ("pruned history
+# unavailable") which otherwise fails the broadcast phase silently — forge
+# still exits 0 and leaves a *simulated* address in run-latest.json, so check
+# the log for the actual broadcast error instead of trusting the exit code.
+if echo "$DEPLOY_OUT" | grep -q "^Error:"; then
+  err "forge script broadcast failed — see $LOG_DIR/deploy.log"
+  tail -20 "$LOG_DIR/deploy.log"
+  exit 1
+fi
 
 RUN_JSON="$ROOT/contract/broadcast/Deploy.s.sol/$CHAIN_A_ID/run-latest.json"
 FILL_AUCTION=$(jq -r '.transactions[] | select(.contractName=="FillAuction") | .contractAddress' "$RUN_JSON" | head -1)
 PARTIAL_FILL_REACTOR=$(jq -r '.transactions[] | select(.contractName=="PartialFillReactor") | .contractAddress' "$RUN_JSON" | head -1)
 FALLBACK_EXECUTOR=$(jq -r '.transactions[] | select(.contractName=="FallbackExecutor") | .contractAddress' "$RUN_JSON" | head -1)
+
+# Belt-and-suspenders: run-latest.json can contain a stale/simulated address
+# even when DEPLOY_OUT looks clean (e.g. a prior failed run's file lingering).
+# Confirm the address actually has code on Chain A before trusting it.
+if [ "$(cast code "$PARTIAL_FILL_REACTOR" --rpc-url "$RPC_A" 2>/dev/null)" = "0x" ]; then
+  err "PartialFillReactor has no code on-chain — broadcast did not really happen. See $LOG_DIR/deploy.log"
+  exit 1
+fi
 
 if [ -z "$PARTIAL_FILL_REACTOR" ]; then
   err "deploy failed or parse failed — see $LOG_DIR/deploy.log"

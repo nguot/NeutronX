@@ -39,8 +39,18 @@ CREATE TABLE IF NOT EXISTS fills (
     path            JSONB,
     graph           JSONB,
     block_number    BIGINT,
+    -- 'filler' = a normal partial fill (regular filler bot); 'fallback' = executed
+    -- by FallbackExecutor.executeFallback() via an off-chain aggregator route.
+    source          TEXT NOT NULL DEFAULT 'filler',
+    -- aggregator key that supplied the route (e.g. 'uniswap', 'kyberswap');
+    -- NULL for source='filler' rows, always set for source='fallback' rows.
+    aggregator      TEXT,
     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- idempotent migration for pre-existing databases
+ALTER TABLE fills ADD COLUMN IF NOT EXISTS source     TEXT NOT NULL DEFAULT 'filler';
+ALTER TABLE fills ADD COLUMN IF NOT EXISTS aggregator TEXT;
 
 CREATE INDEX IF NOT EXISTS idx_orders_swapper ON orders(swapper);
 CREATE INDEX IF NOT EXISTS idx_orders_status  ON orders(status);

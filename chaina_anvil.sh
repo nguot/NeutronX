@@ -10,14 +10,22 @@
 #   bash chaina_anvil.sh
 
 ALCHEMY_URL="https://eth-mainnet.g.alchemy.com/v2/NqceSkD9a9GU5a-EbT9wp"
-FORK_BLOCK="20500000"   # same block as Chain B so token balances match
+FORK_BLOCK="25450000"   # same block as Chain B so token balances match.
+# NOTE: bump this every so often — a block pinned too far in the past starts
+# failing `eth_feeHistory` ("pruned history unavailable") on Alchemy's free
+# tier, AND the hardcoded whale addresses (funding/, filler/*/src/funding/,
+# scripts/crosschain/setup_cc.sh, scripts/race/common.sh) can drain over time
+# (verified: the old 20500000 pin's USDC whales had gone from ~543M/45K USDC
+# down to ~$0/~45K by 2026-07 — re-check whale balances at the new block
+# with `cast call <token> "balanceOf(address)(uint256)" <whale> --block <N>`
+# before bumping again).
 
 echo ""
 echo "╔══════════════════════════════════════════════════════════╗"
 echo "║  NeutronX Cross-Chain — Chain A (Source / WETH)         ║"
 echo "║  Port       : 8545                                       ║"
 echo "║  Chain ID   : 31337                                      ║"
-echo "║  Fork block : $FORK_BLOCK (~Sep 2024)                ║"
+echo "║  Fork block : $FORK_BLOCK (~Jul 2026)                ║"
 echo "╚══════════════════════════════════════════════════════════╝"
 echo ""
 echo "Chain A is the source chain where the swapper locks WETH."

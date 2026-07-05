@@ -12,10 +12,25 @@ import { SUPPORTED_TOKENS, CHAIN_B_RPC } from '../config'
 
 const WETH = '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2'
 
-// Binance hot wallets — deep balances of major tokens on a mainnet fork.
+// Deep-balance addresses on a mainnet fork, tried in order until one has
+// enough for the FULL target (fundFromWhale needs ONE whale to cover it all,
+// not a sum across several). Binance 14 covers USDT/UNI comfortably; the rest
+// are stablecoin/LINK-specific fallbacks — needed because Binance 14's own
+// USDC/DAI/LINK balances (exchange hot wallet, moves around) now sit BELOW
+// what CoWFiller+WhaleFiller need if both seed from the same fork:
+//   - Curve 3pool: deep DAI + USDC + USDT reserve (protocol reserve, not a
+//     wallet that drains — refilled by swap activity)
+//   - Aave V3 aUSDC reserve: extra-deep USDC backup
+//   - deep LINK pool: LINK backup (Binance 14 alone is short of the 1M target)
+// Re-verify with `cast call <token> "balanceOf(address)(uint256)" <whale>
+// --rpc-url <RPC>` if seeding starts failing again — WBTC is deliberately
+// NOT chased with a bigger whale (see the WBTC target comment below).
 const WHALES = [
   '0x28C6c06298d514Db089934071355E5743bf21d60', // Binance 14
   '0xF977814e90dA44bFA03b6295A0616a897441aceC', // Binance 8 (fallback)
+  '0xbEbc44782C7dB0a1A60Cb6fe97d0b483032FF1C7', // Curve 3pool (DAI/USDC/USDT fallback)
+  '0x98C23E9d8f34FEFb1B7BD6a91B7FF122F4e16F5c', // Aave V3 aUSDC reserve (USDC fallback)
+  '0xa6Cc3C2531FdaA6Ae1A3CA84c2855806728693e8', // Deep LINK pool (LINK fallback)
 ]
 
 // Human-readable seed targets per symbol (converted to raw via token decimals).
@@ -26,12 +41,12 @@ const TARGETS: Record<string, string> = {
   // fills. Defaults to the "infinite-ish" 20M for normal dev/demo use.
   USDC: process.env.SEED_USDC_TARGET || '20000000',
   USDT: '20000000',
-  // Binance 14 (WHALE_1) holds ~3.39M DAI on this fork and WHALE_2 holds 0 —
-  // fundFromWhale() needs ONE whale to cover the full target, so keep this
-  // well under ~3.39M (also leaves headroom if both fillers seed from the
-  // same anvil instance).
   DAI:  '1000000',
-  WBTC: '500',
+  // WBTC is genuinely scarce on-chain (~150k total supply) — no single current
+  // whale comfortably clears more than a few hundred WBTC, unlike the
+  // stablecoins. 100 stays comfortably under Binance 14's own balance, so no
+  // extra whale is needed for this one; don't raise it without re-checking.
+  WBTC: '100',
   LINK: '1000000',
   UNI:  '1000000',
 }

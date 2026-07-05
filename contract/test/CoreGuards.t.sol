@@ -2,6 +2,8 @@
 pragma solidity ^0.8.20;
 
 import "./adversarial/AdversarialBase.sol";
+import { IAccessControl } from "@openzeppelin/contracts/access/IAccessControl.sol";
+import { DynamicStakeLib } from "../src/libs/DynamicStakeLib.sol";
 
 /// Branch-coverage batch for the protective shell around the two core contracts:
 /// owner/access guards, one-time setters, L-2 input-bound checks, and the
@@ -33,7 +35,9 @@ contract CoreGuardsTest is AdversarialBase {
 
     function test_setReactor_revert_notOwner() public {
         vm.prank(notOwner);
-        vm.expectRevert("not owner");
+        vm.expectRevert(abi.encodeWithSelector(
+            IAccessControl.AccessControlUnauthorizedAccount.selector, notOwner, bytes32(0) // DEFAULT_ADMIN_ROLE
+        ));
         auction.setReactor(address(0xBEEF));
     }
 
@@ -50,50 +54,82 @@ contract CoreGuardsTest is AdversarialBase {
         fresh.setReactor(address(0));
     }
 
-    // ── setCollateralRate (L-2 bounds) ──
-    function test_setCollateralRate_revert_notOwner() public {
+    // ── setStakeConfig (B3: replaces setCollateralRate/setRefundTable with one
+    //    atomic setter guarded by `_validate`'s 7 invariants) ──
+    function test_setStakeConfig_revert_notParamAdmin() public {
+        bytes32 role = auction.PARAM_ADMIN_ROLE(); // read before arming prank/expectRevert
+        DynamicStakeLib.StakeConfig memory c = _defaultStakeConfig();
         vm.prank(notOwner);
-        vm.expectRevert("not owner");
-        auction.setCollateralRate(0, 1000);
+        vm.expectRevert(abi.encodeWithSelector(
+            IAccessControl.AccessControlUnauthorizedAccount.selector, notOwner, role
+        ));
+        auction.setStakeConfig(c);
     }
 
-    function test_setCollateralRate_revert_badBucket() public {
-        vm.expectRevert("bad bucket");
-        auction.setCollateralRate(4, 1000); // valid buckets are 0..3
+    function test_setStakeConfig_revert_rateTooHigh() public {
+        DynamicStakeLib.StakeConfig memory c = _defaultStakeConfig();
+        c.collateralRate[0] = auction.MAX_COLLATERAL_RATE() + 1;
+        vm.expectRevert("rate out of bounds");
+        auction.setStakeConfig(c);
     }
 
-    function test_setCollateralRate_revert_rateTooHigh() public {
-        uint32 tooHigh = auction.MAX_COLLATERAL_RATE() + 1; // read before arming expectRevert
-        vm.expectRevert("rate too high");
-        auction.setCollateralRate(0, tooHigh);
+    function test_setStakeConfig_revert_rateTooLow() public {
+        DynamicStakeLib.StakeConfig memory c = _defaultStakeConfig();
+        c.collateralRate[0] = auction.MIN_COLLATERAL_RATE() - 1;
+        vm.expectRevert("rate out of bounds");
+        auction.setStakeConfig(c);
     }
 
-    function test_setCollateralRate_success() public {
-        auction.setCollateralRate(0, 1234); // positive control for the happy branch
-        assertEq(auction.collateralRate(0), 1234);
-    }
-
-    // ── setRefundTable (L-2 bounds) ──
-    function test_setRefundTable_revert_notOwner() public {
-        vm.prank(notOwner);
-        vm.expectRevert("not owner");
-        auction.setRefundTable(0, 0, 1000);
-    }
-
-    function test_setRefundTable_revert_badSizeBucket() public {
-        vm.expectRevert("bad bucket");
-        auction.setRefundTable(4, 0, 1000); // size bucket out of range (0..3)
-    }
-
-    function test_setRefundTable_revert_badRatioBucket() public {
-        vm.expectRevert("bad bucket");
-        auction.setRefundTable(0, 5, 1000); // ratio bucket out of range (0..4)
-    }
-
-    function test_setRefundTable_revert_tooHigh() public {
-        uint32 tooHigh = auction.MAX_REFUND_BPS() + 1; // read before arming expectRevert
+    function test_setStakeConfig_revert_refundTooHigh() public {
+        DynamicStakeLib.StakeConfig memory c = _defaultStakeConfig();
+        c.refundTable[4] = auction.MAX_REFUND_BPS() + 1; // row 0, last column
         vm.expectRevert("refund > 100%");
-        auction.setRefundTable(0, 0, tooHigh);
+        auction.setStakeConfig(c);
+    }
+
+    function test_setStakeConfig_revert_refundRowNotEndingAt100() public {
+        DynamicStakeLib.StakeConfig memory c = _defaultStakeConfig();
+        c.refundTable[4] = 9000; // row 0's last column must be exactly 10000
+        vm.expectRevert("refund row must end at 100%");
+        auction.setStakeConfig(c);
+    }
+
+    function test_setStakeConfig_revert_refundRowNotMonotonic() public {
+        DynamicStakeLib.StakeConfig memory c = _defaultStakeConfig();
+        c.refundTable[1] = 9999; // row 0, column 1 — higher than column 2 (2500)
+        vm.expectRevert("refund row not monotonic");
+        auction.setStakeConfig(c);
+    }
+
+    function test_setStakeConfig_revert_sizeThresholdsNotIncreasing() public {
+        DynamicStakeLib.StakeConfig memory c = _defaultStakeConfig();
+        c.sizeThresholds[1] = c.sizeThresholds[0]; // 1 ether, 1 ether, 100 ether — not strictly increasing
+        vm.expectRevert("size thresholds not increasing");
+        auction.setStakeConfig(c);
+    }
+
+    function test_setStakeConfig_revert_timeThresholdsNotDecreasing() public {
+        DynamicStakeLib.StakeConfig memory c = _defaultStakeConfig();
+        c.timeThresholds[1] = c.timeThresholds[0]; // 50, 50, 5 — not strictly decreasing
+        vm.expectRevert("time thresholds not decreasing");
+        auction.setStakeConfig(c);
+    }
+
+    function test_setStakeConfig_revert_badRefundShape() public {
+        DynamicStakeLib.StakeConfig memory c = _defaultStakeConfig();
+        c.refundTable = new uint32[](19); // should be S*R = 4*5 = 20
+        vm.expectRevert("bad refund shape");
+        auction.setStakeConfig(c);
+    }
+
+    function test_setStakeConfig_success() public {
+        DynamicStakeLib.StakeConfig memory c = _defaultStakeConfig();
+        // +10%: a TIGHTENING move (more collateral required) within
+        // MAX_DELTA_BPS (20%), so B4's guard applies it immediately instead of
+        // queuing it as a pending loosening.
+        c.collateralRate[0] = 2200;
+        auction.setStakeConfig(c);
+        assertEq(auction.stakeConfig().collateralRate[0], 2200);
     }
 
     // ─────────────────────────────────────────────────────────────────────────

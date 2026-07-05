@@ -4,6 +4,12 @@ out = "out"
 libs = ["lib"]
 via_ir = true
 # can via_ir do code PartialFill qua nhieu bien
+# NOTE: do NOT enable `optimizer` here. via_ir + optimizer (confirmed on both
+# solc 0.8.26 and 0.8.35) silently drops the second of two sequential writes to
+# fields packed into the same storage slot — reproduced in DecayCursorLib.reset()
+# (test/libs/DecayCursorLib.t.sol test_reset_resetsPrice fails when it's on).
+# FillAuction's contract-size problem is solved instead via library extraction
+# (see src/libs/DynamicStakeLib.sol) — keep the optimizer OFF.
 remappings = [
     "@uniswap/v4-core/=lib/v4-core/",
     "permit2/=lib/permit2/src/",

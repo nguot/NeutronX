@@ -15,14 +15,16 @@
 #   bash chainb_anvil.sh
 
 ALCHEMY_URL="https://eth-mainnet.g.alchemy.com/v2/NqceSkD9a9GU5a-EbT9wp"
-FORK_BLOCK="20500000"   # same block as Chain A so token balances match
+FORK_BLOCK="25450000"   # same block as Chain A so token balances match.
+# NOTE: see the matching comment in chaina_anvil.sh — bump both together, and
+# re-verify whale balances at the new block before doing so.
 
 echo ""
 echo "╔══════════════════════════════════════════════════════════╗"
 echo "║  NeutronX Cross-Chain — Chain B (Destination / USDC)    ║"
 echo "║  Port       : 8546                                       ║"
 echo "║  Chain ID   : 31338                                      ║"
-echo "║  Fork block : $FORK_BLOCK (~Sep 2024)                ║"
+echo "║  Fork block : $FORK_BLOCK (~Jul 2026)                ║"
 echo "╚══════════════════════════════════════════════════════════╝"
 echo ""
 echo "Chain B is the destination chain where fillers deposit USDC."

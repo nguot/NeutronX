@@ -38,7 +38,11 @@ A_COW=0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC
 WETH=0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2
 USDC=0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48
 PERMIT2=0x000000000022D473030F116dDEE9F6B43aC78BA3
-USDC_WHALE=0x28C6c06298d514Db089934071355E5743bf21d60  # Binance 14 (holds lots of USDC)
+# Aave V3 aUSDC reserve — Binance 14 (the old whale here) now only holds ~45K
+# USDC (was much deeper when this was first pinned); a protocol reserve is far
+# more stable. Re-verify with `cast call <USDC> "balanceOf(address)(uint256)"
+# <whale> --rpc-url <RPC>` if this ever needs replacing again.
+USDC_WHALE=0x98C23E9d8f34FEFb1B7BD6a91B7FF122F4e16F5c
 
 # Filled in by deploy()
 FILL_AUCTION=""; REACTOR=""; FALLBACK=""

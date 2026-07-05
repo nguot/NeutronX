@@ -1,4 +1,5 @@
 import { AlphaRouter, SwapType } from '@uniswap/smart-order-router'
+import { Protocol } from '@uniswap/router-sdk'
 import { TradeType, CurrencyAmount, Token, Percent } from '@uniswap/sdk-core'
 import { ethers } from 'ethers'
 import { AggregatorAdapter, AggregatorQuote, QuoteParams } from './types'
@@ -38,7 +39,11 @@ export const uniswapAdapter: AggregatorAdapter = {
         recipient,
         slippageTolerance: SLIPPAGE,
         deadline:          Math.floor(Date.now() / 1000) + 300,
-      }
+      },
+      // SwapRouter02 can't execute V4 pools anyway, and the V4 subgraph
+      // provider hits the deprecated hosted Graph service and throws — cap
+      // routing to V2/V3 so it never fetches V4 candidate pools at all.
+      { protocols: [Protocol.V2, Protocol.V3] }
     )
 
     if (!route || !route.methodParameters) return null

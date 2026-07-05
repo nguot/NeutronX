@@ -58,6 +58,7 @@ bash setup.sh
 This does in one shot:
 - Starts Chain A (port 8545) and a dummy Chain B (port 8546)
 - Deploys `FillAuction`, `PartialFillReactor`, `FallbackExecutor` to Chain A
+- Grants FillAuction's `PARAM_ADMIN_ROLE`/`GUARDIAN_ROLE`/`KEEPER_ROLE` to dedicated dev accounts (see ACCOUNTS.md)
 - Writes contract addresses into `backend/.env`, `filler/CoWFiller/.env`, `filler/WhaleFiller/.env`
 - Runs `funding/` to give every dev account ETH + WETH + USDC
 
@@ -89,7 +90,25 @@ cd frontend && npm run dev
 Frontend: http://localhost:3001  
 Backend API: http://localhost:3000
 
-### 5. Stop
+### 5. Try the Stake Config page
+
+`setup.sh` grants FillAuction's 3 economic roles to dedicated dev accounts (see
+[ACCOUNTS.md](ACCOUNTS.md)) so each tab can be tested with a different MetaMask
+account:
+
+| Tab | Wallet needed | Account |
+|-----|---------------|---------|
+| Overview | none (read-only) | — |
+| Guardian | `GUARDIAN_ROLE` | account 4 |
+| Param Admin | `PARAM_ADMIN_ROLE` | account 3 |
+| History | none (read-only) | — |
+
+To use Guardian/Param Admin, import the matching private key from ACCOUNTS.md
+into MetaMask and add a network for Chain A (RPC `http://127.0.0.1:8545`,
+chainId `31337`). Overview/History read live and historical state without a
+wallet connection.
+
+### 6. Stop
 
 ```bash
 bash setup.sh stop   # kills both Anvil forks

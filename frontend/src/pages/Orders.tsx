@@ -1,10 +1,13 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useMemo } from 'react'
+import { ethers } from 'ethers'
 import type { WalletState } from '../hooks/useWallet'
 import { useAppConfig } from '../context/AppConfig'
 import { BlockEta } from '../lib/blocktime'
 import { fromWei } from '../lib/tokens'
 import { AuctionChart, colorForFiller } from '../components/AuctionChart'
 import CrossChainOrders from '../components/CrossChainOrders'
+import { REACTOR_ABI } from '../contract/reactorAbi'
+import { extractRevertReason } from '../contract/fillAuctionAbi'
 
 interface Fill {
   id:           number
@@ -14,6 +17,8 @@ interface Fill {
   txHash:       string | null
   blockNumber:  number | null
   createdAt:    string
+  source:       'filler' | 'fallback'
+  aggregator:   string | null
 }
 
 interface Order {
@@ -53,16 +58,18 @@ interface FallbackCheckResult {
   chainId:             number
   remainingInput:      string
   preferredAggregator: string | null
+  requiredMinOutput:   string
   results:             AggregatorCheckResult[]
 }
 
-type StatusFilter = 'all' | 'pending' | 'active' | 'filled' | 'cancelled'
+type StatusFilter = 'all' | 'pending' | 'active' | 'filled' | 'cancelled' | 'expired'
 
 const STATUS_COLORS: Record<string, string> = {
   pending:   'badge pending',
   active:    'badge active',
   filled:    'badge filled',
   cancelled: 'badge cancelled',
+  expired:   'badge expired',
 }
 
 function short(addr: string) { return addr ? `${addr.slice(0, 8)}…${addr.slice(-4)}` : '—' }
@@ -128,7 +135,7 @@ export default function Orders({ wallet }: { wallet: WalletState }) {
       <div className="card" style={{ padding: '14px 20px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
           <span style={{ fontSize: '0.78rem', fontWeight: 600, color: '#64748b' }}>Status:</span>
-          {(['all','pending','active','filled','cancelled'] as StatusFilter[]).map(s => (
+          {(['all','pending','active','filled','cancelled','expired'] as StatusFilter[]).map(s => (
             <button
               key={s}
               className={filter === s ? '' : 'ghost'}
@@ -208,7 +215,7 @@ export default function Orders({ wallet }: { wallet: WalletState }) {
                     <tr>
                       <td colSpan={8} style={{ background: '#f8fafc', padding: '16px 20px' }}>
                         {detailLoading && <div style={{ color: '#94a3b8', fontSize: '0.82rem' }}>Loading…</div>}
-                        {detail && <OrderDetailPanel order={detail} />}
+                        {detail && <OrderDetailPanel order={detail} wallet={wallet} onCancelled={load} />}
                       </td>
                     </tr>
                   )}
@@ -234,8 +241,8 @@ export default function Orders({ wallet }: { wallet: WalletState }) {
   )
 }
 
-function OrderDetailPanel({ order }: { order: OrderDetail }) {
-  const { backendUrl, tokens, currentBlock } = useAppConfig()
+function OrderDetailPanel({ order, wallet, onCancelled }: { order: OrderDetail; wallet: WalletState; onCancelled: () => void }) {
+  const { backendUrl, tokens, currentBlock, partialFillReactor } = useAppConfig()
   const inT  = tokens.find(t => t.address.toLowerCase() === order.inputToken.toLowerCase())
   const outT = tokens.find(t => t.address.toLowerCase() === order.outputToken.toLowerCase())
   const inDec  = inT?.decimals ?? 18
@@ -251,6 +258,30 @@ function OrderDetailPanel({ order }: { order: OrderDetail }) {
   const [fbCheck, setFbCheck]     = useState<FallbackCheckResult | null>(null)
   const [fbLoading, setFbLoading] = useState(false)
   const [fbError, setFbError]     = useState('')
+
+  const reactorIface = useMemo(() => new ethers.utils.Interface(REACTOR_ABI), [])
+  const [cancelBusy, setCancelBusy] = useState(false)
+  const [cancelErr, setCancelErr]   = useState('')
+  const [cancelMsg, setCancelMsg]   = useState('')
+
+  const canCancel = wallet.connected
+    && wallet.account.toLowerCase() === order.swapper.toLowerCase()
+    && (order.status === 'pending' || order.status === 'active')
+
+  async function cancelOrder() {
+    if (!wallet.signer) return
+    if (!window.confirm('Cancel this order? This invalidates its nonce on-chain — permanent and cannot be undone.')) return
+    setCancelErr(''); setCancelMsg(''); setCancelBusy(true)
+    try {
+      const c  = new ethers.Contract(partialFillReactor, REACTOR_ABI, wallet.signer)
+      const tx = await c.invalidateNonce(order.nonce)
+      setCancelMsg('Cancelling…')
+      await tx.wait()
+      setCancelMsg('Cancelled on-chain — order list updates once the indexer catches up (a few seconds).')
+      onCancelled()
+    } catch (e: any) { setCancelErr(extractRevertReason(e, reactorIface)) }
+    setCancelBusy(false)
+  }
 
   async function checkFallback() {
     setFbLoading(true)
@@ -306,6 +337,16 @@ function OrderDetailPanel({ order }: { order: OrderDetail }) {
         <Field label="Fallback Route"  value={order.preferredAggregator ?? 'Auto (best price)'} />
       </div>
 
+      {canCancel && (
+        <div className="uni-fill-section" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <button className="ghost sm" style={{ marginTop: 0 }} onClick={cancelOrder} disabled={cancelBusy}>
+            {cancelBusy ? 'Cancelling…' : 'Cancel order'}
+          </button>
+          {cancelErr && <span className="status bad" style={{ fontSize: '0.78rem' }}>{cancelErr}</span>}
+          {cancelMsg && <span style={{ fontSize: '0.78rem', color: '#16a34a' }}>{cancelMsg}</span>}
+        </div>
+      )}
+
       <div className="uni-fill-section">
         <div className="uni-fill-label">
           <span>Fallback Route Check</span>
@@ -320,15 +361,27 @@ function OrderDetailPanel({ order }: { order: OrderDetail }) {
               Remaining: {fromWei(BigInt(fbCheck.remainingInput), inDec)} {inSym} on chain {fbCheck.chainId}
               {fbCheck.preferredAggregator && <> · pinned to <strong>{fbCheck.preferredAggregator}</strong></>}
             </div>
-            {fbCheck.results.map(r => (
-              <div key={r.key} style={{ display: 'flex', alignItems: 'baseline', gap: 8, padding: '3px 0' }}>
-                <span style={{ color: r.ok ? '#16a34a' : '#dc2626', fontWeight: 600 }}>{r.ok ? '✓' : '✗'}</span>
-                <span style={{ minWidth: 160 }}>{r.name}</span>
-                {r.ok
-                  ? <span>{fromWei(BigInt(r.minAmountOut!), outDec)} {outSym} min</span>
-                  : <span className="text-muted" style={{ wordBreak: 'break-all' }}>{r.error}</span>}
-              </div>
-            ))}
+            <div className="text-muted" style={{ marginBottom: 6 }}>
+              Required floor: <strong>{fromWei(BigInt(fbCheck.requiredMinOutput), outDec)} {outSym}</strong>{' '}
+              (swapper's signed minimum, pro-rated to the remaining amount — a quote below this reverts on-chain)
+            </div>
+            {fbCheck.results.map(r => {
+              const clearsFloor = r.ok && BigInt(r.minAmountOut!) >= BigInt(fbCheck.requiredMinOutput)
+              return (
+                <div key={r.key} style={{ display: 'flex', alignItems: 'baseline', gap: 8, padding: '3px 0' }}>
+                  <span style={{ color: r.ok ? '#16a34a' : '#dc2626', fontWeight: 600 }}>{r.ok ? '✓' : '✗'}</span>
+                  <span style={{ minWidth: 160 }}>{r.name}</span>
+                  {r.ok
+                    ? <span>
+                        {fromWei(BigInt(r.minAmountOut!), outDec)} {outSym} min{' '}
+                        <span style={{ color: clearsFloor ? '#16a34a' : '#dc2626', fontWeight: 600 }}>
+                          {clearsFloor ? '· clears floor' : '· below floor (would revert)'}
+                        </span>
+                      </span>
+                    : <span className="text-muted" style={{ wordBreak: 'break-all' }}>{r.error}</span>}
+                </div>
+              )
+            })}
           </div>
         )}
       </div>
@@ -337,9 +390,14 @@ function OrderDetailPanel({ order }: { order: OrderDetail }) {
         ? <p className="uni-waiting">Waiting for fillers…</p>
         : order.fillDetails.map(f => (
           <div key={f.id} className="uni-fill-row">
-            <span className="uni-fill-dot" style={{ background: colorForFiller(f.filler) }} />
-            <span className="uni-fill-filler">{f.filler}</span>
-            <span className="uni-fill-info">{fromWei(BigInt(f.fillAmount), inDec)} {inSym}</span>
+            <span className="uni-fill-dot" style={{ background: f.source === 'fallback' ? '#f59e0b' : colorForFiller(f.filler) }} />
+            <span className="uni-fill-filler">
+              {f.source === 'fallback' ? `⚡ Fallback via ${f.aggregator}` : f.filler}
+            </span>
+            <span className="uni-fill-info">
+              {fromWei(BigInt(f.fillAmount), inDec)} {inSym}
+              {f.source === 'fallback' && <> → {fromWei(BigInt(f.outputAmount), outDec)} {outSym}</>}
+            </span>
             <span className="uni-fill-block" title={f.txHash ?? undefined}>{f.blockNumber ? `#${f.blockNumber}` : new Date(f.createdAt).toLocaleTimeString()}</span>
           </div>
         ))

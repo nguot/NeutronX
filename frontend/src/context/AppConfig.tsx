@@ -14,6 +14,7 @@ interface RawConfig {
   backendUrl:         string
   partialFillReactor: string
   fallbackExecutor:   string
+  fillAuction:        string
   chains:             ChainConfig[]
 }
 
@@ -41,6 +42,7 @@ const DEFAULT: RawConfig = {
   backendUrl:         'http://localhost:3000',
   partialFillReactor: '',
   fallbackExecutor:   '',
+  fillAuction:        '',
   chains:             [],
 }
 

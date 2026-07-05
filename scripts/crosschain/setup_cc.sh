@@ -37,7 +37,12 @@ RPC_B="http://127.0.0.1:8546"
 PERMIT2="0x000000000022D473030F116dDEE9F6B43aC78BA3"
 WETH="0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
 USDC="0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
-USDC_WHALE="0x47ac0Fb4F2D84898e4D9E7b4DaB3C24507a6D503"
+# Aave V3 aUSDC reserve — was 0x47ac0Fb4F2D84898e4D9E7b4DaB3C24507a6D503 (a
+# Binance-style hot wallet) but that address drained from ~543M USDC down to
+# ~$0.01 over time; a protocol reserve is far more stable. Re-verify with
+# `cast call <USDC> "balanceOf(address)(uint256)" <whale> --rpc-url <RPC>`
+# if this ever needs replacing again.
+USDC_WHALE="0x98C23E9d8f34FEFb1B7BD6a91B7FF122F4e16F5c"
 MAX_UINT="115792089237316195423570985008687907853269984665640564039457584007913129639935"
 BACKEND="http://localhost:3000"
 
@@ -61,6 +66,10 @@ LINK="0x514910771AF9Ca656af840dff83E8264EcF986CA"
 UNI="0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984"
 WHALE_1="0x28C6c06298d514Db089934071355E5743bf21d60"   # Binance 14
 WHALE_2="0xF977814e90dA44bFA03b6295A0616a897441aceC"   # Binance 8 (fallback)
+# Curve 3pool — DAI/USDC/USDT protocol reserve, fallback for when WHALE_1/2's
+# stablecoin balances (exchange wallets, drift over time) fall short. See the
+# USDC_WHALE comment above for why a protocol reserve is preferred here.
+WHALE_3="0xbEbc44782C7dB0a1A60Cb6fe97d0b483032FF1C7"
 MAX_UINT160="1461501637330902918203684832716283019655932542975"   # Permit2 "infinite" allowance
 
 declare -A TOKEN_ADDR=([WETH]=$WETH [USDC]=$USDC [USDT]=$USDT [DAI]=$DAI [WBTC]=$WBTC [LINK]=$LINK [UNI]=$UNI)
@@ -68,10 +77,11 @@ declare -A TOKEN_AMOUNT=([USDC]=10000000000 [USDT]=10000000000 [DAI]=10000000000
                          [WBTC]=1000000000 [LINK]=10000000000000000000000 [UNI]=10000000000000000000000)
 
 # fund_swapper_token <rpc> <symbol> — transfer TOKEN_AMOUNT[symbol] of
-# TOKEN_ADDR[symbol] to the swapper from a Binance whale (WHALE_1, fallback WHALE_2).
+# TOKEN_ADDR[symbol] to the swapper from a Binance whale (WHALE_1, fallback
+# WHALE_2, fallback WHALE_3 for stablecoins).
 fund_swapper_token() {
   local rpc="$1" sym="$2" token="${TOKEN_ADDR[$2]}" amount="${TOKEN_AMOUNT[$2]}"
-  for whale in "$WHALE_1" "$WHALE_2"; do
+  for whale in "$WHALE_1" "$WHALE_2" "$WHALE_3"; do
     cast rpc anvil_setBalance "$whale" "0xDE0B6B3A7640000" --rpc-url "$rpc" >/dev/null 2>&1 || true
     cast rpc anvil_impersonateAccount "$whale" --rpc-url "$rpc" >/dev/null 2>&1 || true
     if cast send "$token" "transfer(address,uint256)" "$ACCOUNT0" "$amount" \

@@ -91,7 +91,10 @@ export function startQuoteServer(): void {
             wouldFill:       decision.shouldFill,
             fillAmount:      decision.fillAmount.toString(),
             fillAmountHuman: (Number(decision.fillAmount) / 10 ** inDec).toFixed(4),
-            auctionPrice:    (Number(decision.currentPrice) / 10 ** outDec).toFixed(4),
+            // contract price convention: humanPrice = price / 1e18 * 10^inDec / 10^outDec
+            // (see frontend/src/lib/tokens.tsx's contractToHumanPrice — must match
+            // exactly, or this silently only works for 18-decimal input tokens).
+            auctionPrice:    (Number(decision.currentPrice) / 1e18 * 10 ** inDec / 10 ** outDec).toFixed(4),
             reason:          decision.reason ?? 'no fill',
             metadata:        decision.extras ?? {},
           })

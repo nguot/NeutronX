@@ -4,6 +4,7 @@ import { OrderListener } from './listener/orderListener'
 import { Executor } from './execution/executor'
 import { startQuoteServer } from './quote/quoteServer'
 import { seedInventory } from './funding/seed'
+import { startRepl } from './cli/repl'
 import type { OrderInfo } from './types'
 
 const listener = new OrderListener()
@@ -25,6 +26,7 @@ async function bootstrap() {
   listener.start()
   startQuoteServer()
   console.log('[Main] WhaleFiller started')
+  startRepl()
 }
 
 bootstrap()
@@ -34,7 +36,7 @@ setInterval(async () => {
   try {
     const pending: ethers.BigNumber = await fillAuction.pendingReturns(wallet.address)
     if (pending.gt(0)) {
-      const tx = await fillAuction.withdraw()
+      const tx = await fillAuction.withdraw(wallet.address)
       await tx.wait()
       console.log(`[Main] withdrew ${ethers.utils.formatEther(pending)} ETH stake returns`)
     }
