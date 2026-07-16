@@ -1,7 +1,7 @@
 import * as readline from 'readline'
 import {
   FILLER_NAME, renderOrders, renderBalances, renderSim, runFill,
-  renderCcOrders, runCcFill, runCcClaim, runCcReset, runQuote,
+  renderCcOrders, runCcFill, runCcResume, runQuote,
   resolveOrderHash, resolveCcOrderHash,
 } from './actions'
 import { c } from './format'
@@ -30,11 +30,11 @@ const HELP = `
   balances                      wallet balances on every configured chain
   sim <hash> [--pct n]          dry-run a fill preview, no tx (default 50%)
   fill <hash> [--pct n]         execute a partial fill (default 100%)
-  cc list                       list cross-chain orders + slot status
-  cc fill <hash> <slot>         fill one cross-chain Merkle slot
-  cc claim <hash> <slot>        recover a slot the backend already claimed
-  cc reset <hash> <slot>        reset a stuck locked slot back to available
+  cc list                       list cross-chain orders + fill status
+  cc fill <hash> <pct>          start a new fill for <pct>% of what's still fillable
+  cc resume <hash> <fillId>     resume an in-flight fill after a crash/restart
   quote --in <a> --out <a> --amount <wei> --start-price <raw> --decay <n>
+  shutdown                      stop the bot (same as Ctrl+C)
   help                          show this
 ` + c.dim(
   '\n  <hash> accepts the short form shown in tables (e.g. 0x2a5c33) as long as\n' +
@@ -75,15 +75,14 @@ async function dispatch(line: string): Promise<void> {
         const sub = pos[1]
         if (sub === 'list') {
           await renderCcOrders()
-        } else if (sub === 'fill' || sub === 'claim' || sub === 'reset') {
-          if (!pos[2] || !pos[3]) { console.log(c.red(`usage: cc ${sub} <hash> <slot>`)); break }
-          const hash = await resolveCcOrderHash(pos[2])
-          const slot = Number(pos[3])
-          if (sub === 'fill')  await runCcFill(hash, slot)
-          if (sub === 'claim') await runCcClaim(hash, slot)
-          if (sub === 'reset') await runCcReset(hash, slot)
+        } else if (sub === 'fill') {
+          if (!pos[2] || !pos[3]) { console.log(c.red('usage: cc fill <hash> <pct>')); break }
+          await runCcFill(await resolveCcOrderHash(pos[2]), Number(pos[3]))
+        } else if (sub === 'resume') {
+          if (!pos[2] || !pos[3]) { console.log(c.red('usage: cc resume <hash> <fillId>')); break }
+          await runCcResume(await resolveCcOrderHash(pos[2]), Number(pos[3]))
         } else {
-          console.log(c.red(`unknown 'cc ${sub ?? ''}' — try: cc list | cc fill <hash> <slot> | cc claim <hash> <slot> | cc reset <hash> <slot>`))
+          console.log(c.red(`unknown 'cc ${sub ?? ''}' — try: cc list | cc fill <hash> <pct> | cc resume <hash> <fillId>`))
         }
         break
       }
@@ -94,6 +93,11 @@ async function dispatch(line: string): Promise<void> {
           startPrice: flags['start-price'], decay: flags.decay,
           minFillBps: flags['min-fill-bps'], deadline: flags.deadline, feeTier: flags['fee-tier'],
         })
+        break
+
+      case 'shutdown':
+        console.log(c.dim('shutting down…'))
+        process.kill(process.pid, 'SIGTERM')
         break
 
       default:
@@ -118,6 +122,14 @@ export function startRepl(): void {
     await dispatch(line)
     rl.prompt()
   })
+  // Hard guarantee: Ctrl+C always exits, even if a command is stuck on a
+  // hung network call (e.g. an unresponsive backend/RPC with no timeout —
+  // the actual cause of "types fine, Enter does nothing, Ctrl+C doesn't
+  // either": the in-flight dispatch() never resolves, so process.exit() from
+  // the SIGTERM/SIGINT handler in index.ts never gets a turn to run either).
+  // Bypass all of that and force-kill immediately on the readline interface's
+  // own Ctrl+C detection, independent of whatever else the process is doing.
+  rl.on('SIGINT', () => process.exit(1))
   rl.on('close', () => {
     console.log(c.dim('\nconsole closed (bot keeps running) — Ctrl+C to stop the process.'))
   })

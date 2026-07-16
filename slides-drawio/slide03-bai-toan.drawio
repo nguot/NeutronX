@@ -1,0 +1,67 @@
+<mxfile host="app.diagrams.net">
+  <diagram id="slide03" name="Slide 3 - Bai toan">
+    <mxGraphModel dx="1300" dy="820" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1160" pageHeight="640" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <!-- ================= CONTAINER TRAI ================= -->
+        <mxCell id="lc" value="AGGREGATOR TRUYỀN THỐNG" style="rounded=1;arcSize=3;whiteSpace=wrap;html=1;fillColor=#EEF0F6;strokeColor=#C6CBD9;strokeWidth=1;verticalAlign=top;fontSize=15;fontStyle=1;fontColor=#16305C;spacingTop=16;" vertex="1" parent="1">
+          <mxGeometry x="60" y="90" width="470" height="440" as="geometry" />
+        </mxCell>
+
+        <mxCell id="lmain" value="Swapper TỰ gửi giao dịch&#10;lên các pool AMM" style="rounded=1;arcSize=10;whiteSpace=wrap;html=1;fillColor=#16305C;strokeColor=none;fontColor=#FFFFFF;fontSize=14;fontStyle=1;verticalAlign=middle;align=center;" vertex="1" parent="1">
+          <mxGeometry x="95" y="150" width="400" height="66" as="geometry" />
+        </mxCell>
+
+        <mxCell id="lb1" value="Tự chịu slippage" style="rounded=1;arcSize=14;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#C6CBD9;strokeWidth=1;fontSize=13;fontColor=#333333;align=left;spacingLeft=16;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="95" y="238" width="400" height="46" as="geometry" />
+        </mxCell>
+        <mxCell id="lb2" value="Dễ bị sandwich — chèn lệnh ăn chênh" style="rounded=1;arcSize=14;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#C6CBD9;strokeWidth=1;fontSize=13;fontColor=#333333;align=left;spacingLeft=16;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="95" y="296" width="400" height="46" as="geometry" />
+        </mxCell>
+        <mxCell id="lb3" value="Giao dịch fail vẫn MẤT gas" style="rounded=1;arcSize=14;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#C6CBD9;strokeWidth=1;fontSize=13;fontColor=#333333;align=left;spacingLeft=16;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="95" y="354" width="400" height="46" as="geometry" />
+        </mxCell>
+
+        <mxCell id="lfoot" value="Swapper gánh rủi ro" style="rounded=1;arcSize=18;whiteSpace=wrap;html=1;fillColor=#FBEDEE;strokeColor=#C8102E;strokeWidth=1;fontSize=13;fontStyle=1;fontColor=#C8102E;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="140" y="430" width="310" height="42" as="geometry" />
+        </mxCell>
+
+        <!-- ================= MUI TEN GIUA ================= -->
+        <mxCell id="arrow" value="" style="html=1;shape=singleArrow;arrowWidth=0.55;arrowSize=0.4;fillColor=#16305C;strokeColor=none;" vertex="1" parent="1">
+          <mxGeometry x="540" y="290" width="80" height="56" as="geometry" />
+        </mxCell>
+
+        <!-- ================= CONTAINER PHAI ================= -->
+        <mxCell id="rc" value="MÔ HÌNH INTENT" style="rounded=1;arcSize=3;whiteSpace=wrap;html=1;fillColor=#EAF1FB;strokeColor=#9FB6D9;strokeWidth=1;verticalAlign=top;fontSize=15;fontStyle=1;fontColor=#16305C;spacingTop=16;" vertex="1" parent="1">
+          <mxGeometry x="630" y="90" width="470" height="440" as="geometry" />
+        </mxCell>
+
+        <mxCell id="rmain" value="Swapper chỉ KÝ intent:&#10;&quot;đổi X, nhận tối thiểu Y&quot;" style="rounded=1;arcSize=10;whiteSpace=wrap;html=1;fillColor=#16305C;strokeColor=none;fontColor=#FFFFFF;fontSize=14;fontStyle=1;verticalAlign=middle;align=center;" vertex="1" parent="1">
+          <mxGeometry x="665" y="150" width="400" height="66" as="geometry" />
+        </mxCell>
+
+        <mxCell id="rb1" value="Filler lo thực thi &amp; gánh rủi ro" style="rounded=1;arcSize=14;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#9FB6D9;strokeWidth=1;fontSize=13;fontColor=#333333;align=left;spacingLeft=16;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="665" y="238" width="400" height="46" as="geometry" />
+        </mxCell>
+        <mxCell id="rb2" value="Gasless — swapper không trả gas" style="rounded=1;arcSize=14;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#9FB6D9;strokeWidth=1;fontSize=13;fontColor=#333333;align=left;spacingLeft=16;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="665" y="296" width="400" height="46" as="geometry" />
+        </mxCell>
+        <mxCell id="rb3" value="Được đảm bảo mức output tối thiểu" style="rounded=1;arcSize=14;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#9FB6D9;strokeWidth=1;fontSize=13;fontColor=#333333;align=left;spacingLeft=16;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="665" y="354" width="400" height="46" as="geometry" />
+        </mxCell>
+
+        <mxCell id="rfoot" value="Filler gánh rủi ro" style="rounded=1;arcSize=18;whiteSpace=wrap;html=1;fillColor=#DCE6F6;strokeColor=#16305C;strokeWidth=1;fontSize=13;fontStyle=1;fontColor=#16305C;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="710" y="430" width="310" height="42" as="geometry" />
+        </mxCell>
+
+        <!-- ================= CAPTION DUOI ================= -->
+        <mxCell id="cap" value="Mô hình phổ biến hiện nay: 1 order chỉ 1 filler khớp trọn" style="rounded=1;arcSize=20;whiteSpace=wrap;html=1;fillColor=#16305C;strokeColor=none;fontColor=#FFFFFF;fontSize=14;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="330" y="560" width="500" height="46" as="geometry" />
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

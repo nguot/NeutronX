@@ -1,105 +1,106 @@
 import { ethers } from 'ethers'
-import { findSlotByHashlock, updateSlotStatus, deriveSecret, getCosignerWallet } from '../services/crosschainService'
 import { db } from '../db/client'
 import { ensureIndexerStateTable, resolveCheckpoint, setCheckpoint, queryFilterChunked } from '../db/checkpoint'
+import { ESCROW_DST_FACTORY_ABI, ESCROW_DST_ABI } from './abis'
+import { assertGenuineDstClone } from '../services/escrowAuthenticity'
+import { recordDstFunded, recordClaimed, getRelayerWallet } from '../services/crosschainService'
 
-// Factory emits one event per filler clone deployment
-const FACTORY_ABI = [
-  'event EscrowCreated(address indexed escrow, address indexed filler, bytes32 indexed hashlock, address recipient, address token, uint256 amount, uint256 expiry)',
-]
-
-// Each deployed clone exposes these — backend interacts with the specific clone
-const ESCROW_DST_ABI = [
-  'event Claimed(address indexed claimer, bytes32 secret)',
-  'function claim(bytes32 secret) external',
-  'function claimed() view returns (bool)',
-  'function refunded() view returns (bool)',
-]
-
-// EscrowCreated events for different fillers/slots can land in the same block range
-// and fire concurrently. Each queues onto its cosigner's chain so claim() sends are
-// serialized — otherwise two concurrent sends from the same wallet fetch the same
-// pending nonce and one gets rejected with "nonce too low". Keyed per (label, cosigner)
-// so the two chains' independent nonces never block each other, but unrelated
-// swappers' claims on the same chain still run in parallel.
-const claimQueues = new Map<string, Promise<unknown>>()
-
-function withCosignerQueue<T>(queueKey: string, fn: () => Promise<T>): Promise<T> {
-  const prev = claimQueues.get(queueKey) ?? Promise.resolve()
-  const next = prev.then(fn, fn)
-  claimQueues.set(queueKey, next.then(() => undefined, () => undefined))
-  return next
-}
+// Model 2 (filler-holds-key): this watcher runs on the DESTINATION chain and
+// plays the RELAYER role — it never derives or holds a secret. It does two
+// independent jobs:
+//
+//   1. Block-driven: watch EscrowDstFactory for EscrowCreated, verify the
+//      clone is genuine (CREATE2 address-match) AND matches the quoted
+//      fill's committed recipient/token/amount/expiry (Điểm A) — only then
+//      mark the fill 'dst_funded', which is the gate that lets the swapper's
+//      client safely sign the per-fill authorization.
+//   2. Timer-driven: poll for fills already 'revealed' (secret made public by
+//      a Withdrawn event on the SOURCE chain, seen by escrowSrcWatcher — a
+//      different chain/process) whose dest escrow lives on THIS chain, and
+//      relay EscrowDst.claim(secret) using the relayer's own funded wallet.
+//      claim() is permissionless — the relayer has no special on-chain
+//      privilege, it just pays gas on the swapper's behalf.
 
 export interface EscrowDstWatcherOpts {
   chainId: number
   rpc: string
   factoryAddr: string
   confirmations: number
-  // log prefix, e.g. "Chain A" / "Chain B"
   label: string
 }
 
+// EscrowCreated events for different fillers can land in the same block range
+// and fire concurrently; queue claim() sends per (label, relayer) so they're
+// serialized and each picks up the correctly incremented nonce.
+const claimQueues = new Map<string, Promise<unknown>>()
+
+function withRelayerQueue<T>(queueKey: string, fn: () => Promise<T>): Promise<T> {
+  const prev = claimQueues.get(queueKey) ?? Promise.resolve()
+  const next = prev.then(fn, fn)
+  claimQueues.set(queueKey, next.then(() => undefined, () => undefined))
+  return next
+}
+
 export function startEscrowDstWatcher(opts: EscrowDstWatcherOpts): void {
-  const { chainId, rpc, factoryAddr, confirmations: confs, label } = opts
+  const { chainId, rpc, factoryAddr, label } = opts
 
   const provider = new ethers.providers.JsonRpcProvider(rpc)
-  // Default 4s polling opens a new HTTP connection to the Anvil RPC every poll;
-  // under --block-time the resulting churn can wedge Anvil's TCP accept queue
-  // over a long session, so poll less aggressively here.
+  // Anvil --block-time TCP-wedge mitigation (unchanged from Model 1).
   provider.pollingInterval = 12000
-  const factory  = new ethers.Contract(factoryAddr, FACTORY_ABI, provider)
+  const factory = new ethers.Contract(factoryAddr, ESCROW_DST_FACTORY_ABI, provider)
 
-  console.log(`[${label}] watcher started — chain ${chainId} EscrowDstFactory: ${factoryAddr}`)
+  console.log(`[${label}] dst watcher (relayer) started — chain ${chainId} EscrowDstFactory: ${factoryAddr}`)
 
-  // contract.on('EscrowCreated', ...) was found to silently never fire against
-  // Anvil's --block-time chains (confirmed: zero deliveries even for events that
-  // exist on-chain). Use the same checkpointed getLogs-on-new-block pattern as
-  // the event indexer instead — provider.on('block', ...) is proven reliable.
   const checkpointName = `escrow_dst_${chainId}`
   let lastBlock = -1
   let latestSeen = -1
   let draining = false
+  // Floor for the rescan rewind below — never re-query blocks older than
+  // where this watcher started. On a freshly forked local anvil the tip sits
+  // right at the fork boundary, so an unconditional RESCAN_LAG rewind would
+  // dip into pre-fork history that anvil proxies to the upstream RPC, which
+  // free-tier providers reject for wide eth_getLogs ranges (permanently
+  // wedging this watcher, since a failed drain() never advances lastBlock).
+  let floorBlock = -1
 
+  // Retry-until-connected instead of a bare fire-and-forget IIFE: an
+  // unhandled rejection here (e.g. RPC not accepting connections yet at
+  // backend startup) would otherwise crash the ENTIRE backend process, not
+  // just this watcher.
   ;(async () => {
-    await ensureIndexerStateTable()
-    const current = await provider.getBlockNumber()
-    console.log(`[${label}] connected  block #${current}`)
-    lastBlock = await resolveCheckpoint(checkpointName, current, `[${label}]`)
+    for (;;) {
+      try {
+        await ensureIndexerStateTable()
+        const current = await provider.getBlockNumber()
+        const genesis = await provider.getBlock(0).catch(() => null)
+        console.log(`[${label}] connected  block #${current}`)
+        lastBlock = await resolveCheckpoint(checkpointName, current, `[${label}]`, genesis?.hash)
+        floorBlock = Math.min(lastBlock, current)
+        return
+      } catch (e: any) {
+        console.error(`[${label}] failed to connect (${e?.message ?? e}) — retrying in 5s`)
+        await new Promise(r => setTimeout(r, 5000))
+      }
+    }
   })()
 
-  // Each time a filler deploys a clone, EscrowCreated fires with the escrow address,
-  // the hashlock (H_i), and the fill parameters.  We verify it belongs to one of our
-  // orders, wait confirmations, then claim from the specific clone.
-  //
-  // With pollingInterval=12000 on a ~1 block/sec chain, ethers fires 'block' once
-  // per new block number in a burst — overlapping async handlers would all read
-  // the same stale lastBlock and re-query/re-process the same EscrowCreated event
-  // (and re-call claim() on an already-settled escrow). Drain sequentially instead.
-  // Trufy 3.9: re-scan a trailing window of recently-seen blocks on every drain,
-  // not just the strictly-new range. EscrowCreated events for slots that weren't
-  // settleable on the first pass (source filler not yet indexed, a transient
-  // claim failure rolled back by 3.11, etc.) are therefore reprocessed instead of
-  // being dropped forever once the checkpoint advances past them. handleEscrow is
-  // idempotent — it early-returns for non-'available' slots and rechecks
-  // claimed()/refunded() — so reprocessing a settled escrow is a cheap no-op.
   const RESCAN_LAG = 30
   async function drain() {
     if (draining) return
     draining = true
     try {
       while (lastBlock >= 0 && latestSeen > lastBlock) {
-        const fromBlock = Math.max(0, lastBlock + 1 - RESCAN_LAG)
+        const fromBlock = Math.max(0, floorBlock, lastBlock + 1 - RESCAN_LAG)
         const toBlock   = latestSeen
         try {
           const logs = await queryFilterChunked(factory, factory.filters.EscrowCreated(), fromBlock, toBlock)
           for (const log of logs) {
-            const [escrow, dstFiller, hashlock, recipient, token, amount, dstExpiry] = log.args!
-            console.log(`[${label}] EscrowCreated  ${escrow.slice(0,10)}…  H_i=${hashlock.slice(0,10)}…`)
+            const [escrow, filler, hashlock] = log.args!
+            console.log(`[${label}] EscrowCreated  ${escrow.slice(0,10)}…  hashlock=${hashlock.slice(0,10)}…`)
             try {
-              await handleEscrow(label, chainId, provider, escrow, dstFiller, hashlock, recipient, token, amount, dstExpiry, log.blockNumber, confs)
+              await handleEscrowCreated(label, chainId, escrow, filler, hashlock, log.transactionHash)
             } catch (e: any) {
-              console.error(`[${label}] error handling escrow ${escrow.slice(0,10)}…:`, e?.message ?? e)
+              console.error(`[${label}] error handling EscrowCreated ${escrow.slice(0,10)}…:`, e?.message ?? e)
             }
           }
           lastBlock = toBlock
@@ -118,203 +119,107 @@ export function startEscrowDstWatcher(opts: EscrowDstWatcherOpts): void {
     if (blockNumber > latestSeen) latestSeen = blockNumber
     void drain()
   })
+
+  // Independent timer loop: the reveal that unblocks a claim happens on a
+  // DIFFERENT chain (the order's source), so it can't be driven off this
+  // chain's own block/log stream — poll the DB instead.
+  const RELAY_POLL_MS = 5000
+  setInterval(() => { void relayRevealedFills(label, chainId, provider) }, RELAY_POLL_MS)
 }
 
-async function handleEscrow(
+async function handleEscrowCreated(
+  label: string,
+  dstChainId: number,
+  escrowAddr: string,
+  filler: string,
+  hashlock: string,
+  txHash: string,
+): Promise<void> {
+  // Find the quoted fill this hashlock belongs to.
+  const row = await db.query(`
+    SELECT f.order_hash, f.fill_amount, f.t2, o.swapper, o.output_token, o.dst_chain_id
+    FROM cc_fills f JOIN cc_orders o ON o.order_hash = f.order_hash
+    WHERE f.hashlock = $1 AND f.status = 'quoted'
+  `, [hashlock])
+  if (!row.rows.length) {
+    console.log(`[${label}] EscrowCreated for unknown/already-progressed hashlock — ignoring`)
+    return
+  }
+  const { order_hash: orderHash, fill_amount: fillAmount, t2, swapper, output_token: outputToken, dst_chain_id: expectedDstChain } = row.rows[0]
+
+  if (Number(expectedDstChain) !== dstChainId) {
+    console.warn(`[${label}] fill's recorded dst_chain_id=${expectedDstChain}, but this watcher is on chain ${dstChainId} — skipping`)
+    return
+  }
+
+  // Điểm A: verify the clone is genuine AND matches the committed fill terms
+  // BEFORE letting the swapper's client treat it as safe to sign against.
+  const check = await assertGenuineDstClone(dstChainId, hashlock, filler, escrowAddr, {
+    recipient: swapper, token: outputToken, minAmount: BigInt(fillAmount), expiry: Number(t2),
+  })
+  if (!check.ok) {
+    console.warn(`[${label}] EscrowCreated ${escrowAddr} failed authenticity/terms check: ${check.reason} — refusing to mark dst_funded`)
+    return
+  }
+
+  await recordDstFunded(orderHash, hashlock, escrowAddr, txHash)
+  console.log(`[${label}] dst_funded  order=${orderHash.slice(0,10)}…  hashlock=${hashlock.slice(0,10)}…  escrow verified genuine`)
+}
+
+// Called every RELAY_POLL_MS via `void relayRevealedFills(...)` in a
+// setInterval callback — a rejection escaping this function would be an
+// unhandled promise rejection that crashes the whole backend process, so
+// every fallible step from here down must catch its own errors.
+async function relayRevealedFills(
   label: string,
   dstChainId: number,
   provider: ethers.providers.JsonRpcProvider,
-  escrowAddr: string,
-  dstFiller: string,
-  hashlock: string,
-  recipient: string,
-  token: string,
-  amount: ethers.BigNumber,
-  dstExpiry: ethers.BigNumber,
-  deployBlock: number,
-  confs: number
 ): Promise<void> {
-  // Find which order+slot this hashlock belongs to
-  const match = await findSlotByHashlock(hashlock)
-  if (!match) {
-    console.log(`[${label}] unknown hashlock — not our order, ignoring`)
-    return
-  }
-
-  // Sanity check: the order's recorded destination chain must match the chain
-  // this watcher is running on (catches misconfigured registries).
-  if (match.dst_chain_id !== dstChainId) {
-    console.warn(`[${label}] hashlock's order has dst_chain_id=${match.dst_chain_id}, but this watcher is on chain ${dstChainId} — skipping`)
-    return
-  }
-
-  // Verify the recipient is the swapper for this order
-  if (recipient.toLowerCase() !== match.swapper.toLowerCase()) {
-    console.warn(`[${label}] wrong recipient ${recipient} (expected ${match.swapper}) — skipping`)
-    return
-  }
-
-  // 3.4: verify the filler locked the SIGNED output token. EscrowDstFactory lets
-  // the filler pass any token address; the EscrowCreated event carries it. Without
-  // this check a filler could lock a worthless/unintended token, satisfy the
-  // amount + expiry + filler checks, and still trigger secret reveal for the real
-  // source-side asset.
-  if (token.toLowerCase() !== match.output_token.toLowerCase()) {
-    console.warn(`[${label}] slot ${match.slot_index}: locked token ${token} != signed output ${match.output_token} — skipping`)
-    return
-  }
-
-  // Verify amount >= this slot's exact minimum output.
-  const orderRow  = await db.query('SELECT num_slots FROM cc_orders WHERE order_hash=$1', [match.order_hash])
-  const numSlots  = orderRow.rows[0]?.num_slots ?? 1
-  // 3.6: the source factory makes the FINAL slot absorb the integer-division
-  // remainder (lastSlotAmount), so its required output is larger than a flat
-  // minOutput/numSlots. Mirror that exact sizing instead of a flat share, or a
-  // last-slot filler could fund only the flat minimum yet pull a larger source amount.
-  const basePerSlot = BigInt(match.min_output) / BigInt(numSlots)
-  const minPerSlot  = match.slot_index === numSlots - 1
-    ? BigInt(match.min_output) - basePerSlot * BigInt(numSlots - 1)
-    : basePerSlot
-  if (amount.toBigInt() < minPerSlot) {
-    console.warn(`[${label}] slot ${match.slot_index}: amount ${amount} < required ${minPerSlot} — skipping`)
-    return
-  }
-
-  // 3.1: defend against a malformed sanctioned expiry. createCrossChainOrder now
-  // rejects non-positive / oversized t2Buffer, but guard legacy rows too: the
-  // sanctioned t2_expiry must itself be strictly below the source deadline (T1),
-  // otherwise the ordering check below is meaningless.
-  if (BigInt(match.t2_expiry) >= BigInt(match.deadline)) {
-    console.warn(`[${label}] slot ${match.slot_index}: sanctioned t2 ${match.t2_expiry} >= source deadline ${match.deadline} — malformed order, refusing to reveal secret`)
-    return
-  }
-
-  // 3.1: enforce destination-before-source timelock ordering. The backend
-  // sanctioned t2_expiry = deadline - t2Buffer, strictly before the source
-  // leg's expiry (T1). Refuse to reveal the secret for any escrow whose
-  // on-chain expiry exceeds it — otherwise a filler could set T2 >= T1, let
-  // the source leg expire and cancel it, and still collect the destination leg.
-  if (BigInt(dstExpiry.toString()) > BigInt(match.t2_expiry)) {
-    console.warn(`[${label}] slot ${match.slot_index}: dst expiry ${dstExpiry} > sanctioned t2 ${match.t2_expiry} — refusing to reveal secret`)
-    return
-  }
-
-  // 3.7: do NOT leave 'available' yet. The slot must stay matchable until EVERY
-  // reveal precondition holds (including the source-filler binding below).
-  // Marking it 'locked' here used to strand the slot whenever a later check
-  // returned early — findSlotByHashlock only matches 'available' rows, so the
-  // legitimate escrow could never be re-matched. The transition is deferred to
-  // just before claim(), once all checks have passed.
-  console.log(`[${label}] slot ${match.slot_index} escrow seen — waiting ${confs} confirmation(s)`)
-  await waitConfirmations(provider, deployBlock, confs)
-
-  // Re-check the escrow hasn't already been claimed or refunded (e.g. race condition)
-  const escrow = new ethers.Contract(escrowAddr, ESCROW_DST_ABI, provider)
-  const [alreadyClaimed, alreadyRefunded] = await Promise.all([
-    escrow.claimed(),
-    escrow.refunded(),
-  ])
-  if (alreadyClaimed || alreadyRefunded) {
-    console.log(`[${label}] escrow already settled — nothing to do`)
-    return
-  }
-
-  // Re-derive S_i from rootSecret (never stored, always derived on demand)
-  const sessionRow = await db.query(
-    'SELECT root_secret FROM cc_sessions WHERE swapper=$1',
-    [match.swapper]
-  )
-  const rootSecret = sessionRow.rows[0]?.root_secret
-  if (!rootSecret) {
-    console.error(`[${label}] no session found for swapper ${match.swapper}`)
-    return
-  }
-
-  const secret = deriveSecret(rootSecret, {
-    swapper:     match.swapper,
-    inputToken:  match.input_token,
-    inputAmount: match.input_amount,
-    outputToken: match.output_token,
-    minOutput:   match.min_output,
-    deadline:    match.deadline,
-    nonce:       match.nonce,
-  }, match.slot_index)
-
-  // Relay claim() with the single server cosigner key (Trufy 3.1). The secret
-  // above still comes from this session's per-user rootSecret; the wallet that
-  // *sends* the tx is the server's funded cosigner EOA, the same key that signs
-  // orders and matches the factory's immutable cosigner.
-  const cosignerWallet = getCosignerWallet(provider)
-
-  // 3.2 + 3.7: bind both legs to the SAME filler before revealing the secret,
-  // and tolerate source-indexing lag. assigned_filler is the ACTUAL on-chain
-  // source filler (msg.sender of fillSlot, recorded by escrowSrcWatcher). The
-  // source fill always precedes the destination funding, but escrowSrcWatcher
-  // may not have indexed SlotFilled yet — so poll briefly instead of giving up
-  // on the first miss (a single miss used to strand the slot permanently). On a
-  // genuine mismatch we return with the slot still 'available', so the
-  // legitimate filler's later escrow can still be matched.
-  let srcFiller: string | null = null
-  for (let i = 0; i < 10; i++) {
-    const row = await db.query(
-      'SELECT assigned_filler FROM cc_slots WHERE order_hash=$1 AND slot_index=$2',
-      [match.order_hash, match.slot_index]
-    )
-    srcFiller = row.rows[0]?.assigned_filler as string | null
-    if (srcFiller) break
-    await new Promise(r => setTimeout(r, 1500))
-  }
-  if (!srcFiller || dstFiller.toLowerCase() !== srcFiller.toLowerCase()) {
-    console.warn(`[${label}] slot ${match.slot_index}: dst filler ${dstFiller} != source filler ${srcFiller ?? '(none recorded yet)'} — leaving slot available, refusing to reveal secret`)
-    return
-  }
-
-  // 3.7: every reveal precondition now holds — only here do we leave 'available'.
-  await updateSlotStatus(match.order_hash, match.slot_index, 'locked', escrowAddr)
-
-  console.log(`[${label}] claiming  slot=${match.slot_index}  escrow=${escrowAddr.slice(0,10)}…`)
-
-  // claim() on the individual clone — sends the locked tokens to recipient, emits
-  // Claimed(claimer, S_i). S_i is now public on this chain — the filler reads the
-  // event and calls claimSlot() on the other chain.
-  // Queued per (label, cosigner): send + wait must complete before the next claim()
-  // from this wallet on this chain is sent, so each one picks up the correctly
-  // incremented nonce.
-  //
-  // Trufy 3.11: if the claim send/confirmation fails, the slot must NOT stay
-  // stranded in 'locked' (findSlotByHashlock only matches 'available', so it
-  // could never be retried). Roll it back to 'available' and rethrow so the
-  // drain loop logs it; the escrow is still on-chain and will be re-processed
-  // on the next rescan pass (Trufy 3.9).
-  let tx
+  let rows: { rows: any[] }
   try {
-    tx = await withCosignerQueue(`${label}:${cosignerWallet.address}`, async () => {
-      const sent = await escrow.connect(cosignerWallet).claim(secret)
-      await sent.wait()
-      return sent
-    })
-  } catch (e) {
-    await updateSlotStatus(match.order_hash, match.slot_index, 'available', escrowAddr)
-    console.error(`[${label}] claim failed for slot ${match.slot_index} — rolled back to available for retry`)
-    throw e
+    rows = await db.query(`
+      SELECT f.order_hash, f.hashlock, f.secret, f.escrow_dst_addr, f.t2
+      FROM cc_fills f JOIN cc_orders o ON o.order_hash = f.order_hash
+      WHERE f.status = 'revealed' AND o.dst_chain_id = $1
+    `, [dstChainId])
+  } catch (e: any) {
+    console.error(`[${label}] relay poll: failed to query revealed fills:`, e?.message ?? e)
+    return
+  }
+  if (!rows.rows.length) return
+
+  let relayerWallet: ethers.Wallet
+  try {
+    relayerWallet = getRelayerWallet(provider)
+  } catch (e: any) {
+    console.error(`[${label}] cannot relay claims:`, e?.message ?? e)
+    return
   }
 
-  await updateSlotStatus(match.order_hash, match.slot_index, 'claimed', escrowAddr)
-  console.log(`[${label}] ✔ claimed  slot=${match.slot_index}  tx=${tx.hash}`)
-  console.log(`[${label}]   S_i emitted in Claimed event — filler can now claimSlot() on the other chain`)
-}
+  for (const row of rows.rows) {
+    const { order_hash: orderHash, hashlock, secret, escrow_dst_addr: escrowAddr, t2 } = row
+    if (!escrowAddr) continue
 
-function waitConfirmations(
-  provider: ethers.providers.JsonRpcProvider,
-  fromBlock: number,
-  confs: number
-): Promise<void> {
-  return new Promise(resolve => {
-    const check = async () => {
-      const current = await provider.getBlockNumber()
-      if (current >= fromBlock + confs) resolve()
-      else setTimeout(check, 1000)
+    const nowSec = Math.floor(Date.now() / 1000)
+    if (nowSec > Number(t2)) {
+      console.warn(`[${label}] fill order=${orderHash.slice(0,10)}… hashlock=${hashlock.slice(0,10)}… revealed but past T2 — filler must self-refund on dest`)
+      continue
     }
-    check()
-  })
+
+    try {
+      const escrow = new ethers.Contract(escrowAddr, ESCROW_DST_ABI, provider)
+      const [claimed, refunded] = await Promise.all([escrow.claimed(), escrow.refunded()])
+      if (claimed || refunded) continue // already settled, e.g. by the swapper's own fallback claim
+
+      const txHash: string = await withRelayerQueue(`${label}:${relayerWallet.address}`, async () => {
+        const sent = await escrow.connect(relayerWallet).claim(secret)
+        await sent.wait()
+        return sent.hash
+      })
+      await recordClaimed(orderHash, hashlock, txHash)
+      console.log(`[${label}] ✔ claimed  order=${orderHash.slice(0,10)}…  hashlock=${hashlock.slice(0,10)}…  tx=${txHash}`)
+    } catch (e: any) {
+      console.error(`[${label}] relay claim failed for hashlock ${hashlock.slice(0,10)}…:`, e?.message ?? e)
+    }
+  }
 }

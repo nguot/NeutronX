@@ -1,5 +1,5 @@
 import { ethers } from 'ethers'
-import axios from 'axios'
+import { http as axios } from '../httpClient'
 import { BACKEND_URL, FILL_AUCTION, REACTOR } from '../config'
 import { FILL_AUCTION_ABI, REACTOR_ABI, ERC20_ABI } from '../contract/abis'
 import { wallet } from '../contract/contracts'

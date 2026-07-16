@@ -2,8 +2,6 @@
 pragma solidity ^0.8.20;
 
 import {FullMath} from "@uniswap/v4-core/src/libraries/FullMath.sol";
-import {TickMath} from "@uniswap/v4-core/src/libraries/TickMath.sol";
-import {IUniswapV3Factory, IUniswapV3PoolOracle} from "../interfaces/IUniswapV3.sol";
 
 // Comment-code legend: see the top of FillAuction.sol for the full write-up of
 // every label used below. Quick reference —
@@ -149,70 +147,15 @@ library DynamicStakeLib {
         return uint8(n);
     }
 
-    /// D-1: value `fillAmount` of `inputToken` in ETH (wei), via a Uniswap V3
-    /// TWAP over the (inputToken, WETH) pool at the order's `feeTier`.
-    /// - inputToken == weth  → 1:1 (no oracle needed)
-    /// - factory == 0        → oracle disabled (test/mock mode): treats the raw
-    ///                         amount as the notional, reproducing pre-D-1 behaviour
-    /// The V3 price is already expressed in raw token units, so token decimals
-    /// are handled automatically.
-    function toEthNotional(
-        uint256 fillAmount,
-        address inputToken,
-        uint24  feeTier,
-        address weth,
-        address uniV3Factory,
-        uint32  twapWindow
-    ) public view returns (uint256) {
-        if (uniV3Factory == address(0) || weth == address(0) || inputToken == weth) {
-            return fillAmount;
-        }
-        address pool = IUniswapV3Factory(uniV3Factory).getPool(inputToken, weth, feeTier);
-        require(pool != address(0), "no twap pool");
-
-        uint32[] memory secondsAgos = new uint32[](2);
-        secondsAgos[0] = twapWindow;
-        secondsAgos[1] = 0;
-        (int56[] memory tickCumulatives, ) = IUniswapV3PoolOracle(pool).observe(secondsAgos);
-
-        int56 delta = tickCumulatives[1] - tickCumulatives[0];
-        int24 meanTick = int24(delta / int56(uint56(twapWindow)));
-        // round toward negative infinity (matches Uniswap's OracleLibrary)
-        if (delta < 0 && (delta % int56(uint56(twapWindow)) != 0)) meanTick--;
-
-        uint160 sqrtPriceX96 = TickMath.getSqrtPriceAtTick(meanTick);
-        return _quoteWeth(sqrtPriceX96, fillAmount, inputToken, weth);
-    }
-
-    /// WETH amount for `amountIn` of `inputToken` at the given sqrt price.
-    /// Mirrors Uniswap OracleLibrary.getQuoteAtTick.
-    function _quoteWeth(
-        uint160 sqrtPriceX96,
-        uint256 amountIn,
-        address inputToken,
-        address weth
-    ) private pure returns (uint256 quote) {
-        if (sqrtPriceX96 <= type(uint128).max) {
-            uint256 ratioX192 = uint256(sqrtPriceX96) * sqrtPriceX96;
-            quote = inputToken < weth
-                ? FullMath.mulDiv(ratioX192, amountIn, 1 << 192)
-                : FullMath.mulDiv(1 << 192, amountIn, ratioX192);
-        } else {
-            uint256 ratioX128 = FullMath.mulDiv(uint256(sqrtPriceX96), uint256(sqrtPriceX96), 1 << 64);
-            quote = inputToken < weth
-                ? FullMath.mulDiv(ratioX128, amountIn, 1 << 128)
-                : FullMath.mulDiv(1 << 128, amountIn, ratioX128);
-        }
-    }
-
     /// Registration-time collateral: notionalEth(ceiling, in ETH wei) x
     /// collateralRate[orderSizeBucket] x timeMultiplier. No fill-ratio
     /// dimension - linear in the notional, so a larger ceiling is never
     /// cheaper than a smaller one (no "ceiling-shopping" discount).
     ///
-    /// D-1: the input is now an ETH-denominated notional (see toEthNotional),
-    /// so the stake is dimensionally consistent with the ETH it is paid in,
-    /// for any input token — not just WETH.
+    /// D-1: the input is now an ETH-denominated notional (see
+    /// IEthNotionalOracle / UniswapV3NotionalOracle, which the caller consults
+    /// before calling in here), so the stake is dimensionally consistent with
+    /// the ETH it is paid in, for any input token — not just WETH.
     function computeCollateral(
         uint256 notionalEth,
         uint256 deadline,
@@ -239,6 +182,57 @@ library DynamicStakeLib {
         uint256 deadline
     ) public view returns (uint256 required) {
         required = computeCollateral(notionalEth, deadline, cfg);
+        if (required < cfg.minCollateral) required = cfg.minCollateral;
+    }
+
+    /// Timestamp-denominated twin of getTimeBucket, for callers whose deadline
+    /// is a unix timestamp rather than a block number (e.g. the cross-chain
+    /// escrow factories, which run on `block.timestamp`-based HTLC timelocks).
+    /// `timeThresholds` here must be denominated in SECONDS-left, not
+    /// blocks-left — a config built for getTimeBucket() is the wrong scale for
+    /// this function and vice versa. Comparing a unix timestamp against
+    /// `block.number` directly (as getTimeBucket does) would silently
+    /// mis-bucket every deadline, since the two are different units of
+    /// vastly different magnitude — hence a dedicated twin instead of a shared
+    /// function with an implicit unit convention.
+    function getTimeBucketByTimestamp(
+        uint256 deadline,
+        uint256[] memory timeThresholds
+    ) public view returns (uint8) {
+        uint256 n = timeThresholds.length;
+        if (block.timestamp >= deadline) return uint8(n);
+        uint256 left = deadline - block.timestamp;
+        for (uint256 i = 0; i < n; i++) {
+            if (left > timeThresholds[i]) return uint8(i);
+        }
+        return uint8(n);
+    }
+
+    /// Timestamp twin of computeCollateral — see getTimeBucketByTimestamp.
+    function computeCollateralByTimestamp(
+        uint256 notionalEth,
+        uint256 deadline,
+        StakeConfig storage cfg
+    ) public view returns (uint256) {
+        uint8 sBucket = getOrderSizeBucketETH(notionalEth, cfg.sizeThresholds);
+        uint8 tBucket = getTimeBucketByTimestamp(deadline, cfg.timeThresholds);
+        uint32 rateBps  = cfg.collateralRate[sBucket];
+        uint32 timeMult = cfg.timeMult[tBucket];
+        return
+            FullMath.mulDiv(
+                FullMath.mulDiv(notionalEth, rateBps, 10000),
+                timeMult,
+                10000
+            );
+    }
+
+    /// Timestamp twin of requiredStake — see getTimeBucketByTimestamp.
+    function requiredStakeByTimestamp(
+        StakeConfig storage cfg,
+        uint256 notionalEth,
+        uint256 deadline
+    ) public view returns (uint256 required) {
+        required = computeCollateralByTimestamp(notionalEth, deadline, cfg);
         if (required < cfg.minCollateral) required = cfg.minCollateral;
     }
 
@@ -304,6 +298,69 @@ library DynamicStakeLib {
         return cfg.refundTable[sBucket * R + rBucket];
     }
 
+    /// The economic bound this whole module is built around (see the
+    /// derivation in FillAuction's onFillSuccess writeup / DEFENSE_PACK): for a
+    /// filler who has already decided to under-deliver, profit at fill
+    /// fraction x within a bucket is `x*N*kappa - S*(1-phi)` — increasing in x,
+    /// so within any bucket the worst case sits at its UPPER edge. And since
+    /// refund `phi` is non-decreasing across buckets while the edges `x` are
+    /// increasing, `(1-phi)/x` is non-increasing across buckets (product of a
+    /// non-increasing, non-negative numerator and a non-increasing, positive
+    /// `1/x`) — so for a row's genuinely-non-honest buckets, the worst one is
+    /// always the LAST of them.
+    ///
+    /// "Genuinely non-honest" matters: a row is allowed to reach `phi==10000`
+    /// (100% refund) BEFORE its technically-last non-honest index (e.g. a
+    /// reshape that inserts a redundant extra threshold above the row's real
+    /// honest cutoff) — that bucket carries zero risk despite its index, since
+    /// stopping there already refunds in full, same as delivering 100%. So per
+    /// row we walk backward from index R-2 to the LAST index that still has
+    /// `phi < 10000` and use THAT edge; a row with `phi==10000` starting at
+    /// index 0 has no protected bucket at all and contributes 0 (see below).
+    ///
+    /// Returns the minimum breakeven edge kappa (bps of notional-per-ETH the
+    /// filler would need to realise on delivered volume) below which NO
+    /// partial-fill-then-abandon strategy is profitable for ANY (size bucket,
+    /// time bucket) combination `cfg` allows — i.e. the config's true
+    /// worst-case economic floor. Returns 0 if the config has no non-honest
+    /// bucket at all (R==1: every fill, no matter how small, refunds in full),
+    /// some row's refund is already 100% starting at bucket 0 (same
+    /// degenerate case, row-scoped), or the relevant threshold is 0. Assumes
+    /// `cfg` has already passed `validate` (S,T,R >= 1).
+    function worstCaseKappaBps(StakeConfig memory cfg) public pure returns (uint256 worstKappaBps) {
+        uint256 R = cfg.ratioThresholds.length + 1;
+        if (R < 2) return 0;
+
+        worstKappaBps = type(uint256).max;
+        uint256 S = cfg.collateralRate.length;
+        uint256 T = cfg.timeMult.length;
+        for (uint256 s = 0; s < S; s++) {
+            bool found;
+            uint256 i;
+            for (uint256 k = R - 1; k > 0; k--) {
+                uint256 idx = k - 1; // walks R-2, R-3, ..., 0
+                if (cfg.refundTable[s * R + idx] < 10000) {
+                    i = idx;
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) return 0; // this row refunds 100% from bucket 0 on — no deterrent at all
+
+            uint256 x = cfg.ratioThresholds[i];
+            if (x == 0) return 0;
+            uint256 penalty = 10000 - cfg.refundTable[s * R + i]; // bps, "(1-phi)"
+
+            for (uint256 t = 0; t < T; t++) {
+                // kappaBps = rho * timeMult[t] * penalty / (10000 * x), computed
+                // as two mulDivs (same style as computeCollateral) to avoid overflow.
+                uint256 combined = FullMath.mulDiv(cfg.collateralRate[s], cfg.timeMult[t], 10000);
+                uint256 kappaBps = FullMath.mulDiv(combined, penalty, x);
+                if (kappaBps < worstKappaBps) worstKappaBps = kappaBps;
+            }
+        }
+    }
+
     /// Settlement-time refund: stakeAmount x refundRow[fillRatioBucket(...)].
     /// D-2: the ratio is the fraction of the filler's OWN commitment delivered,
     /// not the fraction of the whole order.
@@ -336,7 +393,8 @@ library DynamicStakeLib {
         uint32 minCollateralRate,
         uint32 maxCollateralRate,
         uint32 maxRefundBps,
-        uint256 maxBuckets
+        uint256 maxBuckets,
+        uint256 minWorstCaseKappaBps
     ) public pure {
         uint256 S = c.collateralRate.length;
         uint256 T = c.timeMult.length;
@@ -396,6 +454,13 @@ library DynamicStakeLib {
             }
             require(prev == maxRefundBps, "refund row must end at 100%");
         }
+
+        // Invariant 8 (direct economic floor): see worstCaseKappaBps above —
+        // folded into `validate` (rather than a separate call from FillAuction)
+        // purely so the calldata->memory copy of `c` isn't paid for twice
+        // across two external calls, for the same EIP-170 bytecode-size reason
+        // every other check in this function was moved out of FillAuction.
+        require(worstCaseKappaBps(c) >= minWorstCaseKappaBps, "kappa floor breached");
     }
 
     /// D1: shape-independent comparison of `newCfg` against the live `oldCfgStorage`,
@@ -409,8 +474,9 @@ library DynamicStakeLib {
     /// Known limitation (documented, not fixed): the grid is discrete, so a
     /// pathological reshape could in principle hide a violation strictly
     /// between two sampled points. The grid is deliberately dense enough to
-    /// cover the fill percentages that matter (1/5/20/50/100%) and a wide
-    /// notional spread (0.5-500 ETH).
+    /// cover a wide notional spread (0.5-500 ETH) and — see
+    /// `_bucketEdgePoints` — every non-honest ratio-bucket edge of BOTH
+    /// configs, which is where the profit-maximising snipe actually sits.
     function guardCheck(
         StakeConfig storage oldCfgStorage,
         StakeConfig memory newCfg,
@@ -419,10 +485,10 @@ library DynamicStakeLib {
         uint256 maxRefundBps
     ) public view returns (bool isLoosening) {
         uint256[4] memory sampleNotionals = [uint256(0.5 ether), 5 ether, 50 ether, 500 ether];
-        uint256[5] memory sampleFillsBps  = [uint256(100), 500, 2000, 5000, 10000]; // 1/5/20/50/100%
         uint256 refDeadline = block.number + 10_000_000; // far beyond any timeThresholds -> fixed time bucket on both sides
 
         StakeConfig memory oldCfg = oldCfgStorage;
+        uint256[] memory edgePts = _bucketEdgePoints(oldCfg.ratioThresholds, newCfg.ratioThresholds);
 
         for (uint256 i = 0; i < sampleNotionals.length; i++) {
             uint256 notional = sampleNotionals[i];
@@ -435,30 +501,91 @@ library DynamicStakeLib {
             if (collNew < collOld) isLoosening = true;
             require(_withinMaxDelta(collNew, collOld, maxDeltaBps), "collateral delta too large");
 
-            for (uint256 j = 0; j < sampleFillsBps.length; j++) {
-                uint256 fillBps = sampleFillsBps[j];
-                uint32 refundOldBps = refundFracBpsAt(oldCfg, notional, fillBps);
-                uint32 refundNewBps = refundFracBpsAt(newCfg, notional, fillBps);
+            // #1 (griefing guard): the 3 original low, attacker-relevant fill
+            // points — floor is UNCONDITIONAL here. A fill of only 1%/5%/20%
+            // must never look "already honest", no matter how the ratio
+            // buckets get reshaped.
+            if (
+                _checkFillPoint(oldCfg, newCfg, notional, 100, collOld, collNew, maxDeltaBps, minPenaltyBps, maxRefundBps, true)
+            ) isLoosening = true;
+            if (
+                _checkFillPoint(oldCfg, newCfg, notional, 500, collOld, collNew, maxDeltaBps, minPenaltyBps, maxRefundBps, true)
+            ) isLoosening = true;
+            if (
+                _checkFillPoint(oldCfg, newCfg, notional, 2000, collOld, collNew, maxDeltaBps, minPenaltyBps, maxRefundBps, true)
+            ) isLoosening = true;
 
-                uint256 penaltyOld = collOld * (maxRefundBps - refundOldBps) / maxRefundBps;
-                uint256 penaltyNew = collNew * (maxRefundBps - refundNewBps) / maxRefundBps;
-
-                if (penaltyNew < penaltyOld) isLoosening = true;
-                require(_withinMaxDelta(penaltyNew, penaltyOld, maxDeltaBps), "penalty delta too large");
-
-                // #2 (penalty floor): at the low, attacker-relevant fill points
-                // only, the penalty itself (not just its DELTA from the old
-                // value) must clear an absolute floor, so PARAM_ADMIN can't gut
-                // the sniping fee even gradually, across many small individually
-                // maxDelta-compliant changes (each step legal on its own, but
-                // the cumulative drift would otherwise erode the fee to nothing).
-                if (fillBps == 100 || fillBps == 500 || fillBps == 2000) {
-                    require(
-                        refundNewBps <= maxRefundBps - minPenaltyBps,
-                        "penalty floor breached"
-                    );
-                }
+            // #2 (penalty floor, generalised): every non-honest ratio-bucket
+            // edge of BOTH configs (see `_bucketEdgePoints`) — this is where a
+            // profit-maximising snipe actually sits (see the economic argument
+            // above `computeRefund`), not the low end. The floor is skipped
+            // ONLY when this specific edge already sits at the row's max
+            // refund: since refund is non-decreasing across buckets, that
+            // means the row's real honest cutoff is at or before this edge —
+            // an EARLIER edge (or one of the 3 fixed points above) is the one
+            // actually carrying the constraint, not this one.
+            for (uint256 j = 0; j < edgePts.length; j++) {
+                if (
+                    _checkFillPoint(oldCfg, newCfg, notional, edgePts[j], collOld, collNew, maxDeltaBps, minPenaltyBps, maxRefundBps, false)
+                ) isLoosening = true;
             }
+        }
+    }
+
+    /// Shared per-(notional, fillBps) check used by `guardCheck`: enforces the
+    /// penalty delta bound and, when `floorAlways` (or the point isn't already
+    /// at the row's max refund), the absolute penalty floor. Returns whether
+    /// this point shows a net loosening.
+    function _checkFillPoint(
+        StakeConfig memory oldCfg,
+        StakeConfig memory newCfg,
+        uint256 notional,
+        uint256 fillBps,
+        uint256 collOld,
+        uint256 collNew,
+        uint256 maxDeltaBps,
+        uint256 minPenaltyBps,
+        uint256 maxRefundBps,
+        bool floorAlways
+    ) private pure returns (bool loosening) {
+        uint32 refundOldBps = refundFracBpsAt(oldCfg, notional, fillBps);
+        uint32 refundNewBps = refundFracBpsAt(newCfg, notional, fillBps);
+
+        uint256 penaltyOld = collOld * (maxRefundBps - refundOldBps) / maxRefundBps;
+        uint256 penaltyNew = collNew * (maxRefundBps - refundNewBps) / maxRefundBps;
+
+        loosening = penaltyNew < penaltyOld;
+        require(_withinMaxDelta(penaltyNew, penaltyOld, maxDeltaBps), "penalty delta too large");
+
+        if (floorAlways || refundNewBps < maxRefundBps) {
+            require(refundNewBps <= maxRefundBps - minPenaltyBps, "penalty floor breached");
+        }
+    }
+
+    /// Builds the ratio-bucket-edge sample set for `guardCheck`: from BOTH the
+    /// old and the new config, the fill% just under each non-honest bucket's
+    /// upper edge.
+    ///
+    /// Why the edges: within any one bucket, refund is a step function of
+    /// fill% (constant), while a snipe's revenue grows with fill% — so a
+    /// profit-maximising filler who has already decided to under-deliver
+    /// always delivers as much as possible WITHOUT crossing into the next
+    /// (better) bucket. That optimum sits at `ratioThresholds[i] - 1`, not at
+    /// the low end of the range. Both configs' thresholds are sampled because
+    /// a reshape can move the edges themselves, and the comparison must catch
+    /// a new edge hiding a breach even if the old edge at that fill% looked
+    /// fine (and vice versa).
+    function _bucketEdgePoints(
+        uint256[] memory oldThresholds,
+        uint256[] memory newThresholds
+    ) private pure returns (uint256[] memory pts) {
+        pts = new uint256[](oldThresholds.length + newThresholds.length);
+        uint256 k = 0;
+        for (uint256 i = 0; i < oldThresholds.length; i++) {
+            pts[k++] = oldThresholds[i] > 0 ? oldThresholds[i] - 1 : 0;
+        }
+        for (uint256 i = 0; i < newThresholds.length; i++) {
+            pts[k++] = newThresholds[i] > 0 ? newThresholds[i] - 1 : 0;
         }
     }
 

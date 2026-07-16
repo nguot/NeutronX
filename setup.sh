@@ -25,7 +25,7 @@ mkdir -p "$LOG_DIR"
 export PATH="$HOME/.foundry/bin:$PATH"
 
 ALCHEMY_URL="https://eth-mainnet.g.alchemy.com/v2/NqceSkD9a9GU5a-EbT9wp"
-FORK_BLOCK="25450000"  # ~Jul 2026 — see the NOTE in chaina_anvil.sh before re-bumping
+source "$ROOT/scripts/fork_block.sh"   # sets FORK_BLOCK — see the NOTE in chaina_anvil.sh before re-bumping
 RPC_A="http://127.0.0.1:8545"
 RPC_B="http://127.0.0.1:8546"
 CHAIN_A_ID=31337

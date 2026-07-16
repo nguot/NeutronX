@@ -5,9 +5,11 @@ import "forge-std/Test.sol";
 import "../src/FallbackExecutor.sol";
 import "../src/PartialFillReactor.sol";
 import "../src/FillAuction.sol";
+import { IEthNotionalOracle } from "../src/interfaces/IEthNotionalOracle.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "./mocks/MockERC20.sol";
 import "./mocks/MockAggregatorRouter.sol";
+import "./mocks/MockSplitAggregatorRouter.sol";
 
 interface IPermit2Full {
     function approve(
@@ -55,7 +57,7 @@ contract FallbackExecutorTest is Test {
         vm.createSelectFork(vm.envString("ALCHEMY_RPC_URL"));
 
         // deploy contracts
-        fillAuction = new FillAuction(treasury, WETH, address(0), 0, true); // input is WETH → oracle short-circuits 1:1
+        fillAuction = new FillAuction(treasury, IEthNotionalOracle(address(0)), true); // oracle-disabled (notional == fill)
         reactor = new PartialFillReactor(
             PERMIT2,
             address(fillAuction),
@@ -139,7 +141,7 @@ contract FallbackExecutorTest is Test {
     function test_fallback_swapsSuccessfully_viaArbitraryAllowlistedRouter() public {
         MockERC20 mockOut = new MockERC20("MOUT", "MOUT");
         MockAggregatorRouter mockRouter = new MockAggregatorRouter();
-        fallbackExecutor.setRouterAllowed(address(mockRouter), true);
+        fallbackExecutor.setRouterAllowed(address(mockRouter), address(mockRouter), true);
 
         uint256 minOutputAmount = 1000e18;
         uint256 quotedAmountOut = 1200e18; // solver's quote, above the signed floor
@@ -163,12 +165,43 @@ contract FallbackExecutorTest is Test {
         assertEq(wethBefore - IERC20(WETH).balanceOf(swapper), INPUT_AMOUNT, "swapper should spend exactly the input");
     }
 
+    // ParaSwap-style two-address model: approveTarget (TokenTransferProxy) is a
+    // different contract than router (Augustus, the call target) — exercises
+    // that forceApprove/forceApprove(0) target approveTargetOf[router], and
+    // that the proxy (not the router) is the one doing the actual pull.
+    function test_fallback_swapsSuccessfully_viaSplitApproveTargetRouter() public {
+        MockERC20 mockOut = new MockERC20("MOUT", "MOUT");
+        MockTokenTransferProxy proxy = new MockTokenTransferProxy();
+        MockSplitAggregatorRouter mockRouter = new MockSplitAggregatorRouter(proxy);
+        fallbackExecutor.setRouterAllowed(address(mockRouter), address(proxy), true);
+
+        uint256 minOutputAmount = 1000e18;
+        uint256 quotedAmountOut = 1200e18;
+
+        PartialFillReactor.SignedOrder memory order =
+            _makeOrderWithFloor(address(mockOut), minOutputAmount, 1);
+
+        vm.roll(block.number + 91);
+
+        bytes memory routeCalldata = abi.encodeWithSelector(
+            MockSplitAggregatorRouter.swap.selector,
+            WETH, INPUT_AMOUNT, address(mockOut), quotedAmountOut, swapper
+        );
+
+        vm.prank(caller);
+        fallbackExecutor.executeFallback(order, address(mockRouter), routeCalldata, quotedAmountOut);
+
+        assertEq(mockOut.balanceOf(swapper), quotedAmountOut, "swapper should receive the quoted output");
+        assertEq(IERC20(WETH).allowance(address(fallbackExecutor), address(proxy)), 0, "approveTarget allowance must be reset to 0 after execution");
+        assertEq(IERC20(WETH).allowance(address(fallbackExecutor), address(mockRouter)), 0, "router itself must never receive an allowance in the split model");
+    }
+
     // C-1: the swapper's signed floor (pro-rated minOutputAmount) must be
     // enforced even if a sloppy/malicious solver passes a lower minAmountOut.
     function test_fallback_revert_belowSignedFloor() public {
         MockERC20 mockOut = new MockERC20("MOUT", "MOUT");
         MockAggregatorRouter mockRouter = new MockAggregatorRouter();
-        fallbackExecutor.setRouterAllowed(address(mockRouter), true);
+        fallbackExecutor.setRouterAllowed(address(mockRouter), address(mockRouter), true);
 
         uint256 minOutputAmount = 1000e18; // swapper's signed floor (full fill)
         uint256 solverMinOut    = 500e18;  // solver under-promises...
@@ -194,7 +227,7 @@ contract FallbackExecutorTest is Test {
     function test_fallback_revert_insufficientOutput() public {
         MockERC20 mockOut = new MockERC20("MOUT", "MOUT");
         MockAggregatorRouter mockRouter = new MockAggregatorRouter();
-        fallbackExecutor.setRouterAllowed(address(mockRouter), true);
+        fallbackExecutor.setRouterAllowed(address(mockRouter), address(mockRouter), true);
 
         uint256 minOutputAmount = 100e18;  // signed floor is low, won't bind
         uint256 solverMinOut    = 1000e18; // solver promises this much...
@@ -250,7 +283,7 @@ contract FallbackExecutorTest is Test {
     function test_fallback_refundsUnconsumedInput() public {
         MockERC20 mockOut = new MockERC20("MOUT", "MOUT");
         MockAggregatorRouter mockRouter = new MockAggregatorRouter();
-        fallbackExecutor.setRouterAllowed(address(mockRouter), true);
+        fallbackExecutor.setRouterAllowed(address(mockRouter), address(mockRouter), true);
 
         uint256 minOutputAmount = 1000e18;
         uint256 quotedAmountOut = 1200e18;
@@ -284,14 +317,16 @@ contract FallbackExecutorTest is Test {
     function test_fallback_revert_cumulativeBelowAbsoluteFloor() public {
         MockERC20 mockOut = new MockERC20("MOUT", "MOUT");
         MockAggregatorRouter mockRouter = new MockAggregatorRouter();
-        fallbackExecutor.setRouterAllowed(address(mockRouter), true);
+        fallbackExecutor.setRouterAllowed(address(mockRouter), address(mockRouter), true);
 
-        // Tiny custom order (inputAmount=3, minOutputAmount=5, price=1.5) so
-        // floor-division creates an exact 1-unit gap, mirroring
+        // Custom order (inputAmount=10, minOutputAmount=19, price=1.9) chosen
+        // so the floor IS reachable in a single fill (10*1.9=19 exact, passes
+        // _validateOrder's register-time "unreachable min output" check) but
+        // an even 5+5 split still leaks value to flooring, mirroring
         // CompletionFloor.t.sol's example but ending via fallback.
-        uint256 inputAmount     = 3;
-        uint256 minOutputAmount = 5;
-        uint128 price           = 1.5e18;
+        uint256 inputAmount     = 10;
+        uint256 minOutputAmount = 19;
+        uint128 price           = 1.9e18;
 
         PartialFillReactor.OrderInfo memory info = PartialFillReactor.OrderInfo({
             swapper: swapper,
@@ -322,48 +357,62 @@ contract FallbackExecutorTest is Test {
         vm.prank(swapper);
         IPermit2Full(PERMIT2).approve(WETH, address(reactor), type(uint160).max, type(uint48).max);
 
-        // fillerA partially fills 2 of 3: outputAmount = 2*1.5 = 3, pro-rata
-        // floor = floor(5*2/3) = 3 (3>=3 ok). Leaves a 1-unit remainder.
+        // fillerA partially fills 5 of 10: outputAmount = 5*1.9 = 9.5 -> floor 9,
+        // pro-rata floor = floor(19*5/10) = 9 (9>=9 ok). Leaves a 5-unit remainder.
         address fillerA = makeAddr("fillerA");
         mockOut.mint(fillerA, 1000);
         vm.prank(fillerA);
         mockOut.approve(address(reactor), type(uint256).max);
 
+        // fillAmount=5 (unlike the old fillAmount=2) requires a nonzero stake
+        // once rounded, so fund + attach it explicitly.
+        uint256 requiredStake = fillAuction.previewCollateral(WETH, info.feeTier, 5, info.deadline);
+        vm.deal(fillerA, requiredStake);
         vm.prank(fillerA);
-        reactor.register(order, 2);
+        reactor.register{value: requiredStake}(order, 5);
 
         vm.prank(fillerA);
-        reactor.executePartialChunk(order, 2);
-        assertEq(reactor.remainingInput(orderHash, inputAmount), 1, "1 wei left");
+        reactor.executePartialChunk(order, 5);
+        assertEq(reactor.remainingInput(orderHash, inputAmount), 5, "5 units left");
 
-        // Fallback for the remaining 1: signedFloor = floor(5*1/3) = 1. Mock
-        // router delivers exactly 1 -> clears its own pro-rata floor, but
-        // cumulative (3 + 1 = 4) < minOutputAmount (5).
+        // Fallback for the remaining 5: signedFloor = floor(19*5/10) = 9. Mock
+        // router delivers exactly 9 -> clears its own pro-rata floor, but
+        // cumulative (9 + 9 = 18) < minOutputAmount (19).
         vm.roll(block.number + 91);
 
         bytes memory routeCalldata = abi.encodeWithSelector(
             MockAggregatorRouter.swap.selector,
-            WETH, uint256(1), address(mockOut), uint256(1), swapper
+            WETH, uint256(5), address(mockOut), uint256(9), swapper
         );
 
         vm.prank(caller);
         vm.expectRevert("min output total");
-        fallbackExecutor.executeFallback(order, address(mockRouter), routeCalldata, 1);
+        fallbackExecutor.executeFallback(order, address(mockRouter), routeCalldata, 9);
     }
 
     function test_setRouterAllowed_onlyOwner() public {
         address newRouter = makeAddr("oneInchRouter");
-        assertFalse(fallbackExecutor.allowedRouters(newRouter));
+        assertEq(fallbackExecutor.approveTargetOf(newRouter), address(0));
 
         vm.prank(caller);
         vm.expectRevert("not owner");
-        fallbackExecutor.setRouterAllowed(newRouter, true);
+        fallbackExecutor.setRouterAllowed(newRouter, newRouter, true);
 
         // setUp() deployed fallbackExecutor as this test contract, so it is the owner.
-        fallbackExecutor.setRouterAllowed(newRouter, true);
-        assertTrue(fallbackExecutor.allowedRouters(newRouter));
+        fallbackExecutor.setRouterAllowed(newRouter, newRouter, true);
+        assertEq(fallbackExecutor.approveTargetOf(newRouter), newRouter);
 
-        fallbackExecutor.setRouterAllowed(newRouter, false);
-        assertFalse(fallbackExecutor.allowedRouters(newRouter));
+        fallbackExecutor.setRouterAllowed(newRouter, newRouter, false);
+        assertEq(fallbackExecutor.approveTargetOf(newRouter), address(0));
+    }
+
+    // Registering a router with a distinct approveTarget (ParaSwap-style) must
+    // record that exact pairing, not silently collapse to the single-address model.
+    function test_setRouterAllowed_distinctApproveTarget() public {
+        address augustus  = makeAddr("augustus");
+        address tokenTransferProxy = makeAddr("tokenTransferProxy");
+
+        fallbackExecutor.setRouterAllowed(augustus, tokenTransferProxy, true);
+        assertEq(fallbackExecutor.approveTargetOf(augustus), tokenTransferProxy);
     }
 }

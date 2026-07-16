@@ -3,7 +3,7 @@
 // right now". Falls back to the static book in mockOrderbook.ts if a pair
 // isn't covered here or the request fails (offline dev, rate limit, etc).
 
-import axios from 'axios'
+import { http as axios } from '../httpClient'
 import { SUPPORTED_TOKENS } from '../config'
 import type { BidLevel, MockOrderbook } from './mockOrderbook'
 

@@ -22,11 +22,17 @@ export const ERC20_ABI = [
   'function transfer(address to, uint256 amount) returns (bool)',
 ]
 
+// Model 2 (filler-holds-key, continuous fill) — mirrors backend/src/chain/abis.ts.
+// No more merkleRoot/numSlots/cosignerSig/slotIndex — per-fill hashlock chosen
+// by the filler itself, on-chain `remaining`, swapper-only signatures.
 export const ESCROW_SRC_FACTORY_ABI = [
-  'function fillSlot((address swapper,address inputToken,uint256 inputAmount,address outputToken,uint256 minOutput,uint256 deadline,uint256 nonce,bytes32 merkleRoot,uint8 numSlots) info, bytes swapperSig, bytes cosignerSig, uint8 slotIndex, bytes32 hashlock, bytes32[] merkleProof) external payable returns (address escrow)',
-  'function isSlotFilled(bytes32 orderHash, uint8 slotIndex) view returns (bool)',
-  'function computeAddress(bytes32 orderHash, uint8 slotIndex) view returns (address)',
-  'function hashOrder((address swapper,address inputToken,uint256 inputAmount,address outputToken,uint256 minOutput,uint256 deadline,uint256 nonce,bytes32 merkleRoot,uint8 numSlots) info) pure returns (bytes32)',
+  'function fillSlot((address swapper,address inputToken,uint256 inputAmount,address outputToken,uint256 minOutput,uint256 deadlineBase,uint256 nonce,uint24 feeTier) info, bytes swapperSig, (bytes32 orderHash,bytes32 hashlock,uint256 fillAmount,uint256 t1,uint256 t2) auth, bytes perFillSig) external payable returns (address escrow)',
+  'function computeAddress(bytes32 orderHash, bytes32 hashlock) view returns (address)',
+  'function isFilled(bytes32 orderHash, bytes32 hashlock) view returns (bool)',
+  'function remainingInput(bytes32 orderHash, uint256 orderAmount) view returns (uint256)',
+  'function previewRequiredStake(uint256 fillAmount, address inputToken, uint24 feeTier, uint256 t1) view returns (uint256)',
+  'function hashOrder((address swapper,address inputToken,uint256 inputAmount,address outputToken,uint256 minOutput,uint256 deadlineBase,uint256 nonce,uint24 feeTier) info) pure returns (bytes32)',
+  'function hashFill((bytes32 orderHash,bytes32 hashlock,uint256 fillAmount,uint256 t1,uint256 t2) auth) pure returns (bytes32)',
   'function DOMAIN_SEPARATOR() view returns (bytes32)',
 ]
 
@@ -45,6 +51,9 @@ export const ESCROW_FACTORY_ABI = [
 ]
 
 export const ESCROW_DST_ABI = [
+  'function claimed() view returns (bool)',
+  'function refunded() view returns (bool)',
+  'function refund() external',
   'event Claimed(address indexed claimer, bytes32 secret)',
 ]
 

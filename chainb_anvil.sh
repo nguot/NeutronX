@@ -15,9 +15,9 @@
 #   bash chainb_anvil.sh
 
 ALCHEMY_URL="https://eth-mainnet.g.alchemy.com/v2/NqceSkD9a9GU5a-EbT9wp"
-FORK_BLOCK="25450000"   # same block as Chain A so token balances match.
-# NOTE: see the matching comment in chaina_anvil.sh — bump both together, and
-# re-verify whale balances at the new block before doing so.
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/scripts/fork_block.sh"   # sets FORK_BLOCK
+# NOTE: bump FORK_BLOCK in scripts/fork_block.sh, not here — see the comment
+# there, and re-verify whale balances at the new block before doing so.
 
 echo ""
 echo "╔══════════════════════════════════════════════════════════╗"

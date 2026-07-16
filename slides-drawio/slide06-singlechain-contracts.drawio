@@ -1,0 +1,119 @@
+<mxfile host="app.diagrams.net">
+  <diagram id="slide06" name="Slide 6 - Single-chain contracts">
+    <mxGraphModel dx="1500" dy="900" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1460" pageHeight="800" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <!-- ================= PartialFillReactor ================= -->
+        <mxCell id="R" value="PartialFillReactor" style="swimlane;html=1;startSize=40;rounded=1;arcSize=4;fillColor=#16305C;swimlaneFillColor=#FFFFFF;strokeColor=#16305C;fontColor=#FFFFFF;fontSize=17;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="40" y="70" width="560" height="290" as="geometry" />
+        </mxCell>
+        <mxCell id="R1" value="register()" style="whiteSpace=wrap;html=1;fillColor=#F3F5FA;strokeColor=#D5DAE5;align=left;verticalAlign=middle;spacingLeft=14;fontSize=14;fontColor=#16305C;" vertex="1" parent="R">
+          <mxGeometry x="10" y="48" width="540" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="R2" value="executePartialChunk()" style="whiteSpace=wrap;html=1;fillColor=#F3F5FA;strokeColor=#D5DAE5;align=left;verticalAlign=middle;spacingLeft=14;fontSize=14;fontColor=#16305C;" vertex="1" parent="R">
+          <mxGeometry x="10" y="84" width="540" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="R3" value="cancelOrder()  ·  invalidateNonce()" style="whiteSpace=wrap;html=1;fillColor=#F3F5FA;strokeColor=#D5DAE5;align=left;verticalAlign=middle;spacingLeft=14;fontSize=14;fontColor=#16305C;" vertex="1" parent="R">
+          <mxGeometry x="10" y="120" width="540" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="R4" value="markFallbackInitiated()" style="whiteSpace=wrap;html=1;fillColor=#F3F5FA;strokeColor=#D5DAE5;align=left;verticalAlign=middle;spacingLeft=14;fontSize=14;fontColor=#16305C;" vertex="1" parent="R">
+          <mxGeometry x="10" y="156" width="540" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="R5" value="recordFallbackOutput()" style="whiteSpace=wrap;html=1;fillColor=#F3F5FA;strokeColor=#D5DAE5;align=left;verticalAlign=middle;spacingLeft=14;fontSize=14;fontColor=#16305C;" vertex="1" parent="R">
+          <mxGeometry x="10" y="192" width="540" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="R6" value="isCancelled()  ·  remainingInput()   [view]" style="whiteSpace=wrap;html=1;fillColor=#EEF0F6;strokeColor=#D5DAE5;align=left;verticalAlign=middle;spacingLeft=14;fontSize=13;fontColor=#5B6472;fontStyle=2;" vertex="1" parent="R">
+          <mxGeometry x="10" y="228" width="540" height="30" as="geometry" />
+        </mxCell>
+
+        <!-- ================= FillAuction ================= -->
+        <mxCell id="A" value="FillAuction" style="swimlane;html=1;startSize=40;rounded=1;arcSize=4;fillColor=#16305C;swimlaneFillColor=#FFFFFF;strokeColor=#16305C;fontColor=#FFFFFF;fontSize=17;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="860" y="70" width="560" height="290" as="geometry" />
+        </mxCell>
+        <mxCell id="A1" value="register()  payable" style="whiteSpace=wrap;html=1;fillColor=#F3F5FA;strokeColor=#D5DAE5;align=left;verticalAlign=middle;spacingLeft=14;fontSize=14;fontColor=#16305C;" vertex="1" parent="A">
+          <mxGeometry x="10" y="48" width="540" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="A2" value="hasValidRegistration()" style="whiteSpace=wrap;html=1;fillColor=#F3F5FA;strokeColor=#D5DAE5;align=left;verticalAlign=middle;spacingLeft=14;fontSize=14;fontColor=#16305C;" vertex="1" parent="A">
+          <mxGeometry x="10" y="84" width="540" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="A3" value="onFillSuccess()" style="whiteSpace=wrap;html=1;fillColor=#F3F5FA;strokeColor=#D5DAE5;align=left;verticalAlign=middle;spacingLeft=14;fontSize=14;fontColor=#16305C;" vertex="1" parent="A">
+          <mxGeometry x="10" y="120" width="540" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="A4" value="slash()" style="whiteSpace=wrap;html=1;fillColor=#F3F5FA;strokeColor=#D5DAE5;align=left;verticalAlign=middle;spacingLeft=14;fontSize=14;fontColor=#16305C;" vertex="1" parent="A">
+          <mxGeometry x="10" y="156" width="540" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="A5" value="releaseRegistration()" style="whiteSpace=wrap;html=1;fillColor=#F3F5FA;strokeColor=#D5DAE5;align=left;verticalAlign=middle;spacingLeft=14;fontSize=14;fontColor=#16305C;" vertex="1" parent="A">
+          <mxGeometry x="10" y="192" width="540" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="A6" value="setStakeConfig()  ·  commitPending()   [governance]" style="whiteSpace=wrap;html=1;fillColor=#EEF0F6;strokeColor=#D5DAE5;align=left;verticalAlign=middle;spacingLeft=14;fontSize=13;fontColor=#5B6472;fontStyle=2;" vertex="1" parent="A">
+          <mxGeometry x="10" y="228" width="540" height="30" as="geometry" />
+        </mxCell>
+
+        <!-- ================= FallbackExecutor ================= -->
+        <mxCell id="F" value="FallbackExecutor" style="swimlane;html=1;startSize=40;rounded=1;arcSize=4;fillColor=#4A5C82;swimlaneFillColor=#FFFFFF;strokeColor=#4A5C82;fontColor=#FFFFFF;fontSize=17;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="40" y="530" width="560" height="170" as="geometry" />
+        </mxCell>
+        <mxCell id="F1" value="executeFallback()   [FALLBACK_WINDOW = 10 block]" style="whiteSpace=wrap;html=1;fillColor=#F3F5FA;strokeColor=#D5DAE5;align=left;verticalAlign=middle;spacingLeft=14;fontSize=14;fontColor=#16305C;" vertex="1" parent="F">
+          <mxGeometry x="10" y="48" width="540" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="F2" value="setRouterAllowed()   [Uniswap / 1inch / Kyber / ParaSwap]" style="whiteSpace=wrap;html=1;fillColor=#F3F5FA;strokeColor=#D5DAE5;align=left;verticalAlign=middle;spacingLeft=14;fontSize=13;fontColor=#16305C;" vertex="1" parent="F">
+          <mxGeometry x="10" y="84" width="540" height="30" as="geometry" />
+        </mxCell>
+
+        <!-- ================= DynamicStakeLib ================= -->
+        <mxCell id="D" value="DynamicStakeLib   (thư viện)" style="swimlane;html=1;startSize=40;rounded=1;arcSize=4;fillColor=#4A5C82;swimlaneFillColor=#FFFFFF;strokeColor=#4A5C82;fontColor=#FFFFFF;fontSize=17;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="860" y="470" width="560" height="230" as="geometry" />
+        </mxCell>
+        <mxCell id="D1" value="requiredStake()   [+ sàn minCollateral]" style="whiteSpace=wrap;html=1;fillColor=#F3F5FA;strokeColor=#D5DAE5;align=left;verticalAlign=middle;spacingLeft=14;fontSize=14;fontColor=#16305C;" vertex="1" parent="D">
+          <mxGeometry x="10" y="48" width="540" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="D2" value="computeRegistration()" style="whiteSpace=wrap;html=1;fillColor=#F3F5FA;strokeColor=#D5DAE5;align=left;verticalAlign=middle;spacingLeft=14;fontSize=14;fontColor=#16305C;" vertex="1" parent="D">
+          <mxGeometry x="10" y="84" width="540" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="D3" value="computeRefund()" style="whiteSpace=wrap;html=1;fillColor=#F3F5FA;strokeColor=#D5DAE5;align=left;verticalAlign=middle;spacingLeft=14;fontSize=14;fontColor=#16305C;" vertex="1" parent="D">
+          <mxGeometry x="10" y="120" width="540" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="D4" value="worstCaseKappaBps()   [snipe luôn lỗ]" style="whiteSpace=wrap;html=1;fillColor=#F3F5FA;strokeColor=#D5DAE5;align=left;verticalAlign=middle;spacingLeft=14;fontSize=14;fontColor=#16305C;" vertex="1" parent="D">
+          <mxGeometry x="10" y="156" width="540" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="D5" value="guardCheck()  ·  validate()" style="whiteSpace=wrap;html=1;fillColor=#F3F5FA;strokeColor=#D5DAE5;align=left;verticalAlign=middle;spacingLeft=14;fontSize=14;fontColor=#16305C;" vertex="1" parent="D">
+          <mxGeometry x="10" y="192" width="540" height="30" as="geometry" />
+        </mxCell>
+
+        <!-- ================= Oracle ================= -->
+        <mxCell id="O" value="UniswapV3NotionalOracle&#10;quoteEthNotional()" style="rounded=1;arcSize=12;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#C89B2E;strokeWidth=2;fontColor=#8A6D1A;fontSize=14;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="620" y="440" width="220" height="80" as="geometry" />
+        </mxCell>
+
+        <!-- ================= EDGES (call graph) ================= -->
+        <mxCell id="E1" value="đặt stake" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#C8102E;strokeWidth=2;fontSize=13;fontColor=#C8102E;labelBackgroundColor=#FFFFFF;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="R1" target="A1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="E2" value="check đăng ký + hoàn stake" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#C8102E;strokeWidth=2;fontSize=13;fontColor=#C8102E;labelBackgroundColor=#FFFFFF;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="R2" target="A3">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="E3" value="requiredStake" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#16305C;strokeWidth=2;fontSize=13;fontColor=#16305C;labelBackgroundColor=#FFFFFF;exitX=1;exitY=0.5;entryX=1;entryY=0.5;" edge="1" parent="1" source="A1" target="D1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="E4" value="computeRefund" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#16305C;strokeWidth=2;fontSize=13;fontColor=#16305C;labelBackgroundColor=#FFFFFF;exitX=1;exitY=0.5;entryX=1;entryY=0.5;" edge="1" parent="1" source="A3" target="D3">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="E5" value="guardCheck / validate" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#16305C;strokeWidth=2;fontSize=13;fontColor=#16305C;labelBackgroundColor=#FFFFFF;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="A6" target="D5">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="E6" value="định giá notional" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;dashed=1;strokeColor=#C89B2E;strokeWidth=2;fontSize=13;fontColor=#8A6D1A;labelBackgroundColor=#FFFFFF;exitX=0;exitY=0.5;entryX=1;entryY=0.5;" edge="1" parent="1" source="A1" target="O">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="E7" value="mark / recordFallbackOutput" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#16305C;strokeWidth=2;fontSize=13;fontColor=#16305C;labelBackgroundColor=#FFFFFF;exitX=0.5;exitY=0;entryX=0.5;entryY=1;" edge="1" parent="1" source="F1" target="R4">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="E8" value="đọc trạng thái order (slash/release)" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;dashed=1;strokeColor=#8A93A6;strokeWidth=2;fontSize=13;fontColor=#5B6472;labelBackgroundColor=#FFFFFF;exitX=0;exitY=0.5;entryX=1;entryY=0.5;" edge="1" parent="1" source="A4" target="R6">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

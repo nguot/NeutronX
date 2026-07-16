@@ -1,0 +1,73 @@
+<mxfile host="app.diagrams.net">
+  <diagram id="ccuml" name="Cross-chain contracts UML">
+    <mxGraphModel dx="1500" dy="900" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1480" pageHeight="720" math="0" shadow="0">
+      <root>
+        <mxCell id="0" /><mxCell id="1" parent="0" />
+
+        <mxCell id="lblA" value="CHAIN A  (nguồn — token swapper)" style="text;html=1;fontColor=#16305C;fontSize=15;fontStyle=1;align=left;" vertex="1" parent="1"><mxGeometry x="40" y="34" width="500" height="26" as="geometry" /></mxCell>
+        <mxCell id="lblB" value="CHAIN B  (đích — token filler)" style="text;html=1;fontColor=#16305C;fontSize=15;fontStyle=1;align=left;" vertex="1" parent="1"><mxGeometry x="880" y="34" width="500" height="26" as="geometry" /></mxCell>
+
+        <!-- ================= EscrowSrcFactory ================= -->
+        <mxCell id="SF" value="EscrowSrcFactory" style="swimlane;html=1;startSize=40;rounded=1;arcSize=4;fillColor=#16305C;swimlaneFillColor=#FFFFFF;strokeColor=#16305C;fontColor=#FFFFFF;fontSize=17;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="40" y="70" width="560" height="224" as="geometry" />
+        </mxCell>
+        <mxCell id="SF1" value="fillSlot()  payable" style="whiteSpace=wrap;html=1;fillColor=#F3F5FA;strokeColor=#D5DAE5;align=left;verticalAlign=middle;spacingLeft=14;fontSize=14;fontColor=#16305C;" vertex="1" parent="SF"><mxGeometry x="10" y="48" width="540" height="30" as="geometry" /></mxCell>
+        <mxCell id="SF2" value="restoreRemaining()" style="whiteSpace=wrap;html=1;fillColor=#F3F5FA;strokeColor=#D5DAE5;align=left;verticalAlign=middle;spacingLeft=14;fontSize=14;fontColor=#16305C;" vertex="1" parent="SF"><mxGeometry x="10" y="84" width="540" height="30" as="geometry" /></mxCell>
+        <mxCell id="SF3" value="previewRequiredStake()" style="whiteSpace=wrap;html=1;fillColor=#F3F5FA;strokeColor=#D5DAE5;align=left;verticalAlign=middle;spacingLeft=14;fontSize=14;fontColor=#16305C;" vertex="1" parent="SF"><mxGeometry x="10" y="120" width="540" height="30" as="geometry" /></mxCell>
+        <mxCell id="SF4" value="computeAddress()  ·  isFilled()   [view]" style="whiteSpace=wrap;html=1;fillColor=#EEF0F6;strokeColor=#D5DAE5;align=left;verticalAlign=middle;spacingLeft=14;fontSize=13;fontColor=#5B6472;fontStyle=2;" vertex="1" parent="SF"><mxGeometry x="10" y="156" width="540" height="30" as="geometry" /></mxCell>
+        <mxCell id="SF5" value="remainingInput()  ·  stakeConfig()   [view]" style="whiteSpace=wrap;html=1;fillColor=#EEF0F6;strokeColor=#D5DAE5;align=left;verticalAlign=middle;spacingLeft=14;fontSize=13;fontColor=#5B6472;fontStyle=2;" vertex="1" parent="SF"><mxGeometry x="10" y="192" width="540" height="30" as="geometry" /></mxCell>
+
+        <!-- ================= EscrowSrc ================= -->
+        <mxCell id="ES" value="EscrowSrc   (clone CREATE2)" style="swimlane;html=1;startSize=40;rounded=1;arcSize=4;fillColor=#4A5C82;swimlaneFillColor=#FFFFFF;strokeColor=#4A5C82;fontColor=#FFFFFF;fontSize=17;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="40" y="430" width="560" height="224" as="geometry" />
+        </mxCell>
+        <mxCell id="ES1" value="initialize()   [chỉ factory]" style="whiteSpace=wrap;html=1;fillColor=#EEF0F6;strokeColor=#D5DAE5;align=left;verticalAlign=middle;spacingLeft=14;fontSize=13;fontColor=#5B6472;fontStyle=2;" vertex="1" parent="ES"><mxGeometry x="10" y="48" width="540" height="30" as="geometry" /></mxCell>
+        <mxCell id="ES2" value="withdraw(secret)   → filler (input + bond), LỘ S" style="whiteSpace=wrap;html=1;fillColor=#F3F5FA;strokeColor=#D5DAE5;align=left;verticalAlign=middle;spacingLeft=14;fontSize=14;fontColor=#16305C;" vertex="1" parent="ES"><mxGeometry x="10" y="84" width="540" height="30" as="geometry" /></mxCell>
+        <mxCell id="ES3" value="cancel()   sau T1 → swapper (input + bond)" style="whiteSpace=wrap;html=1;fillColor=#F3F5FA;strokeColor=#D5DAE5;align=left;verticalAlign=middle;spacingLeft=14;fontSize=14;fontColor=#16305C;" vertex="1" parent="ES"><mxGeometry x="10" y="120" width="540" height="30" as="geometry" /></mxCell>
+        <mxCell id="ES4" value="claimEth()   [pull-payment bond]" style="whiteSpace=wrap;html=1;fillColor=#F3F5FA;strokeColor=#D5DAE5;align=left;verticalAlign=middle;spacingLeft=14;fontSize=14;fontColor=#16305C;" vertex="1" parent="ES"><mxGeometry x="10" y="156" width="540" height="30" as="geometry" /></mxCell>
+        <mxCell id="ES5" value="status()   [view]" style="whiteSpace=wrap;html=1;fillColor=#EEF0F6;strokeColor=#D5DAE5;align=left;verticalAlign=middle;spacingLeft=14;fontSize=13;fontColor=#5B6472;fontStyle=2;" vertex="1" parent="ES"><mxGeometry x="10" y="192" width="540" height="30" as="geometry" /></mxCell>
+
+        <!-- ================= EscrowDstFactory ================= -->
+        <mxCell id="DF" value="EscrowDstFactory" style="swimlane;html=1;startSize=40;rounded=1;arcSize=4;fillColor=#16305C;swimlaneFillColor=#FFFFFF;strokeColor=#16305C;fontColor=#FFFFFF;fontSize=17;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="880" y="70" width="560" height="116" as="geometry" />
+        </mxCell>
+        <mxCell id="DF1" value="deploy()" style="whiteSpace=wrap;html=1;fillColor=#F3F5FA;strokeColor=#D5DAE5;align=left;verticalAlign=middle;spacingLeft=14;fontSize=14;fontColor=#16305C;" vertex="1" parent="DF"><mxGeometry x="10" y="48" width="540" height="30" as="geometry" /></mxCell>
+        <mxCell id="DF2" value="computeAddress()   [view]" style="whiteSpace=wrap;html=1;fillColor=#EEF0F6;strokeColor=#D5DAE5;align=left;verticalAlign=middle;spacingLeft=14;fontSize=13;fontColor=#5B6472;fontStyle=2;" vertex="1" parent="DF"><mxGeometry x="10" y="84" width="540" height="24" as="geometry" /></mxCell>
+
+        <!-- ================= EscrowDst ================= -->
+        <mxCell id="ED" value="EscrowDst   (clone CREATE2)" style="swimlane;html=1;startSize=40;rounded=1;arcSize=4;fillColor=#4A5C82;swimlaneFillColor=#FFFFFF;strokeColor=#4A5C82;fontColor=#FFFFFF;fontSize=17;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="880" y="430" width="560" height="188" as="geometry" />
+        </mxCell>
+        <mxCell id="ED1" value="initialize()   [chỉ factory]" style="whiteSpace=wrap;html=1;fillColor=#EEF0F6;strokeColor=#D5DAE5;align=left;verticalAlign=middle;spacingLeft=14;fontSize=13;fontColor=#5B6472;fontStyle=2;" vertex="1" parent="ED"><mxGeometry x="10" y="48" width="540" height="30" as="geometry" /></mxCell>
+        <mxCell id="ED2" value="claim(secret)   → swapper (output)" style="whiteSpace=wrap;html=1;fillColor=#F3F5FA;strokeColor=#D5DAE5;align=left;verticalAlign=middle;spacingLeft=14;fontSize=14;fontColor=#16305C;" vertex="1" parent="ED"><mxGeometry x="10" y="84" width="540" height="30" as="geometry" /></mxCell>
+        <mxCell id="ED3" value="refund()   sau T2 → chỉ filler" style="whiteSpace=wrap;html=1;fillColor=#F3F5FA;strokeColor=#D5DAE5;align=left;verticalAlign=middle;spacingLeft=14;fontSize=14;fontColor=#16305C;" vertex="1" parent="ED"><mxGeometry x="10" y="120" width="540" height="30" as="geometry" /></mxCell>
+        <mxCell id="ED4" value="status()   [view]" style="whiteSpace=wrap;html=1;fillColor=#EEF0F6;strokeColor=#D5DAE5;align=left;verticalAlign=middle;spacingLeft=14;fontSize=13;fontColor=#5B6472;fontStyle=2;" vertex="1" parent="ED"><mxGeometry x="10" y="156" width="540" height="24" as="geometry" /></mxCell>
+
+        <!-- ================= Oracle + Lib (bond, Chain A) ================= -->
+        <mxCell id="O" value="UniswapV3NotionalOracle&#10;quoteEthNotional()" style="rounded=1;arcSize=12;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#C89B2E;strokeWidth=2;fontColor=#8A6D1A;fontSize=13;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1"><mxGeometry x="640" y="326" width="220" height="72" as="geometry" /></mxCell>
+        <mxCell id="LIB" value="DynamicStakeLib&#10;requiredStakeByTimestamp()" style="rounded=1;arcSize=12;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#4A5C82;strokeWidth=2;fontColor=#4A5C82;fontSize=13;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1"><mxGeometry x="640" y="180" width="220" height="72" as="geometry" /></mxCell>
+
+        <!-- ================= EDGES ================= -->
+        <mxCell id="E1" value="deploy clone (CREATE2) + initialize" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#16305C;strokeWidth=2;fontSize=13;fontColor=#16305C;labelBackgroundColor=#FFFFFF;exitX=0.15;exitY=1;entryX=0.15;entryY=0;" edge="1" parent="1" source="SF1" target="ES">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="E2" value="restoreRemaining (callback §12.4)" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;dashed=1;strokeColor=#8A93A6;strokeWidth=2;fontSize=13;fontColor=#5B6472;labelBackgroundColor=#FFFFFF;exitX=0;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="ES3" target="SF2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="E3" value="deploy clone (CREATE2) + initialize" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#16305C;strokeWidth=2;fontSize=13;fontColor=#16305C;labelBackgroundColor=#FFFFFF;exitX=0.15;exitY=1;entryX=0.15;entryY=0;" edge="1" parent="1" source="DF1" target="ED">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="E4" value="requiredStakeByTimestamp (bond)" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeColor=#4A5C82;strokeWidth=2;fontSize=12;fontColor=#4A5C82;labelBackgroundColor=#FFFFFF;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="SF1" target="LIB">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="E5" value="quoteEthNotional" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;dashed=1;strokeColor=#C89B2E;strokeWidth=2;fontSize=12;fontColor=#8A6D1A;labelBackgroundColor=#FFFFFF;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="LIB" target="O">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="E6" value="reveal S → relayer claim(S)   (cùng hashlock H)" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;dashed=1;strokeColor=#C89B2E;strokeWidth=3;fontSize=13;fontColor=#8A6D1A;fontStyle=1;labelBackgroundColor=#FFFFFF;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="ES2" target="ED2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

@@ -3,6 +3,7 @@ pragma solidity ^0.8.20;
 
 import "forge-std/Test.sol";
 import "../src/FillAuction.sol";
+import "../src/oracles/UniswapV3NotionalOracle.sol";
 
 /// D-1 fork test: collateral is denominated in ETH for ANY input token via a
 /// Uniswap V3 TWAP over the (token, WETH) pool. Runs against a mainnet fork
@@ -17,7 +18,8 @@ contract TwapCollateralTest is Test {
 
     function setUp() public {
         vm.createSelectFork(vm.envString("ALCHEMY_RPC_URL"));
-        auction = new FillAuction(treasury, WETH, FACTORY, 60, false); // 60s TWAP
+        UniswapV3NotionalOracle oracle = new UniswapV3NotionalOracle(WETH, FACTORY, 60); // 60s TWAP
+        auction = new FillAuction(treasury, oracle, false);
     }
 
     /// WETH input short-circuits the oracle: notional == fillAmount.

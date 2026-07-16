@@ -3,6 +3,7 @@ pragma solidity ^0.8.20;
 
 import "forge-std/Test.sol";
 import "../../src/FillAuction.sol";
+import { IEthNotionalOracle } from "../../src/interfaces/IEthNotionalOracle.sol";
 import "./FillAuctionHandler.sol";
 
 /// Stateful invariant test: no matter what sequence of register / fill /
@@ -16,7 +17,7 @@ contract FillAuctionInvariantTest is Test {
     address public treasury = makeAddr("treasury");
 
     function setUp() public {
-        auction = new FillAuction(treasury, address(0), address(0), 0, true); // oracle-disabled (1:1) mode
+        auction = new FillAuction(treasury, IEthNotionalOracle(address(0)), true); // oracle-disabled (1:1) mode
 
         address[] memory actors = new address[](4);
         actors[0] = makeAddr("alice");

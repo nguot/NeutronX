@@ -16,6 +16,7 @@ import { startFallbackWatcher }   from './watcher/fallbackWatcher'
 import { startExpiryWatcher }     from './watcher/expiryWatcher'
 import { startIndexer }           from './indexer/eventIndexer'
 import { startStakeConfigIndexer } from './indexer/stakeConfigIndexer'
+import { startRegistrationIndexer } from './indexer/registrationIndexer'
 import { startEscrowDstWatcher }  from './chain/escrowDstWatcher'
 import { startEscrowSrcWatcher }  from './chain/escrowSrcWatcher'
 import { initCrossChainSchema }   from './services/crosschainService'
@@ -50,6 +51,7 @@ app.listen(PORT, async () => {
     await initFillerSchema()
     startIndexer()
     startStakeConfigIndexer()
+    startRegistrationIndexer()
     startFallbackWatcher()
     startExpiryWatcher()
     // One watcher per registry chain, watching that chain's EscrowDstFactory —

@@ -12,6 +12,7 @@ import { readFileSync } from 'fs'
 import { resolve } from 'path'
 import { parse as parseEnv } from 'dotenv'
 import { getAggregator } from './aggregators'
+import { pickFeeTier } from './marketRate'
 
 const ERC20_ABI = ['function balanceOf(address) view returns (uint256)', 'function symbol() view returns (string)', 'function decimals() view returns (uint8)']
 
@@ -167,6 +168,18 @@ export async function createOrder(dto: CreateOrderRequest): Promise<CreateOrderR
       `Insufficient ${symbol} balance: have ${ethers.utils.formatUnits(balance, decimals)}, ` +
       `need ${ethers.utils.formatUnits(order.inputAmount, decimals)}`
     )
+  }
+
+  // Pick the deepest-liquidity (inputToken, WETH) pool for the on-chain stake
+  // oracle instead of trusting the client's hardcoded tier. feeTier is a
+  // cosigner-set field — it is NOT part of the swapper's signed digest
+  // (SWAPPER_ORDER_TYPE_HASH), so overriding it here does not invalidate
+  // dto.signature. When no pool is found we keep the client value (oracle-disabled
+  // / notional mode still fills the order).
+  const pickedFeeTier = await pickFeeTier(getProvider(), order.inputToken)
+  if (pickedFeeTier !== null && pickedFeeTier !== order.feeTier) {
+    console.log(`[createOrder] feeTier ${order.feeTier} -> ${pickedFeeTier} (deepest ${order.inputToken}/WETH pool)`)
+    order.feeTier = pickedFeeTier
   }
 
   const cosignerSig = await signOrder(order)
@@ -332,6 +345,40 @@ export async function getFillerSwapFills(filler: string) {
     inputToken:   f.input_token,
     outputToken:  f.output_token,
     orderTotal:   f.order_total,
+  }))
+}
+
+// A filler's stake registrations (see indexer/registrationIndexer.ts) — powers
+// the "Stake registrations" section on the Fillers page, including whether a
+// registration is still reclaimable (status='active') via releaseRegistration().
+export async function getFillerRegistrations(filler: string) {
+  const r = await db.query(`
+    SELECT r.order_hash, r.fill_amount, r.stake_amount, r.status,
+           r.refund_amount, r.forfeited_amount, r.slashed_reward, r.slashed_by,
+           r.registered_block, r.resolved_block, r.resolved_tx_hash, r.created_at,
+           o.status AS order_status, o.input_token, o.output_token, o.input_amount AS order_total
+    FROM registrations r
+    JOIN orders o ON o.hash = r.order_hash
+    WHERE LOWER(r.filler) = LOWER($1)
+    ORDER BY r.registered_block DESC
+  `, [filler])
+  return r.rows.map(x => ({
+    orderHash:       x.order_hash,
+    fillAmount:      x.fill_amount,
+    stakeAmount:     x.stake_amount,
+    status:          x.status as 'active' | 'filled' | 'slashed' | 'released',
+    refundAmount:    x.refund_amount,
+    forfeitedAmount: x.forfeited_amount,
+    slashedReward:   x.slashed_reward,
+    slashedBy:       x.slashed_by,
+    registeredBlock: Number(x.registered_block),
+    resolvedBlock:   x.resolved_block !== null ? Number(x.resolved_block) : null,
+    resolvedTxHash:  x.resolved_tx_hash,
+    createdAt:       x.created_at.toISOString(),
+    orderStatus:     x.order_status,
+    inputToken:      x.input_token,
+    outputToken:     x.output_token,
+    orderTotal:      x.order_total,
   }))
 }
 

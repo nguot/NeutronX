@@ -63,10 +63,10 @@ function Inner() {
       <main className="page-content">
         {tab === 'swap'       && <DutchAuction wallet={wallet} />}
         {tab === 'crosschain' && <CrossChain   wallet={wallet} switchNetwork={switchNetwork} />}
-        {tab === 'orders'     && <Orders        wallet={wallet} />}
-        {tab === 'explore'    && <Explore wallet={wallet} />}
+        {tab === 'orders'     && <Orders        wallet={wallet} switchNetwork={switchNetwork} />}
+        {tab === 'explore'    && <Explore wallet={wallet} switchNetwork={switchNetwork} />}
         {tab === 'simulate'   && <Simulate      wallet={wallet} />}
-        {tab === 'fillers'    && <Fillers />}
+        {tab === 'fillers'    && <Fillers wallet={wallet} />}
         {tab === 'stakeconfig' && <StakeConfig wallet={wallet} switchNetwork={switchNetwork} />}
       </main>
     </div>

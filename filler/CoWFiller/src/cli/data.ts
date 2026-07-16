@@ -1,5 +1,5 @@
 import { ethers } from 'ethers'
-import axios from 'axios'
+import { http as axios } from '../httpClient'
 import { BACKEND_URL, CHAIN_B_RPC, SUPPORTED_TOKENS } from '../config'
 import { ERC20_ABI } from '../contract/abis'
 import { provider, wallet } from '../contract/contracts'
@@ -28,8 +28,9 @@ export async function fetchCcOrders(): Promise<any[]> {
   return data.orders ?? []
 }
 
-export async function resetSlot(hash: string, slotIndex: number): Promise<void> {
-  await axios.patch(`${BACKEND_URL}/cc/orders/${hash}/slots/${slotIndex}/reset`)
+export async function fetchCcFill(fillId: number): Promise<any> {
+  const { data } = await axios.get(`${BACKEND_URL}/cc/fills/${fillId}`)
+  return data
 }
 
 // ── On-chain block height / balances ──────────────────────────────────────────

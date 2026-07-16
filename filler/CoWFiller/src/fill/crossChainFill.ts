@@ -1,53 +1,71 @@
 import { ethers } from 'ethers'
-import axios from 'axios'
+import { http as axios } from '../httpClient'
 import {
   BACKEND_URL, ESCROW_SRC_FACTORY, CHAIN_B_RPC, CHAIN_B_FACTORY,
   CHAIN_B_ESCROW_SRC_FACTORY, CHAIN_A_DST_FACTORY,
 } from '../config'
-import { ESCROW_SRC_FACTORY_ABI, ESCROW_SRC_ABI, ESCROW_FACTORY_ABI, ESCROW_DST_ABI, ERC20_ABI } from '../contract/abis'
+import { ESCROW_SRC_FACTORY_ABI, ESCROW_SRC_ABI, ESCROW_FACTORY_ABI, ERC20_ABI } from '../contract/abis'
 import { wallet } from '../contract/contracts'
+import { saveSecret, loadSecret } from './secretStore'
 
-const SAFETY_DEPOSIT = ethers.utils.parseEther('0.01')
+// ─────────────────────────────────────────────────────────────────────────────
+// Model 2 (filler-holds-key, continuous fill) — see
+// CROSSCHAIN_INTENT_REDESIGN_HUONG_PHAT_TRIEN.md at the repo root.
+//
+// Reversed from Model 1 in three ways:
+//   1. The FILLER generates its own secret/hashlock (not the backend) — the
+//      backend never sees it until it's revealed on-chain.
+//   2. The filler funds the DESTINATION escrow FIRST, before the swapper ever
+//      authorizes pulling the source input — the deterministic defense
+//      against "hủi hút TokenA rồi không fund dest" (see EscrowSrcFactory's
+//      file header, "TWO SWAPPER SIGNATURES").
+//   3. Timelocks (t1/t2) are unix timestamps, not block numbers — no more
+//      rebaseBlockNumber (two independently-mined chains needed that only
+//      because block counts aren't comparable across chains; timestamps are).
+// ─────────────────────────────────────────────────────────────────────────────
 
-// Anvil forks both chains at this block. Querying below it forwards to Alchemy,
-// which rejects ranges > 10 blocks on the free tier.
-const FORK_BLOCK = 20_500_000
-
-// `wallet` (from contracts.ts) is connected to Chain A (RPC_URL); CHAIN_B_RPC
-// connects to Chain B with the same private key/address.
 const CHAIN_A_ID = 31337
 const CHAIN_B_ID = 31338
 
-// ── Claim-wait timing (step 5 of crossChainFill) ──────────────────────────────
-// After the dst escrow is deployed, the backend's dst-chain watcher polls
-// every 12s, re-derives S_i, and calls claim() — which emits the Claimed
-// event we're waiting for here.
+// Filler's own margin before its chosen T1 gets close to the order's
+// deadlineBase ceiling, and how far T2 sits after T1 — must exceed the
+// destination chain's finality lag (doc §3: buffer = finality of chain B).
+const T1_BUFFER_SECONDS = 300
+const T2_BUFFER_SECONDS = 120
 
-// Generous overall timeout: the watcher may queue behind other claims, so
-// this can take well over a minute.
-const CLAIM_TIMEOUT_MS = 300_000
+const STATUS_POLL_INTERVAL_MS = 3_000
+const STATUS_WAIT_TIMEOUT_MS  = 300_000
 
-// How often to re-check for the Claimed event while waiting.
-const CLAIM_POLL_INTERVAL_MS = 2_000
+// Minimum wall-clock margin required before T1 to still (a) create EscrowSrc
+// or (b) reveal the secret — T1 may have been revised by the swapper after
+// this filler quoted it (see backend crosschainService.setFillSwapperSig), so
+// the value in `fill` fetched right before each step is what's checked, not
+// the filler's own original T1_BUFFER_SECONDS guess. `--force` bypasses this.
+const DEFAULT_MIN_MARGIN_SECONDS = 60
 
-// How many recent blocks to scan per check for the Claimed event. The escrow
-// was deployed only moments ago, so a small trailing window is enough.
-const CLAIM_SCAN_WINDOW_BLOCKS = 30
+export interface CrossChainFillOptions {
+  minMarginSeconds?: number
+  force?: boolean
+}
 
-// ── Recovery scan (crossChainClaim) ────────────────────────────────────────
-// crossChainClaim is a manual recovery action that can run long after the escrow
-// was deployed (e.g. retried in a later session), so it needs a much wider
-// lookback than the live poll above.
-const RECOVERY_SCAN_WINDOW_BLOCKS = 2000
-
-// Translate an absolute block number from the source chain's clock to the
-// destination chain's. The two chains count blocks independently, so the only
-// thing meaningful across them is "how far in the future" the moment is:
-//   Δ (blocks from now) = srcBlock - srcNow         // measured on the src chain
-//   same moment on dst  = dstNow + Δ                // re-anchored on the dst chain
-// Assumes both chains mine at the same rate (true for paired Anvil forks).
-function rebaseBlockNumber(srcBlock: number, srcNow: number, dstNow: number): number {
-  return dstNow + (srcBlock - srcNow)
+// Throws (aborting the step that hasn't happened yet) if `targetSec` is
+// closer than `minMarginSeconds` away — unless `force` is set. Creating
+// EscrowSrc this close to T1 risks the reveal tx not confirming in time,
+// which forfeits the bond (grief-lock, doc §4 attack #4) for no gain; not
+// revealing after EscrowSrc already exists risks the same, so `--force` lets
+// an operator explicitly accept that risk instead of the bot deciding alone.
+function assertTimeMargin(label: string, targetSec: number, opts?: CrossChainFillOptions) {
+  const minMargin = opts?.minMarginSeconds ?? DEFAULT_MIN_MARGIN_SECONDS
+  const remaining = targetSec - Math.floor(Date.now() / 1000)
+  if (remaining >= minMargin) return
+  if (opts?.force) {
+    console.log(`[crossChainFill]     ⚠ ${label}: only ${remaining}s left before T1 (< ${minMargin}s margin) — proceeding anyway (--force)`)
+    return
+  }
+  throw new Error(
+    `${label}: only ${remaining}s left before T1 (< ${minMargin}s required margin) — aborting to avoid a tx that ` +
+    `might not confirm in time. Re-run with --force to proceed anyway, or --min-margin-sec to change the threshold.`
+  )
 }
 
 interface ChainLegs {
@@ -61,8 +79,6 @@ interface ChainLegs {
 
 // An order's chainAId tells us which chain plays the "src" (EscrowSrcFactory)
 // role for THIS order — the other chain plays "dst" (EscrowDstFactory).
-// A→B and B→A are both handled by the same fill logic below, parameterized
-// on these resolved legs.
 function resolveLegs(chainAId: number): ChainLegs {
   const providerA = wallet.provider!
   const providerB = new ethers.providers.JsonRpcProvider(CHAIN_B_RPC)
@@ -83,17 +99,10 @@ function resolveLegs(chainAId: number): ChainLegs {
   throw new Error(`Unsupported chainAId ${chainAId} — this filler only supports Chain A (${CHAIN_A_ID}) / Chain B (${CHAIN_B_ID})`)
 }
 
-// Fetch an order + its slot from the backend and resolve which chain plays
-// "src"/"dst" for it. Shared setup for crossChainFill and crossChainClaim.
-async function fetchOrderAndSlot(orderHash: string, slotIndex: number): Promise<{ order: any, slot: any, legs: ChainLegs }> {
-  const { data: order } = await axios.get(`${BACKEND_URL}/cc/orders/${orderHash}`)
-  const slot = (order.slots as any[])[slotIndex]
-  if (!slot) throw new Error(`Slot ${slotIndex} not found in order`)
-  const legs = resolveLegs(order.chainAId)
-  return { order, slot, legs }
-}
-
-export async function crossChainFill(orderHash: string, slotIndex: number): Promise<string> {
+// ── Entry point 1: start a brand-new fill ─────────────────────────────────────
+// `pctOfRemaining` mirrors the single-chain `fill <hash> <pct>` UX — the
+// filler asks for a percentage of what's still fillable, not a raw amount.
+export async function crossChainFill(orderHash: string, pctOfRemaining: number, opts?: CrossChainFillOptions): Promise<string> {
   if (!CHAIN_B_RPC) {
     throw new Error(
       'CHAIN_B_RPC not set in .env\n' +
@@ -101,302 +110,198 @@ export async function crossChainFill(orderHash: string, slotIndex: number): Prom
     )
   }
 
-  // ── Fetch order detail from backend ────────────────────────────────────────
-  const { order, slot, legs } = await fetchOrderAndSlot(orderHash, slotIndex)
-  if (slot.status !== 'available') throw new Error(`Slot ${slotIndex} is "${slot.status}" — not available`)
-
-  const hashlock:    string   = slot.hashlock
-  const proof:       string[] = slot.proof
-  const swapper:     string   = order.swapper
-  const outputToken: string   = order.outputToken
-  // 3.6: the source factory makes the FINAL slot absorb the integer-division
-  // remainder, so fund the exact per-slot minimum (mirrors lastSlotAmount) —
-  // a flat minOutput/numSlots would underfund the destination on the last slot.
-  const baseSlot:    bigint   = BigInt(order.minOutput) / BigInt(order.numSlots)
-  const slotAmount:  bigint   = slotIndex === order.numSlots - 1
-    ? BigInt(order.minOutput) - baseSlot * BigInt(order.numSlots - 1)
-    : baseSlot
-
-  // ── Resolve src/dst chain legs from this order's direction ──────────────────
-  const { srcProvider, srcWallet, srcFactoryAddr, dstProvider, dstWallet, dstFactoryAddr } = legs
-  if (!srcFactoryAddr || !dstFactoryAddr) {
-    throw new Error(
-      `Factory addresses not configured for chain ${order.chainAId} → ${order.dstChainId}.\n` +
-      'Run: bash tests/crosschain/setup_cc.sh   (then restart this filler)'
-    )
+  const { data: order } = await axios.get(`${BACKEND_URL}/cc/orders/${orderHash}`)
+  if (!order.swapperSig) {
+    throw new Error(`Order ${orderHash.slice(0, 10)}… has no swapperSig yet — the swapper hasn't signed the intent`)
   }
 
-  const srcFactory = new ethers.Contract(srcFactoryAddr, ESCROW_SRC_FACTORY_ABI, srcWallet)
-  const dstFactory = new ethers.Contract(dstFactoryAddr, ESCROW_FACTORY_ABI,     dstWallet)
-  const tokenDst   = new ethers.Contract(outputToken,    ERC20_ABI,             dstWallet)
+  const legs = resolveLegs(order.chainAId)
+  const srcFactory = new ethers.Contract(legs.srcFactoryAddr, ESCROW_SRC_FACTORY_ABI, legs.srcProvider)
+  const remaining: ethers.BigNumber = await srcFactory.remainingInput(orderHash, order.inputAmount)
+  if (remaining.isZero()) throw new Error(`Order ${orderHash.slice(0, 10)}… has nothing left to fill`)
 
-  // Balance check on the destination chain before committing
-  const balDst: ethers.BigNumber = await tokenDst.balanceOf(wallet.address)
-  if (balDst.toBigInt() < slotAmount) {
-    throw new Error(
-      `Insufficient ${outputToken} on destination chain (${order.dstChainId}).\n` +
-      `Need ${slotAmount}, have ${balDst.toBigInt()}.\n` +
-      'Run setup_cc.sh to re-fund fillers.'
-    )
-  }
+  const fillAmount = (remaining.toBigInt() * BigInt(Math.round(pctOfRemaining * 100))) / 10_000n
+  if (fillAmount <= 0n) throw new Error(`${pctOfRemaining}% of remaining (${remaining}) rounds to zero`)
 
-  const info = {
-    swapper:     order.swapper,
-    inputToken:  order.inputToken,
-    inputAmount: order.inputAmount,
-    outputToken: order.outputToken,
-    minOutput:   order.minOutput,
-    deadline:    order.deadline,
-    nonce:       order.nonce,
-    merkleRoot:  order.merkleRoot,
-    numSlots:    order.numSlots,
-  }
-  // The swapper authorizes the order off-chain (wallet_signTypedData → backend
-  // PATCH /cc/orders/:hash/swapperSig); the filler just relays that signature.
-  // It works for ANY swapper — the filler never holds a swapper's key.
-  const swapperSig: string = order.swapperSig
-  if (!swapperSig) {
-    throw new Error(
-      `Order ${orderHash.slice(0, 10)}… has no swapperSig — the swapper hasn't signed it yet ` +
-      `(PATCH /cc/orders/:hash/swapperSig). The filler cannot sign on their behalf.`
-    )
-  }
+  // ── Filler generates its OWN secret — the backend never sees it ──────────
+  const secret   = ethers.utils.hexlify(ethers.utils.randomBytes(32))
+  const hashlock = ethers.utils.keccak256(secret)
 
-  // ── Step 1: fillSlot on the source chain ────────────────────────────────────
-  const escrowAddrSrc = await fillSlotOnSrc(
-    srcFactory, srcProvider, info, orderHash, slotIndex, hashlock, proof, swapperSig, order.cosignerSig,
-  )
+  const nowSec = Math.floor(Date.now() / 1000)
+  const t1 = Math.min(order.deadlineBase, nowSec + T1_BUFFER_SECONDS)
+  const t2 = t1 + T2_BUFFER_SECONDS
+  if (t1 <= nowSec) throw new Error(`Order ${orderHash.slice(0, 10)}… deadlineBase is too close/passed — no valid T1 available`)
 
-  // ── Steps 2-4: ensure the EscrowDst clone is funded + deployed ──────────────
-  const escrowAddrDst = await ensureDstEscrowDeployed(
-    dstFactory, dstProvider, srcProvider, tokenDst, hashlock, swapper, outputToken, slotAmount, order.t2Expiry,
-  )
+  // ── Quote the backend BEFORE funding anything ────────────────────────────
+  console.log(`[crossChainFill] 1/6 quoting fill  amount=${fillAmount}  hashlock=${hashlock.slice(0,10)}…  t1=${t1} t2=${t2}`)
+  const { data: created } = await axios.post(`${BACKEND_URL}/cc/orders/${orderHash}/fills`, {
+    filler: wallet.address, hashlock, fillAmount: fillAmount.toString(), t1, t2,
+  })
+  const fillId: number = created.fillId
 
-  // ── Step 5: wait for backend's dst-chain watcher to claim (reveals S_i) ─────
-  // Backend sees EscrowCreated, re-derives S_i, calls escrow.claim(S_i).
-  // The Claimed event emits S_i in plaintext — we read it from the dst chain.
-  console.log(`[crossChainFill] 5/6 waiting for backend to claim escrow and reveal S_i…`)
-  const secret = await waitForClaimed(dstProvider, escrowAddrDst, CLAIM_TIMEOUT_MS)
-  console.log(`[crossChainFill]     S_i revealed  ${secret.slice(0,10)}…`)
+  // Survive a crash between here and withdraw() — this is the ONLY place the
+  // secret exists (backend never holds it); crossChainResume reads it back.
+  saveSecret(fillId, secret)
 
-  // ── Step 6: withdraw on the source chain ────────────────────────────────────
-  const withdrawTx = await withdrawOnSrc(srcWallet, escrowAddrSrc, secret, slotIndex)
-
-  // Mark slot 'done' so it is no longer rendered as claimable.
-  await axios.patch(`${BACKEND_URL}/cc/orders/${orderHash}/slots/${slotIndex}/done`).catch(() => {})
-
-  return withdrawTx.hash
+  return driveToCompletion(orderHash, fillId, hashlock, secret, order, legs, fillAmount, t2, opts)
 }
 
-// ── Step 1: fillSlot on the source chain ────────────────────────────────────
-// Lazily registers the order on its first call (verifies swapperSig +
-// cosignerSig), checks the Merkle proof, deploys an EscrowSrc clone, and
-// pulls slotAmount of the swapper's input token into it via Permit2. msg.value
-// is this filler's safety deposit, refunded on withdraw(). Returns the
-// EscrowSrc clone address for this slot.
-async function fillSlotOnSrc(
-  srcFactory: ethers.Contract,
-  srcProvider: ethers.providers.Provider,
-  info: Record<string, unknown>,
+// ── Entry point 2: resume an in-flight fill after a restart/crash ────────────
+// Needs the secret THIS filler generated originally, recovered from the local
+// store — never re-derived, never requested from the backend.
+export async function crossChainResume(orderHash: string, fillId: number, opts?: CrossChainFillOptions): Promise<string> {
+  if (!CHAIN_B_RPC) throw new Error('CHAIN_B_RPC not set in .env')
+
+  const secret = loadSecret(fillId)
+  if (!secret) {
+    throw new Error(`No locally-stored secret for fill ${fillId} — this filler didn't originate it, or the local store (.cc-secrets.json) was lost`)
+  }
+
+  const { data: order } = await axios.get(`${BACKEND_URL}/cc/orders/${orderHash}`)
+  const { data: fill }  = await axios.get(`${BACKEND_URL}/cc/fills/${fillId}`)
+
+  if (fill.status === 'claimed') {
+    console.log(`[crossChainResume] fill ${fillId} already claimed on the dest chain — nothing left to do`)
+    return 'already-claimed'
+  }
+
+  const legs = resolveLegs(order.chainAId)
+  return driveToCompletion(orderHash, fillId, fill.hashlock, secret, order, legs, BigInt(fill.fillAmount), fill.t2, opts)
+}
+
+// ── Shared tail: fund dest (idempotent) → wait dst_funded → wait authorized
+//    → fillSlot on source (idempotent) → withdraw (reveals the secret) ───────
+async function driveToCompletion(
   orderHash: string,
-  slotIndex: number,
+  fillId: number,
   hashlock: string,
-  proof: string[],
-  swapperSig: string,
-  cosignerSig: string,
+  secret: string,
+  order: any,
+  legs: ChainLegs,
+  fillAmount: bigint,
+  t2: number,
+  opts?: CrossChainFillOptions,
 ): Promise<string> {
-  const escrowAddrSrc: string = await srcFactory.computeAddress(orderHash, slotIndex)
-  const alreadyFilled: boolean = await srcFactory.isSlotFilled(orderHash, slotIndex)
+  const { srcProvider, srcWallet, srcFactoryAddr, dstProvider, dstWallet, dstFactoryAddr } = legs
 
-  if (alreadyFilled) {
-    const escrowSrcExisting = new ethers.Contract(escrowAddrSrc, ESCROW_SRC_ABI, srcProvider)
-    const existingFiller: string = await escrowSrcExisting.filler()
-    if (existingFiller.toLowerCase() !== wallet.address.toLowerCase()) {
-      throw new Error(
-        `Slot ${slotIndex} is already filled by a different filler (${existingFiller}).\n` +
-        'Use the other filler to fill this slot.'
-      )
-    }
-    console.log(`[crossChainFill] 1/6 slot already filled by us — skipping fillSlot`)
-  } else {
-    console.log(`[crossChainFill] 1/6 fillSlot  order=${orderHash.slice(0,10)}… slot=${slotIndex}`)
-    const fillTx = await srcFactory.fillSlot(info, swapperSig, cosignerSig, slotIndex, hashlock, proof, { value: SAFETY_DEPOSIT })
-    await fillTx.wait()
-  }
+  await ensureDstEscrowDeployed(dstFactoryAddr, dstWallet, dstProvider, order.outputToken, hashlock, order.swapper, fillAmount, t2)
 
-  // Filler address is recorded automatically by the backend's escrowSrcWatcher
-  // (SlotFilled event) — no self-report needed.
-  return escrowAddrSrc
+  console.log(`[crossChainFill] 2/6 waiting for backend to verify dest escrow is genuine…`)
+  await waitForFillStatus(fillId, s => s !== 'quoted')
+
+  console.log(`[crossChainFill] 3/6 waiting for swapper to verify + sign…`)
+  // The swapper may have revised T1 when they signed (see backend
+  // setFillSwapperSig) — `fill.t1` here is that possibly-revised value, fresh
+  // from the backend, which is exactly what gets checked and what's put into
+  // `auth` below (never the filler's own original quote-time t1).
+  const fill = await waitForFillStatus(fillId, s => s !== 'quoted' && s !== 'dst_funded')
+
+  assertTimeMargin('before creating EscrowSrc', fill.t1, opts)
+  const escrowAddrSrc = await fillSlotOnSrc(srcFactoryAddr, srcWallet, srcProvider, order, fill, orderHash, hashlock)
+
+  assertTimeMargin('before revealing the secret', fill.t1, opts)
+  return withdrawOnSrc(srcWallet, escrowAddrSrc, secret)
 }
 
-// ── Steps 2-4: ensure the EscrowDst clone is funded + deployed ──────────────
-// Computes the deterministic clone address (CREATE2, so it's known before
-// deployment), then transfers output tokens and deploys the clone — unless a
-// previous attempt already got this far and timed out waiting for the claim
-// (step 5). Re-running the transfer+deploy in that case would double-fund the
-// escrow and revert on deploy() (CREATE2 collision on an address that's
-// already a contract); detect that and skip straight to waiting for the claim.
+// ── Fund + deploy EscrowDst FIRST, before the source leg even exists ─────────
 async function ensureDstEscrowDeployed(
-  dstFactory: ethers.Contract,
+  dstFactoryAddr: string,
+  dstWallet: ethers.Wallet,
   dstProvider: ethers.providers.Provider,
-  srcProvider: ethers.providers.Provider,
-  tokenDst: ethers.Contract,
+  outputToken: string,
   hashlock: string,
   swapper: string,
-  outputToken: string,
-  slotAmount: bigint,
-  t2ExpirySrc: number,
+  fillAmount: bigint,
+  t2: number,
 ): Promise<string> {
+  const dstFactory = new ethers.Contract(dstFactoryAddr, ESCROW_FACTORY_ABI, dstWallet)
   const escrowAddrDst: string = await dstFactory.computeAddress(hashlock, wallet.address)
-  console.log(`[crossChainFill] 2/6 dst-chain escrow address  ${escrowAddrDst}`)
+  console.log(`[crossChainFill]     dest-chain escrow address  ${escrowAddrDst}`)
 
-  const dstEscrowExists = (await dstProvider.getCode(escrowAddrDst)) !== '0x'
-  if (dstEscrowExists) {
-    console.log(`[crossChainFill] 3-4/6 escrow already deployed at ${escrowAddrDst.slice(0,10)}… — resuming wait for claim`)
+  const exists = (await dstProvider.getCode(escrowAddrDst)) !== '0x'
+  if (exists) {
+    console.log(`[crossChainFill]     already deployed — resuming from here`)
     return escrowAddrDst
   }
 
-  // ── Step 3: transfer output tokens directly to the escrow address ──────────
-  // No ERC-20 approve needed — filler transfers directly to the clone address.
-  console.log(`[crossChainFill] 3/6 transfer ${slotAmount} → ${escrowAddrDst.slice(0,10)}… (dst chain)`)
-  const transferTx = await tokenDst.transfer(escrowAddrDst, slotAmount)
+  const tokenDst = new ethers.Contract(outputToken, ERC20_ABI, dstWallet)
+  const bal: ethers.BigNumber = await tokenDst.balanceOf(wallet.address)
+  if (bal.toBigInt() < fillAmount) {
+    throw new Error(`Insufficient ${outputToken} on the destination chain. Need ${fillAmount}, have ${bal.toBigInt()}.`)
+  }
+
+  console.log(`[crossChainFill]     transfer ${fillAmount} → ${escrowAddrDst.slice(0,10)}… (dst chain)`)
+  const transferTx = await tokenDst.transfer(escrowAddrDst, fillAmount)
   await transferTx.wait()
 
-  // ── Step 4: deploy the escrow clone on the dst chain ────────────────────────
-  // t2Expiry from the backend is a SOURCE-chain block number (T2 = T1 - t2Buffer).
-  // EscrowDst.initialize() checks `expiry > block.number` against the DST chain's
-  // own (independent) height, so rebase the absolute src block onto the dst clock.
-  const [blockSrc, blockDst] = await Promise.all([
-    srcProvider.getBlockNumber(),
-    dstProvider.getBlockNumber(),
-  ])
-  const t2ExpiryDst = rebaseBlockNumber(t2ExpirySrc, blockSrc, blockDst)
-
-  console.log(`[crossChainFill] 4/6 factory.deploy  H=${hashlock.slice(0,10)}… T2=${t2ExpiryDst} (dst chain)`)
-  const deployTx = await dstFactory.deploy(hashlock, swapper, outputToken, slotAmount, t2ExpiryDst)
+  console.log(`[crossChainFill]     factory.deploy  H=${hashlock.slice(0,10)}…  T2=${t2} (dst chain)`)
+  const deployTx = await dstFactory.deploy(hashlock, swapper, outputToken, fillAmount, t2)
   await deployTx.wait()
-  console.log(`[crossChainFill]     escrow deployed  tx=${deployTx.hash}`)
 
   return escrowAddrDst
 }
 
-// ── Step 6: withdraw on the source chain ────────────────────────────────────
-async function withdrawOnSrc(
+// ── fillSlot on the source chain — only constructible once BOTH signatures
+//    exist (the order intent + this specific fill's authorization) ──────────
+async function fillSlotOnSrc(
+  srcFactoryAddr: string,
   srcWallet: ethers.Wallet,
-  escrowAddrSrc: string,
-  secret: string,
-  slotIndex: number,
-): Promise<ethers.providers.TransactionResponse> {
-  const escrowSrc = new ethers.Contract(escrowAddrSrc, ESCROW_SRC_ABI, srcWallet)
-  console.log(`[crossChainFill] 6/6 EscrowSrc(${escrowAddrSrc.slice(0,10)}…).withdraw  slot=${slotIndex}  (src chain)`)
-  const withdrawTx = await escrowSrc.withdraw(secret)
-  await withdrawTx.wait()
-  console.log(`[crossChainFill] ✔ output token + safety deposit withdrawn on src chain  tx=${withdrawTx.hash}`)
-  return withdrawTx
+  srcProvider: ethers.providers.Provider,
+  order: any,
+  fill: any,
+  orderHash: string,
+  hashlock: string,
+): Promise<string> {
+  const srcFactory = new ethers.Contract(srcFactoryAddr, ESCROW_SRC_FACTORY_ABI, srcWallet)
+  const escrowAddrSrc: string = await srcFactory.computeAddress(orderHash, hashlock)
+
+  const alreadyFilled: boolean = await srcFactory.isFilled(orderHash, hashlock)
+  if (alreadyFilled) {
+    console.log(`[crossChainFill] 4/6 source already locked — skipping fillSlot`)
+    return escrowAddrSrc
+  }
+
+  if (!fill.swapperSig) throw new Error(`Fill ${fill.fillId} has no per-fill swapperSig yet`)
+
+  const info = {
+    swapper: order.swapper, inputToken: order.inputToken, inputAmount: order.inputAmount,
+    outputToken: order.outputToken, minOutput: order.minOutput,
+    deadlineBase: order.deadlineBase, nonce: order.nonce, feeTier: order.feeTier,
+  }
+  const auth = { orderHash, hashlock, fillAmount: fill.fillAmount, t1: fill.t1, t2: fill.t2 }
+
+  const required: ethers.BigNumber = await srcFactory.previewRequiredStake(
+    fill.fillAmount, order.inputToken, order.feeTier, fill.t1
+  )
+
+  console.log(`[crossChainFill] 4/6 fillSlot  bond=${ethers.utils.formatEther(required)} ETH  (src chain)`)
+  const fillTx = await srcFactory.fillSlot(info, order.swapperSig, auth, fill.swapperSig, { value: required })
+  await fillTx.wait()
+
+  return escrowAddrSrc
 }
 
-// Recovery: filler timed out before calling withdraw() on the src chain after
-// the backend already claimed on the dst chain (reveals S_i).
-export async function crossChainClaim(orderHash: string, slotIndex: number): Promise<string> {
-  if (!CHAIN_B_RPC) {
-    throw new Error('CHAIN_B_RPC not set in .env')
-  }
-
-  const { order, slot, legs } = await fetchOrderAndSlot(orderHash, slotIndex)
-  if (!slot.escrowAddr) {
-    throw new Error(`Slot ${slotIndex} has no escrow address — backend hasn't processed it yet`)
-  }
-
-  const { srcWallet, srcFactoryAddr, dstProvider } = legs
-  if (!srcFactoryAddr) {
-    throw new Error(`Factory address not configured for chain ${order.chainAId} — run setup_cc.sh`)
-  }
-
-  const srcFactory = new ethers.Contract(srcFactoryAddr, ESCROW_SRC_FACTORY_ABI, srcWallet)
-  const escrowDst  = new ethers.Contract(slot.escrowAddr, ESCROW_DST_ABI, dstProvider)
-
-  // Step A: confirm the dst chain is reachable
-  const current = await dstProvider.getBlockNumber().catch((e: any) => {
-    throw new Error(`[step A] dst chain not reachable — is the corresponding anvil running?\nDetail: ${e.message ?? e}`)
-  })
-
-  // Step B: scan recent blocks for Claimed event.
-  // Anvil forks at block 20_500_000. Querying below that causes Anvil to forward
-  // the request to Alchemy, which rejects ranges > 10 blocks on the free tier.
-  // Clamping to fork+1 ensures the entire range stays in Anvil-local storage.
-  const fromBlock = Math.max(FORK_BLOCK + 1, current - RECOVERY_SCAN_WINDOW_BLOCKS)
-  console.log(`[crossChainClaim] scanning blocks ${fromBlock}..${current} on dst chain for Claimed event`)
-  const logs = await escrowDst.queryFilter(escrowDst.filters.Claimed(), fromBlock, current).catch((e: any) => {
-    throw new Error(`[step B] queryFilter failed — ${e.message ?? e}`)
-  })
-
-  const escrowAddrSrc: string = await srcFactory.computeAddress(orderHash, slotIndex)
+// ── Reveal the secret by withdrawing on the source chain ─────────────────────
+async function withdrawOnSrc(srcWallet: ethers.Wallet, escrowAddrSrc: string, secret: string): Promise<string> {
   const escrowSrc = new ethers.Contract(escrowAddrSrc, ESCROW_SRC_ABI, srcWallet)
-  const status: string = await escrowSrc.status()
-
-  if (logs.length === 0) {
-    // No Claimed event on the dst chain — two possibilities:
-    // (A) the dst chain was restarted (stale DB entry, escrow gone) → reset slot to 'available'
-    // (B) backend hasn't processed yet → mine blocks and retry
-    //
-    // Distinguish by checking the src chain: if the EscrowSrc clone hasn't been
-    // withdrawn yet, the DB is stale. Reset it so the user can refill.
-    if (status === 'withdrawn') {
-      await axios.patch(`${BACKEND_URL}/cc/orders/${orderHash}/slots/${slotIndex}/done`).catch(() => {})
-      return 'already-claimed'
-    }
-    console.log(`[crossChainClaim] no dst-chain event and src not withdrawn → resetting slot ${slotIndex} to available`)
-    await axios.patch(`${BACKEND_URL}/cc/orders/${orderHash}/slots/${slotIndex}/reset`).catch(() => {})
-    return 'reset-to-available'
-  }
-
-  const secret = (logs[0] as ethers.Event).args!.secret as string
-  console.log(`[crossChainClaim] S_${slotIndex}=${secret.slice(0,10)}…  withdrawing on src chain…`)
-
-  // Already withdrawn on-chain (output token already sent, DB just stale)
-  if (status === 'withdrawn') {
-    console.log(`[crossChainClaim] slot ${slotIndex} already withdrawn on-chain — marking done in DB`)
-    await axios.patch(`${BACKEND_URL}/cc/orders/${orderHash}/slots/${slotIndex}/done`).catch(() => {})
-    return 'already-claimed'
-  }
-
-  const withdrawTx = await escrowSrc.withdraw(secret).catch((e: any) => {
-    throw new Error(`[step C] withdraw reverted — ${e.reason ?? e.message ?? e}`)
-  })
+  console.log(`[crossChainFill] 5/6 EscrowSrc(${escrowAddrSrc.slice(0,10)}…).withdraw  (src chain — reveals the secret publicly)`)
+  const withdrawTx = await escrowSrc.withdraw(secret)
   await withdrawTx.wait()
-  console.log(`[crossChainClaim] ✔ withdrawn  tx=${withdrawTx.hash}`)
-
-  // Mark slot 'done' in backend DB so it stops showing as claimable.
-  await axios.patch(`${BACKEND_URL}/cc/orders/${orderHash}/slots/${slotIndex}/done`).catch(() => {})
-
+  console.log(`[crossChainFill] ✔ 6/6 input token + bond withdrawn  tx=${withdrawTx.hash}`)
+  console.log(`[crossChainFill]     secret is now public — a relayer will claim the dest escrow automatically`)
   return withdrawTx.hash
 }
 
-// Poll the dst chain for the EscrowDst.Claimed event on the given clone.
-// Returns the revealed secret (bytes32 as hex string).
-async function waitForClaimed(
-  provider: ethers.providers.Provider,
-  escrowAddr: string,
-  timeoutMs: number,
-): Promise<string> {
-  const escrow  = new ethers.Contract(escrowAddr, ESCROW_DST_ABI, provider)
-  const deadline = Date.now() + timeoutMs
-
+// ── Poll the backend for this fill's status to satisfy `predicate` ──────────
+async function waitForFillStatus(fillId: number, predicate: (status: string) => boolean): Promise<any> {
+  const deadline = Date.now() + STATUS_WAIT_TIMEOUT_MS
   while (Date.now() < deadline) {
-    const current = await provider.getBlockNumber()
-    const logs = await escrow.queryFilter(
-      escrow.filters.Claimed(),
-      Math.max(FORK_BLOCK + 1, current - CLAIM_SCAN_WINDOW_BLOCKS),
-      'latest',
-    )
-    if (logs.length > 0) {
-      return (logs[0] as ethers.Event).args!.secret as string
-    }
-    await new Promise(r => setTimeout(r, CLAIM_POLL_INTERVAL_MS))
+    const { data: fill } = await axios.get(`${BACKEND_URL}/cc/fills/${fillId}`)
+    if (predicate(fill.status)) return fill
+    await new Promise(r => setTimeout(r, STATUS_POLL_INTERVAL_MS))
   }
-
   throw new Error(
-    'Timed out waiting for Claimed event on the destination chain.\n' +
-    'Make sure the backend is running with the destination EscrowDstFactory configured (restart after setup_cc.sh).'
+    `Timed out waiting for fill ${fillId} to progress past its current status.\n` +
+    `Run 'cc resume <hash> ${fillId}' later to pick it back up (the secret is saved locally).`
   )
 }

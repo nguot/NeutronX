@@ -17,6 +17,7 @@ const EMPTY_CFG: StakeConfigStruct = {
 interface Constants {
   maxDeltaBps: number; changeCooldown: number; loosenDelay: number; minPenaltyBps: number
   minRate: number; maxRate: number; maxRefundBps: number; maxBuckets: number
+  minWorstCaseKappaBps: number
 }
 
 // ── bucket range labels ──────────────────────────────────────────────────────
@@ -80,15 +81,20 @@ export default function StakeConfigPage({ wallet, switchNetwork }: {
       setPendingEffective(pendEff.toNumber())
 
       if (!consts) {
-        const [maxDeltaBps, changeCooldown, loosenDelay, minPenaltyBps, minRate, maxRate, maxRefundBps, maxBuckets] =
+        const [maxDeltaBps, changeCooldown, loosenDelay, minPenaltyBps, minRate, maxRate, maxRefundBps, maxBuckets, minKappa] =
           await Promise.all([
             c.MAX_DELTA_BPS(), c.CHANGE_COOLDOWN(), c.LOOSEN_DELAY(), c.MIN_PENALTY_BPS(),
             c.MIN_COLLATERAL_RATE(), c.MAX_COLLATERAL_RATE(), c.MAX_REFUND_BPS(), c.MAX_BUCKETS(),
+            // Defensive fallback so an older FillAuction (deployed before this
+            // constant existed) doesn't brick the whole page — 1000 = 10% mirrors
+            // the contract default.
+            c.MIN_WORST_CASE_KAPPA_BPS().catch(() => ethers.BigNumber.from(1000)),
           ])
         setConsts({
           maxDeltaBps: maxDeltaBps.toNumber(), changeCooldown: changeCooldown.toNumber(),
           loosenDelay: loosenDelay.toNumber(), minPenaltyBps: minPenaltyBps.toNumber(),
           minRate, maxRate, maxRefundBps, maxBuckets: maxBuckets.toNumber(),
+          minWorstCaseKappaBps: minKappa.toNumber(),
         })
       }
 
@@ -536,11 +542,50 @@ interface FormState {
   minCollateral: string
 }
 
+// Mirrors DynamicStakeLib.worstCaseKappaBps() — the config's true worst-case
+// economic floor: the smallest price edge (bps of delivered notional) at which
+// ANY partial-fill-then-abandon strategy first turns a profit, across every
+// (size, time) bucket. Returned alongside the argmin (size row + fill-ratio
+// bucket) so the UI can point at the exact cell to fix. Returns null when the
+// form is still incomplete/non-numeric (leave it to the other validators).
+// Uses BigInt floor division to match the contract's FullMath.mulDiv exactly.
+function worstCaseKappaForm(form: FormState): { kappaBps: number; s: number; idx: number } | null {
+  const S = form.collateralRate.length
+  const T = form.timeMult.length
+  const R = form.ratioThresholds.length + 1
+  if (R < 2) return { kappaBps: 0, s: 0, idx: 0 } // one ratio bucket -> always 100% refund -> no deterrent
+
+  let best: { kappaBps: number; s: number; idx: number } | null = null
+  for (let s = 0; s < S; s++) {
+    // last "genuinely non-honest" bucket in this row: walk R-2..0 for refund < 100%
+    let idx = -1
+    for (let k = R - 1; k > 0; k--) {
+      const cell = Number(form.refundTable[s]?.[k - 1])
+      if (!Number.isFinite(cell)) return null // incomplete row — other validators handle it
+      if (cell < 10000) { idx = k - 1; break }
+    }
+    if (idx === -1) return { kappaBps: 0, s, idx: 0 } // refunds 100% from bucket 0 — free snipe
+
+    const x = BigInt(Math.trunc(Number(form.ratioThresholds[idx])))
+    if (x === 0n) return { kappaBps: 0, s, idx }
+    const penalty = 10000n - BigInt(Math.trunc(Number(form.refundTable[s][idx])))
+    const rho = BigInt(Math.trunc(Number(form.collateralRate[s])))
+    for (let t = 0; t < T; t++) {
+      const mult = BigInt(Math.trunc(Number(form.timeMult[t])))
+      const combined = (rho * mult) / 10000n
+      const kappa = Number((combined * penalty) / x)
+      if (best === null || kappa < best.kappaBps) best = { kappaBps: kappa, s, idx }
+    }
+  }
+  return best
+}
+
 // Mirrors DynamicStakeLib.validate() exactly (contract/src/libs/DynamicStakeLib.sol:334)
 // so a bad submission is caught here instead of burning gas on a guaranteed revert.
 // This does NOT replicate guardCheck()'s economic delta/penalty-floor comparison
 // against the LIVE config (that needs on-chain state at specific sampled notionals) —
-// only the shape/ordering/bounds invariants that are checkable from the form alone.
+// only the shape/ordering/bounds invariants that are checkable from the form alone,
+// PLUS the worst-case-kappa floor (Invariant 8), which IS computable from the form.
 function validateForm(form: FormState, consts: Constants | null): string[] {
   const errs: string[] = []
   const num = (v: string) => (v.trim() === '' ? NaN : Number(v))
@@ -630,6 +675,25 @@ function validateForm(form: FormState, consts: Constants | null): string[] {
     if (prev !== maxRefund) errs.push(`Refund table row ${s} must end at 100% (${maxRefund} bps) — currently ${prev} bps.`)
   })
 
+  // Invariant 8 (worst-case-kappa floor) — only meaningful once the shape/order/
+  // bounds above are clean (otherwise indices/values are unreliable), matching
+  // the contract, which runs this check at the END of validate().
+  if (consts && errs.length === 0) {
+    const wc = worstCaseKappaForm(form)
+    const minK = consts.minWorstCaseKappaBps
+    if (wc && wc.kappaBps < minK) {
+      const sizeLabel = ascendingRangeLabel(form.sizeThresholds, wc.s, 'ETH')
+      const ratioBps  = form.ratioThresholds[wc.idx]
+      const edgePct   = ratioBps != null && ratioBps !== '' ? bpsToPct(Number(ratioBps)) : 'the last non-100% column'
+      errs.push(
+        `Economic floor: this config lets a filler snipe profitably at only ${bpsToPct(wc.kappaBps)} price edge — ` +
+        `the minimum required is ${bpsToPct(minK)}. Worst point is the "${sizeLabel}" size row at the ${edgePct}-filled ` +
+        `column: its refund is too generous (small penalty at a near-honest fill). Lower that refund, or raise the ` +
+        `collateral rate for that row.`,
+      )
+    }
+  }
+
   return errs
 }
 
@@ -653,6 +717,7 @@ function ParamAdmin({ config, consts, fillAuction, wallet, wrongNetwork, chainAI
   fillAuction: string; wallet: WalletState; wrongNetwork: boolean; chainAId: number
   switchNetwork: (id: number) => Promise<void>; isParamAdmin: boolean; iface: ethers.utils.Interface; onDone: () => void
 }) {
+  const { backendUrl } = useAppConfig()
   const [form, setForm] = useState<FormState | null>(null)
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
@@ -730,6 +795,42 @@ function ParamAdmin({ config, consts, fillAuction, wallet, wrongNetwork, chainAI
         refundTable: form.refundTable.flat().map(v => Number(v || '0')),
         minCollateral: ethers.utils.parseEther(form.minCollateral || '0'),
       }
+
+      // Backend dry-run first: this callStatic's setStakeConfig against the LIVE
+      // contract, so it catches the guardCheck reverts the client-side
+      // validateForm can't (per-call delta cap, penalty-vs-live, cooldown,
+      // already-pending) AND pinpoints a kappa-floor cell. If the backend is
+      // unreachable we fall through to the contract, which is authoritative and
+      // now returns a friendly reason via extractRevertReason.
+      if (backendUrl) {
+        try {
+          const res = await fetch(`${backendUrl}/stake-config/validate`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              from: wallet.account,
+              config: {
+                sizeThresholds: tuple.sizeThresholds.map(v => v.toString()),
+                collateralRate: tuple.collateralRate,
+                timeThresholds: tuple.timeThresholds.map(v => v.toString()),
+                timeMult: tuple.timeMult,
+                ratioThresholds: tuple.ratioThresholds.map(v => v.toString()),
+                refundTable: tuple.refundTable,
+                minCollateral: tuple.minCollateral.toString(),
+              },
+            }),
+          })
+          const data = await res.json()
+          if (res.ok && data.ok === false) {
+            let m: string = data.message || data.reason || 'Config rejected by dry-run.'
+            if (data.culprit) {
+              m += ` — worst point: "${data.culprit.sizeLabel}" size row at the ${data.culprit.fillPct}-filled column ` +
+                   `(refund ${bpsToPct(data.culprit.refundBps)}, snipe breaks even at ${bpsToPct(data.culprit.worstCaseKappaBps)} edge).`
+            }
+            setErr(m); setBusy(false); return
+          }
+        } catch { /* backend down — let the on-chain call be the source of truth */ }
+      }
+
       const c = new ethers.Contract(fillAuction, FILL_AUCTION_ABI, wallet.signer)
       const tx = await c.setStakeConfig(tuple)
       setMsg('Submitting…'); await tx.wait()

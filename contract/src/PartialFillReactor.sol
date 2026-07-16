@@ -12,6 +12,7 @@ import { DecayCursorLib } from "./libs/DecayCursorLib.sol";
 
 import { IPermit2 } from "./interfaces/IPermit2.sol";
 import { IFillAuction } from "./interfaces/IFillAuction.sol";
+import { IPartialFillCallback } from "./interfaces/IPartialFillCallback.sol";
 
 contract PartialFillReactor is ReentrancyGuard {
     using SafeERC20 for IERC20;
@@ -98,7 +99,7 @@ contract PartialFillReactor is ReentrancyGuard {
     /// orderTotal/deadline are derived from the signed order, and the cosigner
     /// signature is now verified here too (M-3) so a stake can only ever be
     /// placed against a genuinely authenticated order.
-    function register(SignedOrder calldata order, uint256 fillAmount) external payable {
+    function register(SignedOrder calldata order, uint256 fillAmount) external payable nonReentrant {
         bytes32 orderHash = _hashOrder(order.info);
         require(!_cancelled[orderHash], "cancelled");
         _validateOrder(order);
@@ -115,7 +116,30 @@ contract PartialFillReactor is ReentrancyGuard {
     function executePartialChunk(
         SignedOrder calldata order,
         uint256 fillAmount
-    ) external nonReentrant {
+    ) external {
+        _executePartialChunk(order, fillAmount, "");
+    }
+
+    /// Same settlement path as executePartialChunk, but hands control to
+    /// IPartialFillCallback(msg.sender) between the input leg and the output
+    /// leg, so a filler CONTRACT can source outputAmount on-chain (swap,
+    /// borrow, ...) instead of pre-holding it. msg.sender must be a contract
+    /// implementing IPartialFillCallback — an EOA has no code to run here and
+    /// should keep using plain executePartialChunk instead.
+    function executePartialChunkWithCallback(
+        SignedOrder calldata order,
+        uint256 fillAmount,
+        bytes calldata callbackData
+    ) external {
+        require(callbackData.length > 0, "empty callback data");
+        _executePartialChunk(order, fillAmount, callbackData);
+    }
+
+    function _executePartialChunk(
+        SignedOrder calldata order,
+        uint256 fillAmount,
+        bytes memory callbackData
+    ) private nonReentrant {
         bytes32 orderHash = _hashOrder(order.info);
 
         // ── CHECKS ──
@@ -173,6 +197,16 @@ contract PartialFillReactor is ReentrancyGuard {
         // ── INTERACTIONS ──
         // forge-lint: disable-next-line(unsafe-typecast)
         permit2.transferFrom(order.info.swapper, msg.sender, uint160(fillAmount), order.info.inputToken);
+
+        // Optional callback: hands control to msg.sender between the input leg
+        // above and the output leg below, so a filler contract can source
+        // outputAmount on-chain instead of pre-holding it. No-op on the plain
+        // executePartialChunk path, where callbackData is always empty.
+        if (callbackData.length > 0) {
+            IPartialFillCallback(msg.sender).partialFillCallback(
+                orderHash, fillAmount, order.info.inputToken, order.info.outputToken, outputAmount, callbackData
+            );
+        }
 
         // 3.2: enforce the slippage floor on what the swapper ACTUALLY receives,
         // measured as a balance delta, not the nominal transfer amount. A
@@ -296,6 +330,16 @@ contract PartialFillReactor is ReentrancyGuard {
             !_nonceInvalidated[order.info.swapper][order.info.nonce],
             "nonce invalidated"
         );
+        // Dutch-auction price only decays from startPrice, so the highest output
+        // any filler could ever pay is at block 0 (no decay applied yet). If the
+        // swapper's signed floor is above that ceiling, the order can never be
+        // filled by anyone at any time — reject it here, at the very first
+        // register()/executePartialChunk call, before a filler can stake against
+        // an order that is guaranteed to trap their collateral.
+        uint256 maxAchievable = FullMath.mulDiv(
+            order.info.inputAmount, order.info.startPrice, 1e18
+        );
+        require(order.info.minOutputAmount <= maxAchievable, "unreachable min output");
         bytes32 digest = keccak256(
             abi.encodePacked("\x19\x01", DOMAIN_SEPARATOR, _hashOrder(order.info))
         );

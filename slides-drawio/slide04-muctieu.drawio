@@ -1,0 +1,93 @@
+<mxfile host="app.diagrams.net">
+  <diagram id="slide04" name="Slide 4 - Khoang trong &amp; Muc tieu">
+    <mxGraphModel dx="1300" dy="820" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1160" pageHeight="640" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <!-- ============ BANG SO SANH ============ -->
+        <mxCell id="h0" value="" style="whiteSpace=wrap;html=1;fillColor=#EEF0F6;strokeColor=#C6CBD9;strokeWidth=1;" vertex="1" parent="1">
+          <mxGeometry x="80" y="95" width="220" height="48" as="geometry" />
+        </mxCell>
+        <mxCell id="h1" value="UniswapX" style="whiteSpace=wrap;html=1;fillColor=#16305C;strokeColor=#0E2144;strokeWidth=1;fontColor=#FFFFFF;fontSize=15;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="300" y="95" width="250" height="48" as="geometry" />
+        </mxCell>
+        <mxCell id="h2" value="1inch" style="whiteSpace=wrap;html=1;fillColor=#16305C;strokeColor=#0E2144;strokeWidth=1;fontColor=#FFFFFF;fontSize=15;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="550" y="95" width="250" height="48" as="geometry" />
+        </mxCell>
+        <mxCell id="h3" value="CoW Swap" style="whiteSpace=wrap;html=1;fillColor=#16305C;strokeColor=#0E2144;strokeWidth=1;fontColor=#FFFFFF;fontSize=15;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="800" y="95" width="250" height="48" as="geometry" />
+        </mxCell>
+
+        <mxCell id="r1l" value="Khớp order" style="whiteSpace=wrap;html=1;fillColor=#DCE6F6;strokeColor=#C6CBD9;strokeWidth=1;fontColor=#16305C;fontSize=14;fontStyle=1;align=left;spacingLeft=16;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="80" y="143" width="220" height="66" as="geometry" />
+        </mxCell>
+        <mxCell id="r1a" value="All-or-nothing" style="whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#C6CBD9;strokeWidth=1;fontColor=#333333;fontSize=14;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="300" y="143" width="250" height="66" as="geometry" />
+        </mxCell>
+        <mxCell id="r1b" value="Partial fill" style="whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#C6CBD9;strokeWidth=1;fontColor=#333333;fontSize=14;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="550" y="143" width="250" height="66" as="geometry" />
+        </mxCell>
+        <mxCell id="r1c" value="Batch (gộp lô)" style="whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#C6CBD9;strokeWidth=1;fontColor=#333333;fontSize=14;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="800" y="143" width="250" height="66" as="geometry" />
+        </mxCell>
+
+        <mxCell id="r2l" value="Filler" style="whiteSpace=wrap;html=1;fillColor=#DCE6F6;strokeColor=#C6CBD9;strokeWidth=1;fontColor=#16305C;fontSize=14;fontStyle=1;align=left;spacingLeft=16;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="80" y="209" width="220" height="66" as="geometry" />
+        </mxCell>
+        <mxCell id="r2a" value="Phải onboard" style="whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#C6CBD9;strokeWidth=1;fontColor=#333333;fontSize=14;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="300" y="209" width="250" height="66" as="geometry" />
+        </mxCell>
+        <mxCell id="r2b" value="Permissioned / duyệt" style="whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#C6CBD9;strokeWidth=1;fontColor=#333333;fontSize=14;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="550" y="209" width="250" height="66" as="geometry" />
+        </mxCell>
+        <mxCell id="r2c" value="Phải thi tuyển" style="whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#C6CBD9;strokeWidth=1;fontColor=#333333;fontSize=14;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="800" y="209" width="250" height="66" as="geometry" />
+        </mxCell>
+
+        <mxCell id="r3l" value="Hệ quả" style="whiteSpace=wrap;html=1;fillColor=#DCE6F6;strokeColor=#C6CBD9;strokeWidth=1;fontColor=#16305C;fontSize=14;fontStyle=1;align=left;spacingLeft=16;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="80" y="275" width="220" height="66" as="geometry" />
+        </mxCell>
+        <mxCell id="r3a" value="Order lớn chờ lâu" style="whiteSpace=wrap;html=1;fillColor=#FBEDEE;strokeColor=#C6CBD9;strokeWidth=1;fontColor=#C8102E;fontSize=14;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="300" y="275" width="250" height="66" as="geometry" />
+        </mxCell>
+        <mxCell id="r3b" value="Rào cản filler cao" style="whiteSpace=wrap;html=1;fillColor=#FBEDEE;strokeColor=#C6CBD9;strokeWidth=1;fontColor=#C8102E;fontSize=14;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="550" y="275" width="250" height="66" as="geometry" />
+        </mxCell>
+        <mxCell id="r3c" value="Rào cản filler cao" style="whiteSpace=wrap;html=1;fillColor=#FBEDEE;strokeColor=#C6CBD9;strokeWidth=1;fontColor=#C8102E;fontSize=14;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="800" y="275" width="250" height="66" as="geometry" />
+        </mxCell>
+
+        <!-- ============ KHUNG MUC TIEU ============ -->
+        <mxCell id="goal" value="MỤC TIÊU ĐỒ ÁN" style="rounded=1;arcSize=4;whiteSpace=wrap;html=1;fillColor=#EAF1FB;strokeColor=#16305C;strokeWidth=2;verticalAlign=top;fontSize=16;fontStyle=1;fontColor=#16305C;spacingTop=14;" vertex="1" parent="1">
+          <mxGeometry x="80" y="380" width="970" height="220" as="geometry" />
+        </mxCell>
+
+        <!-- Card 1 -->
+        <mxCell id="g1t" value="Khớp NHANH" style="rounded=1;arcSize=16;whiteSpace=wrap;html=1;fillColor=#16305C;strokeColor=none;fontColor=#FFFFFF;fontSize=14;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="105" y="430" width="290" height="44" as="geometry" />
+        </mxCell>
+        <mxCell id="g1b" value="Nhiều filler cùng partial-fill một order" style="rounded=1;arcSize=10;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#9FB6D9;strokeWidth=1;fontColor=#333333;fontSize=13;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="105" y="482" width="290" height="88" as="geometry" />
+        </mxCell>
+
+        <!-- Card 2 -->
+        <mxCell id="g2t" value="Filler PERMISSIONLESS" style="rounded=1;arcSize=16;whiteSpace=wrap;html=1;fillColor=#16305C;strokeColor=none;fontColor=#FFFFFF;fontSize=14;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="420" y="430" width="290" height="44" as="geometry" />
+        </mxCell>
+        <mxCell id="g2b" value="Ai cũng tham gia được, không cần whitelist" style="rounded=1;arcSize=10;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#9FB6D9;strokeWidth=1;fontColor=#333333;fontSize=13;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="420" y="482" width="290" height="88" as="geometry" />
+        </mxCell>
+
+        <!-- Card 3 -->
+        <mxCell id="g3t" value="Vẫn AN TOÀN" style="rounded=1;arcSize=16;whiteSpace=wrap;html=1;fillColor=#16305C;strokeColor=none;fontColor=#FFFFFF;fontSize=14;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="735" y="430" width="290" height="44" as="geometry" />
+        </mxCell>
+        <mxCell id="g3b" value="Chặn filler ôm order rồi bỏ, chặn gian lận" style="rounded=1;arcSize=10;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#9FB6D9;strokeWidth=1;fontColor=#333333;fontSize=13;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="735" y="482" width="290" height="88" as="geometry" />
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

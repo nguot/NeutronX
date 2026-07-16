@@ -106,11 +106,23 @@ export interface FallbackCheckResult {
   chainId:             number
   remainingInput:      string
   preferredAggregator: string | null
-  // Pro-rated floor FallbackExecutor.sol enforces on-chain (minOutputAmount *
-  // remainingInput / inputAmount, see FallbackExecutor.sol:111) — a quote's
-  // minAmountOut must be >= this or the real executeFallback() call reverts
-  // with "below signed min output". Lets the UI show ✓/✗ against the actual
-  // gate, not just "a route exists".
+  // Total minOutputAmount the swapper signed for the WHOLE order (12 DAI → 14.85
+  // USDC in the example that motivated this) — never pro-rated.
+  minOutputTotal:      string
+  // Sum of fills.output_amount already paid out for this order (partial fills +
+  // any prior fallback leg) — PartialFillReactor's on-chain _paidOutput[orderHash].
+  paidSoFar:            string
+  // FallbackExecutor.sol:111's per-leg floor: minOutputTotal * remainingInput /
+  // inputAmount. Only ONE of the two gates the real tx enforces.
+  proRataFloor:         string
+  // PartialFillReactor.recordFallbackOutput's gate (PartialFillReactor.sol:240):
+  // paidSoFar + amountOut must reach minOutputTotal. What's actually still owed.
+  remainingOutputOwed:  string
+  // max(proRataFloor, remainingOutputOwed) — the real bar a quote's minAmountOut
+  // must clear for executeFallback to succeed on-chain (both requires must pass).
+  // A quote's minAmountOut must be >= this or the real executeFallback() call
+  // reverts ("below signed min output" or "min output total"). Lets the UI show
+  // ✓/✗ against the actual combined gate, not just "a route exists".
   requiredMinOutput:   string
   results:             AggregatorCheckResult[]
 }
@@ -140,8 +152,41 @@ export async function checkFallbackRoute(hash: string): Promise<FallbackCheckRes
   const orderHash = computeOrderHash(order)
   const rem = (await reactor.remainingInput(orderHash, order.input_amount) as ethers.BigNumber).toBigInt()
 
-  // Same formula as FallbackExecutor.sol:111 — mirrors the actual on-chain gate.
-  const requiredMinOutput = (BigInt(order.min_output) * rem) / BigInt(order.input_amount)
+  const minOutputTotal = BigInt(order.min_output)
+  const inputAmount    = BigInt(order.input_amount)
+
+  // Gate 1 — FallbackExecutor.sol:111's per-leg floor (this fallback leg alone,
+  // pro-rated to however much input is left).
+  const proRataFloor = (minOutputTotal * rem) / inputAmount
+
+  // Gate 2 — PartialFillReactor.recordFallbackOutput's cumulative floor
+  // (PartialFillReactor.sol:236-241): total ever paid (prior partial fills +
+  // this leg) must reach minOutputTotal. Mirrors on-chain _paidOutput[orderHash].
+  const { rows: paidRows } = await db.query(
+    `SELECT COALESCE(SUM(output_amount::numeric), 0) AS paid FROM fills WHERE order_hash = $1`,
+    [orderHash]
+  )
+  const paidSoFar           = BigInt(paidRows[0].paid)
+  const remainingOutputOwed = paidSoFar >= minOutputTotal ? 0n : minOutputTotal - paidSoFar
+
+  // The real tx enforces BOTH requires — a quote must clear whichever is stricter.
+  const requiredMinOutput = proRataFloor > remainingOutputOwed ? proRataFloor : remainingOutputOwed
+
+  // Nothing left to route — querying aggregators with amountIn=0 just produces
+  // confusing per-adapter errors (most reject a zero amount outright).
+  if (rem === 0n) {
+    return {
+      orderHash, chainId,
+      remainingInput: '0',
+      preferredAggregator: order.preferred_aggregator ?? null,
+      minOutputTotal: minOutputTotal.toString(),
+      paidSoFar: paidSoFar.toString(),
+      proRataFloor: '0',
+      remainingOutputOwed: remainingOutputOwed.toString(),
+      requiredMinOutput: '0',
+      results: [],
+    }
+  }
 
   const params: QuoteParams = {
     chainId,
@@ -168,6 +213,10 @@ export async function checkFallbackRoute(hash: string): Promise<FallbackCheckRes
     chainId,
     remainingInput: rem.toString(),
     preferredAggregator: order.preferred_aggregator ?? null,
+    minOutputTotal:      minOutputTotal.toString(),
+    paidSoFar:            paidSoFar.toString(),
+    proRataFloor:         proRataFloor.toString(),
+    remainingOutputOwed:  remainingOutputOwed.toString(),
     requiredMinOutput: requiredMinOutput.toString(),
     results,
   }

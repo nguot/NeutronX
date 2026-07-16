@@ -3,6 +3,7 @@ pragma solidity ^0.8.20;
 
 import "forge-std/Test.sol";
 import "../src/FillAuction.sol";
+import { IEthNotionalOracle } from "../src/interfaces/IEthNotionalOracle.sol";
 import { MockReactor } from "./FillAuction.t.sol";
 
 /// Terminal-state / double-settlement matrix for FillAuction.
@@ -41,7 +42,7 @@ contract FillAuctionTerminalStateTest is Test {
 
     function setUp() public {
         reactor = new MockReactor();
-        auction = new FillAuction(treasury, address(0), address(0), 0, true); // oracle-disabled (1:1)
+        auction = new FillAuction(treasury, IEthNotionalOracle(address(0)), true); // oracle-disabled (1:1)
         auction.setReactor(address(reactor));
         reactor.setAuction(address(auction));
         vm.roll(100);

@@ -5,9 +5,11 @@ export async function ensureIndexerStateTable() {
   await db.query(`
     CREATE TABLE IF NOT EXISTS indexer_state (
       name       TEXT PRIMARY KEY,
-      last_block BIGINT NOT NULL
+      last_block BIGINT NOT NULL,
+      fingerprint TEXT
     )
   `)
+  await db.query(`ALTER TABLE indexer_state ADD COLUMN IF NOT EXISTS fingerprint TEXT`)
 }
 
 // Returns the last block processed for `name`. The first time a watcher is
@@ -47,8 +49,48 @@ const CHUNK_SIZE     = Number(process.env.INDEXER_CHUNK ?? 2000)
 const BACKFILL =
   (process.env.INDEXER_BACKFILL ?? (process.env.NODE_ENV === 'production' ? 'true' : 'false')) === 'true'
 
-export async function resolveCheckpoint(name: string, currentBlock: number, label: string): Promise<number> {
-  let last = await getCheckpoint(name, currentBlock)
+// Local anvil forks are commonly re-forked at a HIGHER block number over time
+// (FORK_BLOCK gets bumped forward as the real upstream chain advances), so a
+// stale checkpoint from a previous fork instance can end up numerically
+// BEHIND the new tip — indistinguishable from a genuine backlog by block
+// number alone. `fingerprint` (typically the local chain's genesis block
+// hash) catches this: it changes on every fresh anvil fork even when the
+// numeric heights overlap, so a mismatch means "different chain, discard the
+// old checkpoint" regardless of whether it looks ahead or behind the tip.
+export async function resolveCheckpoint(
+  name: string,
+  currentBlock: number,
+  label: string,
+  fingerprint?: string,
+): Promise<number> {
+  const { rows } = await db.query('SELECT last_block, fingerprint FROM indexer_state WHERE name = $1', [name])
+
+  if (rows.length === 0) {
+    await db.query(
+      'INSERT INTO indexer_state (name, last_block, fingerprint) VALUES ($1, $2, $3)',
+      [name, currentBlock, fingerprint ?? null],
+    )
+    return currentBlock
+  }
+
+  let last = Number(rows[0].last_block)
+  const storedFingerprint: string | null = rows[0].fingerprint
+
+  if (fingerprint && storedFingerprint && storedFingerprint !== fingerprint) {
+    console.warn(`${label}: chain fingerprint changed (new anvil fork?) — discarding stale checkpoint ${last}, rewinding to tip ${currentBlock}`)
+    last = currentBlock
+    await db.query(
+      'UPDATE indexer_state SET last_block = $2, fingerprint = $3 WHERE name = $1',
+      [name, last, fingerprint],
+    )
+    return last
+  }
+
+  if (fingerprint && !storedFingerprint) {
+    // Upgrade path: backfill the fingerprint for an existing checkpoint row
+    // without otherwise touching last_block.
+    await db.query('UPDATE indexer_state SET fingerprint = $2 WHERE name = $1', [name, fingerprint])
+  }
 
   // Checkpoint ahead of the tip ⇒ the chain was reset to a lower height.
   if (last > currentBlock) {

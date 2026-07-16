@@ -108,9 +108,10 @@ export async function startIndexer() {
   await ensureIndexerStateTable()
 
   const currentBlock   = await provider.getBlockNumber()
-  let lastFillBlock     = await resolveCheckpoint('reactor_partial_fill', currentBlock, 'Indexer')
-  let lastFallbackBlock = await resolveCheckpoint('fallback_executed', currentBlock, 'Indexer')
-  let lastCancelBlock   = await resolveCheckpoint('reactor_nonce_invalidated', currentBlock, 'Indexer')
+  const genesis = await provider.getBlock(0).catch(() => null)
+  let lastFillBlock     = await resolveCheckpoint('reactor_partial_fill', currentBlock, 'Indexer', genesis?.hash)
+  let lastFallbackBlock = await resolveCheckpoint('fallback_executed', currentBlock, 'Indexer', genesis?.hash)
+  let lastCancelBlock   = await resolveCheckpoint('reactor_nonce_invalidated', currentBlock, 'Indexer', genesis?.hash)
 
   console.log('Indexer started')
 

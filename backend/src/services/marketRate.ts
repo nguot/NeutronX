@@ -3,8 +3,25 @@ import { Protocol } from '@uniswap/router-sdk'
 import { TradeType, CurrencyAmount, Token, Percent } from '@uniswap/sdk-core'
 import { ethers } from 'ethers'
 
+/// demo only => what more code should it have for full production
 const CHAIN_ID = 1
 const DUMMY_RECIPIENT = '0x0000000000000000000000000000000000000001'
+
+// Uniswap V3 mainnet factory + WETH. Used to pick the deepest-liquidity
+// (inputToken, WETH) pool so the on-chain stake oracle
+// (DynamicStakeLib.toEthNotional) reads from a pool that actually exists at the
+// order's feeTier and is hard to manipulate. A token pair can have several V3
+// pools (one per fee tier), so the tier is what selects WHICH pool is quoted.
+const UNIV3_FACTORY = '0x1F98431c8aD98523631AE4a59f267346ea31F984'
+const WETH          = '0xC02aaa39b223FE8D0A0e5C4F27eAD9083C756Cc2'
+const CANDIDATE_FEE_TIERS = [100, 500, 3000, 10000] as const
+
+const FACTORY_ABI = ['function getPool(address,address,uint24) view returns (address)']
+const V3_POOL_ABI = [
+  'function liquidity() view returns (uint128)',
+  // slot0()[3] = observationCardinality (how many past observations the pool retains)
+  'function slot0() view returns (uint160,int24,uint16,uint16,uint16,uint8,bool)',
+]
 
 export interface MarketQuote {
   estOut:     bigint
@@ -131,5 +148,46 @@ export async function getMarketRate(
     )
   } catch {
     return quoteFromCoinGecko(inputToken, inputDecimals, outputToken, outputDecimals, inputAmountWei)
+  }
+}
+
+/// Pick the (inputToken, WETH) fee tier whose V3 pool has the deepest liquidity,
+/// so the on-chain stake oracle reads a real, manipulation-resistant pool instead
+/// of a hardcoded tier that may point at a thin (or non-existent) pool.
+///
+/// Returns `null` when no usable pool exists — the caller then keeps the
+/// client-supplied feeTier (the order is still fillable when the on-chain oracle
+/// is disabled / running in notional mode, and WETH input is quoted 1:1 anyway).
+/// Best-effort: never throws, so an RPC hiccup never blocks order creation.
+///
+/// `minObservationCardinality` guards the TWAP window: observe() can only span a
+/// window the pool has retained enough observations for. Deep mainnet pools keep
+/// hundreds; a value of 2 just rejects brand-new pools that only hold the spot.
+export async function pickFeeTier(
+  provider: ethers.providers.Provider,
+  inputToken: string,
+  minObservationCardinality = 2,
+): Promise<number | null> {
+  if (inputToken.toLowerCase() === WETH.toLowerCase()) return null // oracle is 1:1 for WETH input
+  try {
+    const factory = new ethers.Contract(UNIV3_FACTORY, FACTORY_ABI, provider)
+    let best: { tier: number; liquidity: ethers.BigNumber } | null = null
+
+    for (const tier of CANDIDATE_FEE_TIERS) {
+      const pool: string = await factory.getPool(inputToken, WETH, tier)
+      if (pool === ethers.constants.AddressZero) continue          // (1) pool exists?
+
+      const c = new ethers.Contract(pool, V3_POOL_ABI, provider)
+      const [liquidity, slot0] = await Promise.all([c.liquidity(), c.slot0()])
+      if ((liquidity as ethers.BigNumber).isZero()) continue        // (2) has liquidity?
+      if ((slot0[3] as number) < minObservationCardinality) continue // (3) enough history?
+
+      if (!best || (liquidity as ethers.BigNumber).gt(best.liquidity)) {
+        best = { tier, liquidity }                                  // keep the deepest
+      }
+    }
+    return best?.tier ?? null
+  } catch {
+    return null
   }
 }

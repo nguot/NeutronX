@@ -5,6 +5,8 @@ import "forge-std/Script.sol";
 import "../src/FillAuction.sol";
 import "../src/PartialFillReactor.sol";
 import "../src/FallbackExecutor.sol";
+import "../src/oracles/UniswapV3NotionalOracle.sol";
+import "../src/interfaces/IEthNotionalOracle.sol";
 
 /**
  * Testnet deployment of the single-chain partial-fill stack.
@@ -53,10 +55,12 @@ contract DeployTestnet is Script {
         console.log("Oracle disabled:    ", oracleDisabled);
         console.log("Cosigner:           ", cosigner);
 
-        // 1. FillAuction — oracle-disabled (zero factory) unless explicitly enabled.
-        FillAuction fillAuction = oracleDisabled
-            ? new FillAuction(deployer, address(0), address(0), 0, true)
-            : new FillAuction(deployer, weth, univ3Factory, twapWindow, false);
+        // 1. FillAuction — oracle-disabled unless explicitly enabled.
+        IEthNotionalOracle oracle = oracleDisabled
+            ? IEthNotionalOracle(address(0))
+            : IEthNotionalOracle(address(new UniswapV3NotionalOracle(weth, univ3Factory, twapWindow)));
+        if (!oracleDisabled) console.log("UniswapV3NotionalOracle:", address(oracle));
+        FillAuction fillAuction = new FillAuction(deployer, oracle, oracleDisabled);
         console.log("FillAuction:        ", address(fillAuction));
 
         // 2. PartialFillReactor.

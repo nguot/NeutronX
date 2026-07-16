@@ -1,0 +1,181 @@
+<mxfile host="app.diagrams.net">
+
+  <diagram id="gas1" name="Bang 1 - Single-chain swap">
+    <mxGraphModel dx="1400" dy="820" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1400" pageHeight="700" math="0" shadow="0">
+      <root>
+        <mxCell id="0" /><mxCell id="1" parent="0" />
+
+        <mxCell id="t1" value="Bảng 1 — Single-chain swap" style="text;html=1;fontColor=#16305C;fontSize=18;fontStyle=1;align=left;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="40" y="20" width="600" height="40" as="geometry" />
+        </mxCell>
+
+        <!-- header row -->
+        <mxCell id="h0" value="" style="whiteSpace=wrap;html=1;fillColor=#EEF0F6;strokeColor=#C6CBD9;strokeWidth=1;" vertex="1" parent="1">
+          <mxGeometry x="40" y="80" width="220" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="h1" value="UniswapX" style="whiteSpace=wrap;html=1;fillColor=#16305C;strokeColor=#0E2144;fontColor=#FFFFFF;fontSize=15;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="260" y="80" width="290" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="h2" value="1inch Fusion+" style="whiteSpace=wrap;html=1;fillColor=#16305C;strokeColor=#0E2144;fontColor=#FFFFFF;fontSize=15;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="550" y="80" width="290" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="h3" value="CoW Swap" style="whiteSpace=wrap;html=1;fillColor=#16305C;strokeColor=#0E2144;fontColor=#FFFFFF;fontSize=15;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="840" y="80" width="290" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="h4" value="NeutronX" style="whiteSpace=wrap;html=1;fillColor=#0E2144;strokeColor=#0E2144;fontColor=#FFFFFF;fontSize=15;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="1130" y="80" width="230" height="56" as="geometry" />
+        </mxCell>
+
+        <!-- row 1: Khop lenh -->
+        <mxCell id="r1l" value="Khớp lệnh" style="whiteSpace=wrap;html=1;fillColor=#DCE6F6;strokeColor=#C6CBD9;fontColor=#16305C;fontSize=14;fontStyle=1;align=left;spacingLeft=14;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="40" y="136" width="220" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="r1a" value="All-or-nothing" style="whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#C6CBD9;fontColor=#333333;fontSize=14;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="260" y="136" width="290" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="r1b" value="Partial-fill" style="whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#C6CBD9;fontColor=#333333;fontSize=14;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="550" y="136" width="290" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="r1c" value="Batch (gộp lô)" style="whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#C6CBD9;fontColor=#333333;fontSize=14;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="840" y="136" width="290" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="r1d" value="Partial-fill" style="whiteSpace=wrap;html=1;fillColor=#EAF1FB;strokeColor=#9FB6D9;strokeWidth=1;fontColor=#16305C;fontSize=14;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="1130" y="136" width="230" height="90" as="geometry" />
+        </mxCell>
+
+        <!-- row 2: Filler/solver -->
+        <mxCell id="r2l" value="Filler / solver" style="whiteSpace=wrap;html=1;fillColor=#DCE6F6;strokeColor=#C6CBD9;fontColor=#16305C;fontSize=14;fontStyle=1;align=left;spacingLeft=14;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="40" y="226" width="220" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="r2a" value="Permissionless" style="whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#C6CBD9;fontColor=#333333;fontSize=14;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="260" y="226" width="290" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="r2b" value="KYC + whitelist" style="whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#C6CBD9;fontColor=#333333;fontSize=14;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="550" y="226" width="290" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="r2c" value="Bonding + KYC" style="whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#C6CBD9;fontColor=#333333;fontSize=14;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="840" y="226" width="290" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="r2d" value="Permissionless (stake)" style="whiteSpace=wrap;html=1;fillColor=#EAF1FB;strokeColor=#9FB6D9;strokeWidth=1;fontColor=#16305C;fontSize=14;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="1130" y="226" width="230" height="90" as="geometry" />
+        </mxCell>
+
+        <!-- row 3: Gas filler -->
+        <mxCell id="r3l" value="Gas filler" style="whiteSpace=wrap;html=1;fillColor=#DCE6F6;strokeColor=#C6CBD9;fontColor=#16305C;fontSize=14;fontStyle=1;align=left;spacingLeft=14;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="40" y="316" width="220" height="120" as="geometry" />
+        </mxCell>
+        <mxCell id="r3a" value="~120–200k*&#10;(1 tx, all-or-nothing)" style="whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#C6CBD9;fontColor=#333333;fontSize=14;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="260" y="316" width="290" height="120" as="geometry" />
+        </mxCell>
+        <mxCell id="r3b" value="~150–250k*&#10;(settlement)" style="whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#C6CBD9;fontColor=#333333;fontSize=14;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="550" y="316" width="290" height="120" as="geometry" />
+        </mxCell>
+        <mxCell id="r3c" value="Rẻ nhất*&#10;(amortized theo batch)" style="whiteSpace=wrap;html=1;fillColor=#EAF3EA;strokeColor=#C6CBD9;fontColor=#2E7D32;fontSize=14;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="840" y="316" width="290" height="120" as="geometry" />
+        </mxCell>
+        <mxCell id="r3d" value="register ~410k&#10;+ fill ~235k/chunk&#10;(đo thật)" style="whiteSpace=wrap;html=1;fillColor=#FBEDEE;strokeColor=#C8102E;strokeWidth=1;fontColor=#C8102E;fontSize=14;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="1130" y="316" width="230" height="120" as="geometry" />
+        </mxCell>
+
+        <mxCell id="note1" value="* ước tính theo kiến trúc; chỉ NeutronX đo thật bằng forge gas-report." style="text;html=1;fontColor=#5B6472;fontSize=12;fontStyle=2;align=left;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="40" y="446" width="700" height="26" as="geometry" />
+        </mxCell>
+
+        <mxCell id="concl1" value="Gas NeutronX CAO HƠN rõ rệt ở single-chain: register + fill ≈ 645k, gấp 3–5 lần so với 120–250k của các hệ kia — đây là chi phí phải trả cho cơ chế stake permissionless (không có ở 3 hệ còn lại)." style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#FBEDEE;strokeColor=#C8102E;strokeWidth=2;fontColor=#C8102E;fontSize=14;fontStyle=1;align=left;verticalAlign=middle;spacingLeft=16;" vertex="1" parent="1">
+          <mxGeometry x="40" y="490" width="1320" height="80" as="geometry" />
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+
+  <diagram id="gas2" name="Bang 2 - Cross-chain swap">
+    <mxGraphModel dx="1400" dy="820" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1400" pageHeight="700" math="0" shadow="0">
+      <root>
+        <mxCell id="0" /><mxCell id="1" parent="0" />
+
+        <mxCell id="t2" value="Bảng 2 — Cross-chain swap" style="text;html=1;fontColor=#16305C;fontSize=18;fontStyle=1;align=left;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="40" y="20" width="600" height="40" as="geometry" />
+        </mxCell>
+
+        <!-- header row -->
+        <mxCell id="k0" value="" style="whiteSpace=wrap;html=1;fillColor=#EEF0F6;strokeColor=#C6CBD9;strokeWidth=1;" vertex="1" parent="1">
+          <mxGeometry x="40" y="80" width="220" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="k1" value="UniswapX" style="whiteSpace=wrap;html=1;fillColor=#16305C;strokeColor=#0E2144;fontColor=#FFFFFF;fontSize=15;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="260" y="80" width="290" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="k2" value="1inch Fusion+" style="whiteSpace=wrap;html=1;fillColor=#16305C;strokeColor=#0E2144;fontColor=#FFFFFF;fontSize=15;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="550" y="80" width="290" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="k3" value="CoW Swap" style="whiteSpace=wrap;html=1;fillColor=#16305C;strokeColor=#0E2144;fontColor=#FFFFFF;fontSize=15;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="840" y="80" width="290" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="k4" value="NeutronX" style="whiteSpace=wrap;html=1;fillColor=#0E2144;strokeColor=#0E2144;fontColor=#FFFFFF;fontSize=15;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="1130" y="80" width="230" height="56" as="geometry" />
+        </mxCell>
+
+        <!-- row 1: Mo hinh -->
+        <mxCell id="m1l" value="Mô hình" style="whiteSpace=wrap;html=1;fillColor=#DCE6F6;strokeColor=#C6CBD9;fontColor=#16305C;fontSize=14;fontStyle=1;align=left;spacingLeft=14;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="40" y="136" width="220" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="m1a" value="ERC-7683 + Across&#10;(optimistic)" style="whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#C6CBD9;fontColor=#333333;fontSize=14;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="260" y="136" width="290" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="m1b" value="HTLC&#10;(escrow + deposit)" style="whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#C6CBD9;fontColor=#333333;fontSize=14;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="550" y="136" width="290" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="m1c" value="Bridge ngoài&#10;(Bungee / Across)" style="whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#C6CBD9;fontColor=#333333;fontSize=14;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="840" y="136" width="290" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="m1d" value="HTLC, filler tự giữ key&#10;(atomic)" style="whiteSpace=wrap;html=1;fillColor=#EAF1FB;strokeColor=#9FB6D9;strokeWidth=1;fontColor=#16305C;fontSize=14;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="1130" y="136" width="230" height="110" as="geometry" />
+        </mxCell>
+
+        <!-- row 2: Niem tin -->
+        <mxCell id="m2l" value="Niềm tin" style="whiteSpace=wrap;html=1;fillColor=#DCE6F6;strokeColor=#C6CBD9;fontColor=#16305C;fontSize=14;fontStyle=1;align=left;spacingLeft=14;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="40" y="246" width="220" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="m2a" value="Relayer của Across" style="whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#C6CBD9;fontColor=#333333;fontSize=14;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="260" y="246" width="290" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="m2b" value="Relayer điều phối&#10;(atomic)" style="whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#C6CBD9;fontColor=#333333;fontSize=14;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="550" y="246" width="290" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="m2c" value="Bridge bên ngoài" style="whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#C6CBD9;fontColor=#333333;fontSize=14;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="840" y="246" width="290" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="m2d" value="Không bên thứ ba" style="whiteSpace=wrap;html=1;fillColor=#EAF1FB;strokeColor=#9FB6D9;strokeWidth=1;fontColor=#16305C;fontSize=14;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="1130" y="246" width="230" height="90" as="geometry" />
+        </mxCell>
+
+        <!-- row 3: Gas filler -->
+        <mxCell id="m3l" value="Gas filler" style="whiteSpace=wrap;html=1;fillColor=#DCE6F6;strokeColor=#C6CBD9;fontColor=#16305C;fontSize=14;fontStyle=1;align=left;spacingLeft=14;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="40" y="336" width="220" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="m3a" value="~200–350k*" style="whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#C6CBD9;fontColor=#333333;fontSize=14;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="260" y="336" width="290" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="m3b" value="~400–700k*" style="whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#C6CBD9;fontColor=#333333;fontSize=14;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="550" y="336" width="290" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="m3c" value="Bridge + swap*&#10;(biến động, phụ bridge)" style="whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#C6CBD9;fontColor=#333333;fontSize=14;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="840" y="336" width="290" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="m3d" value="~720k&#10;(đo thật)" style="whiteSpace=wrap;html=1;fillColor=#FDF3E6;strokeColor=#C89B2E;strokeWidth=1;fontColor=#8A6D1A;fontSize=14;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="1130" y="336" width="230" height="100" as="geometry" />
+        </mxCell>
+
+        <mxCell id="note2" value="* ước tính theo kiến trúc; chỉ NeutronX đo thật bằng forge gas-report." style="text;html=1;fontColor=#5B6472;fontSize=12;fontStyle=2;align=left;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="40" y="446" width="700" height="26" as="geometry" />
+        </mxCell>
+
+        <mxCell id="concl2" value="Gas NeutronX Ở CROSS-CHAIN không cao bất thường: ~720k nằm cùng khoảng với 1inch Fusion+ (~400–700k) — hệ kiến trúc gần nhất (cũng HTLC). Chi phí escrow + relay là đặc trưng chung của mọi hệ HTLC, không riêng NeutronX; điểm khác biệt là không cần bên thứ ba." style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#FDF3E6;strokeColor=#C89B2E;strokeWidth=2;fontColor=#8A6D1A;fontSize=14;fontStyle=1;align=left;verticalAlign=middle;spacingLeft=16;" vertex="1" parent="1">
+          <mxGeometry x="40" y="490" width="1320" height="90" as="geometry" />
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+
+</mxfile>

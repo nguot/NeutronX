@@ -58,6 +58,10 @@ interface FallbackCheckResult {
   chainId:             number
   remainingInput:      string
   preferredAggregator: string | null
+  minOutputTotal:      string
+  paidSoFar:            string
+  proRataFloor:         string
+  remainingOutputOwed:  string
   requiredMinOutput:   string
   results:             AggregatorCheckResult[]
 }
@@ -74,7 +78,7 @@ const STATUS_COLORS: Record<string, string> = {
 
 function short(addr: string) { return addr ? `${addr.slice(0, 8)}…${addr.slice(-4)}` : '—' }
 
-export default function Orders({ wallet }: { wallet: WalletState }) {
+export default function Orders({ wallet, switchNetwork }: { wallet: WalletState; switchNetwork: (chainId: number) => Promise<void> }) {
   const { backendUrl } = useAppConfig()
 
   const [orders, setOrders]     = useState<Order[]>([])
@@ -236,7 +240,7 @@ export default function Orders({ wallet }: { wallet: WalletState }) {
       </div>
 
       {/* Cross-chain orders for the connected wallet (hidden when none) */}
-      <CrossChainOrders wallet={wallet} />
+      <CrossChainOrders wallet={wallet} switchNetwork={switchNetwork} />
     </>
   )
 }
@@ -323,6 +327,31 @@ function OrderDetailPanel({ order, wallet, onCancelled }: { order: OrderDetail; 
                 return <div key={f.id} className="uni-fill-segment" style={{ width: `${segPct}%`, background: colorForFiller(f.filler) }} />
               })}
             </div>
+            {order.fillDetails.length > 0 && (
+              <table style={{ width: '100%', fontSize: '0.76rem', marginTop: 8, borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ color: '#94a3b8', textAlign: 'left' }}>
+                    <th style={{ fontWeight: 500, paddingRight: 12 }}>Filler</th>
+                    <th style={{ fontWeight: 500, paddingRight: 12 }}>Source</th>
+                    <th style={{ fontWeight: 500, paddingRight: 12 }}>Paid (in)</th>
+                    <th style={{ fontWeight: 500 }}>Received (out)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {order.fillDetails.map(f => (
+                    <tr key={f.id}>
+                      <td style={{ paddingRight: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span style={{ width: 8, height: 8, borderRadius: 4, background: colorForFiller(f.filler), flexShrink: 0 }} />
+                        <span className="mono">{short(f.filler)}</span>
+                      </td>
+                      <td style={{ paddingRight: 12 }}>{f.source === 'fallback' ? `fallback · ${f.aggregator ?? '?'}` : 'filler'}</td>
+                      <td style={{ paddingRight: 12 }}>{fromWei(BigInt(f.fillAmount), inDec)} {inSym}</td>
+                      <td>{fromWei(BigInt(f.outputAmount), outDec)} {outSym}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
           </div>
         </>
       )}
@@ -350,32 +379,45 @@ function OrderDetailPanel({ order, wallet, onCancelled }: { order: OrderDetail; 
       <div className="uni-fill-section">
         <div className="uni-fill-label">
           <span>Fallback Route Check</span>
-          <button className="ghost sm" style={{ marginTop: 0 }} onClick={checkFallback} disabled={fbLoading}>
-            {fbLoading ? 'Checking…' : 'Test fallback route'}
+          <button className="ghost sm" style={{ marginTop: 0 }} onClick={checkFallback} disabled={fbLoading || order.status === 'filled'}>
+            {fbLoading ? 'Checking…' : order.status === 'filled' ? 'Fully filled' : 'Test fallback route'}
           </button>
         </div>
         {fbError && <div className="status bad" style={{ fontSize: '0.78rem', marginTop: 6 }}>{fbError}</div>}
-        {fbCheck && (
+        {fbCheck && fbCheck.remainingInput === '0' && (
+          <div className="text-muted" style={{ marginTop: 6, fontSize: '0.78rem' }}>
+            Order fully filled ({fromWei(BigInt(fbCheck.paidSoFar), outDec)} {outSym} paid out of {fromWei(BigInt(fbCheck.minOutputTotal), outDec)} {outSym} owed) — nothing left to route via fallback.
+          </div>
+        )}
+        {fbCheck && fbCheck.remainingInput !== '0' && (
           <div style={{ marginTop: 6, fontSize: '0.78rem' }}>
             <div className="text-muted" style={{ marginBottom: 4 }}>
-              Remaining: {fromWei(BigInt(fbCheck.remainingInput), inDec)} {inSym} on chain {fbCheck.chainId}
+              Input remaining: <strong>{fromWei(BigInt(fbCheck.remainingInput), inDec)} {inSym}</strong> on chain {fbCheck.chainId}
               {fbCheck.preferredAggregator && <> · pinned to <strong>{fbCheck.preferredAggregator}</strong></>}
             </div>
+            <div className="text-muted" style={{ marginBottom: 4 }}>
+              Output — total owed {fromWei(BigInt(fbCheck.minOutputTotal), outDec)} {outSym},
+              {' '}already paid {fromWei(BigInt(fbCheck.paidSoFar), outDec)} {outSym},
+              {' '}still owed <strong>{fromWei(BigInt(fbCheck.remainingOutputOwed), outDec)} {outSym}</strong>
+            </div>
             <div className="text-muted" style={{ marginBottom: 6 }}>
-              Required floor: <strong>{fromWei(BigInt(fbCheck.requiredMinOutput), outDec)} {outSym}</strong>{' '}
-              (swapper's signed minimum, pro-rated to the remaining amount — a quote below this reverts on-chain)
+              Two on-chain gates a quote must BOTH clear:
+              {' '}per-leg pro-rata floor <strong>{fromWei(BigInt(fbCheck.proRataFloor), outDec)} {outSym}</strong>
+              {' '}(FallbackExecutor.sol, this leg alone) · cumulative floor <strong>{fromWei(BigInt(fbCheck.remainingOutputOwed), outDec)} {outSym}</strong>
+              {' '}(PartialFillReactor.sol, total order) → effective required min:{' '}
+              <strong>{fromWei(BigInt(fbCheck.requiredMinOutput), outDec)} {outSym}</strong>
             </div>
             {fbCheck.results.map(r => {
               const clearsFloor = r.ok && BigInt(r.minAmountOut!) >= BigInt(fbCheck.requiredMinOutput)
               return (
                 <div key={r.key} style={{ display: 'flex', alignItems: 'baseline', gap: 8, padding: '3px 0' }}>
-                  <span style={{ color: r.ok ? '#16a34a' : '#dc2626', fontWeight: 600 }}>{r.ok ? '✓' : '✗'}</span>
+                  <span style={{ color: clearsFloor ? '#16a34a' : '#dc2626', fontWeight: 600 }}>{clearsFloor ? '✓' : '✗'}</span>
                   <span style={{ minWidth: 160 }}>{r.name}</span>
                   {r.ok
                     ? <span>
                         {fromWei(BigInt(r.minAmountOut!), outDec)} {outSym} min{' '}
                         <span style={{ color: clearsFloor ? '#16a34a' : '#dc2626', fontWeight: 600 }}>
-                          {clearsFloor ? '· clears floor' : '· below floor (would revert)'}
+                          {clearsFloor ? '· clears both floors' : '· below required floor (would revert)'}
                         </span>
                       </span>
                     : <span className="text-muted" style={{ wordBreak: 'break-all' }}>{r.error}</span>}

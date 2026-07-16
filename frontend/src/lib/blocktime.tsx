@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react'
 import { useAppConfig } from '../context/AppConfig'
 
 // Orders use block numbers for deadlines, which are meaningless to a human ("ends
@@ -45,6 +46,38 @@ export function BlockEta({ target, current, showClock = true, style }: {
     return <span className="uni-label-muted" title={title} style={style}>block {target}</span>
   }
   const eta = blockEta(target, cur)
+  return (
+    <span title={title} style={{ color: eta.expired ? '#dc2626' : undefined, ...style }}>
+      {eta.label}{showClock && !eta.expired ? ` · ~${eta.clock}` : ''}
+    </span>
+  )
+}
+
+// Model 2 timelocks (deadlineBase, t1, t2) are unix timestamps, not block
+// numbers — this reads wall-clock time directly instead of estimating via a
+// nominal block time.
+export function timeEta(targetUnixSec: number, nowUnixSec = Date.now() / 1000): Eta {
+  const seconds = targetUnixSec - nowUnixSec
+  const clock = new Date(targetUnixSec * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  return seconds <= 0
+    ? { label: `ended ≈ ${formatDuration(-seconds)} ago`, clock, blocks: 0, expired: true }
+    : { label: `≈ ${formatDuration(seconds)} left`,        clock, blocks: 0, expired: false }
+}
+
+// Drop-in human-time label for a unix-timestamp deadline (T1/T2/deadlineBase).
+// Self-ticks every 15s so the countdown stays roughly live without a poll.
+export function TimeEta({ target, showClock = true, style }: {
+  target: number
+  showClock?: boolean
+  style?: React.CSSProperties
+}) {
+  const [now, setNow] = useState(() => Date.now() / 1000)
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now() / 1000), 15000)
+    return () => clearInterval(id)
+  }, [])
+  const eta = timeEta(target, now)
+  const title = new Date(target * 1000).toLocaleString()
   return (
     <span title={title} style={{ color: eta.expired ? '#dc2626' : undefined, ...style }}>
       {eta.label}{showClock && !eta.expired ? ` · ~${eta.clock}` : ''}

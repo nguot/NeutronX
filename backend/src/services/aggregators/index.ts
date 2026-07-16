@@ -2,6 +2,7 @@ import { AggregatorAdapter } from './types'
 import { uniswapAdapter } from './uniswap'
 import { oneInchAdapter } from './oneinch'
 import { kyberswapAdapter } from './kyberswap'
+import { paraswapAdapter } from './paraswap'
 
 export * from './types'
 
@@ -9,15 +10,15 @@ export * from './types'
 // add it to this list. It then shows up automatically in fallbackWatcher's
 // "auto" best-price comparison and in the /config/aggregators API.
 //
-// paraswapAdapter (./paraswap.ts) is implemented but NOT registered here yet:
-// its router (Augustus) isn't in FallbackExecutor's allowedRouters, and its
-// two-address approve-then-call model (approve tokenTransferProxy, call `to`)
-// doesn't fit forceApprove(router, rem); router.call(...) without a contract
-// change. Registering it as-is makes "auto" pick it and revert on-chain.
+// paraswapAdapter's two-address model (approve tokenTransferProxy, call
+// Augustus) is resolved on-chain via FallbackExecutor.approveTargetOf[router]
+// (owner-registered per router, see Deploy.s.sol) rather than a parameter
+// here — so this adapter needs no special-casing versus the others.
 export const AGGREGATORS: AggregatorAdapter[] = [
   uniswapAdapter,
   oneInchAdapter,
   kyberswapAdapter,
+  paraswapAdapter,
 ]
 
 export function getAggregator(key: string): AggregatorAdapter | undefined {

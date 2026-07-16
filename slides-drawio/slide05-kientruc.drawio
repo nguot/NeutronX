@@ -1,0 +1,81 @@
+<mxfile host="app.diagrams.net">
+  <diagram id="slide05" name="Slide 5 - Kien truc tong the">
+    <mxGraphModel dx="1300" dy="820" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1160" pageHeight="640" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <!-- ============ TANG 1: FRONTEND ============ -->
+        <mxCell id="fe" value="" style="rounded=1;arcSize=4;whiteSpace=wrap;html=1;fillColor=#EEF0F6;strokeColor=#C6CBD9;strokeWidth=1;" vertex="1" parent="1">
+          <mxGeometry x="120" y="70" width="920" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="fet" value="FRONTEND" style="rounded=1;arcSize=12;whiteSpace=wrap;html=1;fillColor=#16305C;strokeColor=none;fontColor=#FFFFFF;fontSize=17;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="140" y="88" width="160" height="54" as="geometry" />
+        </mxCell>
+        <mxCell id="fe1" value="Swapper ký order" style="rounded=1;arcSize=12;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#9FB6D9;strokeWidth=1;fontColor=#333333;fontSize=17;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="330" y="88" width="330" height="54" as="geometry" />
+        </mxCell>
+        <mxCell id="fe2" value="Dashboard cho filler" style="rounded=1;arcSize=12;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#9FB6D9;strokeWidth=1;fontColor=#333333;fontSize=17;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="690" y="88" width="330" height="54" as="geometry" />
+        </mxCell>
+
+        <!-- ============ TANG 2: BACKEND ============ -->
+        <mxCell id="be" value="" style="rounded=1;arcSize=4;whiteSpace=wrap;html=1;fillColor=#EEF0F6;strokeColor=#C6CBD9;strokeWidth=1;" vertex="1" parent="1">
+          <mxGeometry x="120" y="190" width="920" height="128" as="geometry" />
+        </mxCell>
+        <mxCell id="bet" value="BACKEND" style="rounded=1;arcSize=10;whiteSpace=wrap;html=1;fillColor=#16305C;strokeColor=none;fontColor=#FFFFFF;fontSize=17;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="140" y="212" width="160" height="84" as="geometry" />
+        </mxCell>
+        <mxCell id="be1" value="Lưu order cho swapper" style="rounded=1;arcSize=14;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#9FB6D9;strokeWidth=1;fontColor=#333333;fontSize=17;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="330" y="212" width="330" height="38" as="geometry" />
+        </mxCell>
+        <mxCell id="be2" value="Cosigner ký order" style="rounded=1;arcSize=14;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#9FB6D9;strokeWidth=1;fontColor=#333333;fontSize=17;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="690" y="212" width="330" height="38" as="geometry" />
+        </mxCell>
+        <mxCell id="be3" value="Watcher / Indexer trạng thái" style="rounded=1;arcSize=14;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#9FB6D9;strokeWidth=1;fontColor=#333333;fontSize=17;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="330" y="258" width="330" height="38" as="geometry" />
+        </mxCell>
+        <mxCell id="be4" value="Relayer (cross-chain)" style="rounded=1;arcSize=14;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#9FB6D9;strokeWidth=1;fontColor=#333333;fontSize=17;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="690" y="258" width="330" height="38" as="geometry" />
+        </mxCell>
+
+        <!-- ============ TANG 3: SETTLEMENT LAYER ============ -->
+        <mxCell id="se" value="" style="rounded=1;arcSize=4;whiteSpace=wrap;html=1;fillColor=#EAF1FB;strokeColor=#16305C;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="120" y="348" width="920" height="130" as="geometry" />
+        </mxCell>
+        <mxCell id="set" value="SETTLEMENT LAYER&#10;(smart contract on-chain)" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#16305C;strokeColor=none;fontColor=#FFFFFF;fontSize=17;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="140" y="368" width="180" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="se1" value="Single-chain swap" style="rounded=1;arcSize=10;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#16305C;strokeWidth=2;fontColor=#16305C;fontSize=17;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="350" y="378" width="320" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="se2" value="Cross-chain swap" style="rounded=1;arcSize=10;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#16305C;strokeWidth=2;fontColor=#16305C;fontSize=17;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="700" y="378" width="320" height="70" as="geometry" />
+        </mxCell>
+
+        <!-- ============ TANG 4: FILLER ============ -->
+        <mxCell id="fi" value="" style="rounded=1;arcSize=4;whiteSpace=wrap;html=1;fillColor=#EEF0F6;strokeColor=#C6CBD9;strokeWidth=1;" vertex="1" parent="1">
+          <mxGeometry x="120" y="508" width="920" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="fit" value="FILLER" style="rounded=1;arcSize=12;whiteSpace=wrap;html=1;fillColor=#16305C;strokeColor=none;fontColor=#FFFFFF;fontSize=17;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="140" y="526" width="160" height="54" as="geometry" />
+        </mxCell>
+        <mxCell id="fi1" value="Agent off-chain — bất kỳ ai cũng chạy được" style="rounded=1;arcSize=12;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#9FB6D9;strokeWidth=1;fontColor=#333333;fontSize=17;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="330" y="526" width="690" height="54" as="geometry" />
+        </mxCell>
+
+        <!-- ============ CONNECTORS ============ -->
+        <mxCell id="c1" style="edgeStyle=none;html=1;rounded=0;endArrow=block;endFill=1;strokeColor=#16305C;strokeWidth=2;" edge="1" parent="1" source="fe" target="be">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="c2" style="edgeStyle=none;html=1;rounded=0;endArrow=block;endFill=1;strokeColor=#16305C;strokeWidth=2;" edge="1" parent="1" source="be" target="se">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="c3" style="edgeStyle=none;html=1;rounded=0;endArrow=block;endFill=1;startArrow=block;startFill=1;strokeColor=#16305C;strokeWidth=2;" edge="1" parent="1" source="se" target="fi">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

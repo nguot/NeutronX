@@ -64,8 +64,25 @@ export function statusLabel(status: string): string {
     case 'available': return pc.green(status)
     case 'locked':    return pc.yellow(status)
     case 'claimed':   return pc.cyan(status)
+    // Model 2 cross-chain fill states (see crosschainService.ts's state machine)
+    case 'quoted':      return pc.blue(status)
+    case 'dst_funded':  return pc.blue(status)
+    case 'authorized':  return pc.yellow(status)
+    case 'src_locked':  return pc.yellow(status)
+    case 'revealed':    return pc.cyan(status)
+    case 'slashed':     return pc.red(status)
     default:          return status
   }
+}
+
+// ora's spinner.fail()/succeed()/warn() assume the persisted message is a
+// single terminal line — ethers.js errors routinely dump multi-KB, embedded-
+// newline JSON-RPC bodies, which wrap across many rows and throw off ora's
+// cursor bookkeeping for everything rendered after it (including the REPL's
+// next prompt). Collapse to one line and cap the length before handing it off.
+export function shortErr(e: any, max = 180): string {
+  const msg = String(e?.reason ?? e?.message ?? e).replace(/\s+/g, ' ').trim()
+  return msg.length > max ? msg.slice(0, max) + '…' : msg
 }
 
 export const c = pc

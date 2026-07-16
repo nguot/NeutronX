@@ -24,7 +24,7 @@ export PATH="$HOME/.foundry/bin:$PATH"
 # ── chain / accounts (Anvil defaults) ────────────────────────────────────────
 RPC="${RPC:-http://127.0.0.1:8545}"
 FORK_RPC="${FORK_RPC:-https://eth-mainnet.g.alchemy.com/v2/NqceSkD9a9GU5a-EbT9wp}"
-FORK_BLOCK="${FORK_BLOCK:-20500000}"
+source "$ROOT/scripts/fork_block.sh"   # sets FORK_BLOCK (env var still overrides — see that file)
 CHAIN_ID=31337
 
 PK0=0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80   # acct0: deployer + cosigner + swapper

@@ -91,7 +91,8 @@ export async function startStakeConfigIndexer() {
   await initStakeConfigSchema()
 
   const currentBlock = await provider.getBlockNumber()
-  let lastBlock = await resolveCheckpoint('stake_config_events', currentBlock, 'StakeConfig indexer')
+  const genesis = await provider.getBlock(0).catch(() => null)
+  let lastBlock = await resolveCheckpoint('stake_config_events', currentBlock, 'StakeConfig indexer', genesis?.hash)
 
   console.log('StakeConfig indexer started')
 

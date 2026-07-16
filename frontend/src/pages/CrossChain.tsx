@@ -3,16 +3,17 @@ import { ethers } from 'ethers'
 import type { WalletState } from '../hooks/useWallet'
 import { useAppConfig } from '../context/AppConfig'
 import { HashRow } from '../components/CrossChainOrders'
+import { safeApproveErc20 } from '../lib/erc20'
+import { fromWei } from '../lib/tokens'
 
-// Chain B auto-mines ~1 block/sec (see tests/crosschain/chainb_anvil.sh), so a
-// deadline expressed in blocks burns through fast in real time. Give enough
-// headroom for the manual UI flow (creating + signing the order, then a filler
-// noticing and calling fillSlot) — ~30 min on a 1-block/sec chain.
-const DEADLINE_BUFFER_BLOCKS = 1800
+// Order intent deadline (T1 ceiling) — how long a signed intent stays quotable
+// by fillers before it expires. Timestamp-based (Model 2), not block-based.
+const DEADLINE_BUFFER_SEC = 60 * 60
+const DEFAULT_FEE_TIER = 3000
 
 const PERMIT2 = '0x000000000022D473030F116dDEE9F6B43aC78BA3'
 const P2_ABI  = ['function allowance(address,address,address) view returns (uint160,uint48,uint48)', 'function approve(address,address,uint160,uint48)']
-const ERC_ABI = ['function allowance(address,address) view returns (uint256)', 'function approve(address,uint256) returns (bool)']
+const ERC_ABI = ['function allowance(address,address) view returns (uint256)', 'function approve(address,uint256) returns (bool)', 'function balanceOf(address) view returns (uint256)']
 
 function toWei(val: string, dec: number): bigint {
   try { return ethers.utils.parseUnits(val || '0', dec).toBigInt() } catch { return 0n }
@@ -29,7 +30,7 @@ interface CrossChainProps {
 }
 
 export default function CrossChain({ wallet, switchNetwork }: CrossChainProps) {
-  const { backendUrl, crossChainReactor, escrowSrcFactoryB, chainId } = useAppConfig()
+  const { backendUrl, crossChainReactor, escrowSrcFactoryB, chainId, chainARpc, chainBRpc } = useAppConfig()
 
   const [allTokens, setAllTokens] = useState<CCTokenInfo[]>([])
   const [srcChain, setSrcChain] = useState(0)
@@ -39,12 +40,11 @@ export default function CrossChain({ wallet, switchNetwork }: CrossChainProps) {
   const [inAmt,  setInAmt]  = useState('')
   const [outAmt, setOutAmt] = useState('')
 
-  const [adv, setAdv] = useState({ deadline: '', t2Buffer: '50', nonce: String(Date.now() % 1000000) })
+  const [adv, setAdv] = useState({ deadlineMin: '', feeTier: String(DEFAULT_FEE_TIER), nonce: String(Date.now() % 1000000) })
   const setAdvField = (k: keyof typeof adv) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setAdv(a => ({ ...a, [k]: e.target.value }))
 
   const [showInfo, setShowInfo] = useState(false)
-  const [cosignerAddr, setCosignerAddr] = useState('')
   const [step, setStep] = useState<Step>('idle')
   const [msg,  setMsg]  = useState('')
   const [err,  setErr]  = useState('')
@@ -63,6 +63,47 @@ export default function CrossChain({ wallet, switchNetwork }: CrossChainProps) {
   const factoryByChain: Record<number, string> = { [Number(chainId)]: crossChainReactor, 31338: escrowSrcFactoryB }
   const factory      = factoryByChain[srcChain] ?? ''
   const wrongNetwork = wallet.connected && srcChain !== 0 && wallet.chainId !== srcChain
+  const rpcByChain: Record<number, string> = { [Number(chainId)]: chainARpc, 31338: chainBRpc }
+
+  // Auto-switch the wallet's network instead of making the user click a
+  // button for it — fires whenever the selected source chain doesn't match
+  // where the wallet is connected. If the wallet rejects/cancels, `err` shows
+  // why and this won't spam retries (deps are unchanged until the user picks
+  // a different source chain or reconnects).
+  const [switching, setSwitching] = useState(false)
+  useEffect(() => {
+    if (!wrongNetwork) return
+    setSwitching(true)
+    switchNetwork(srcChain).catch((e: any) => setErr(e.message)).finally(() => setSwitching(false))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wrongNetwork, srcChain])
+
+  // ── balances (read straight from each chain's RPC, not wallet.provider, so
+  // they're accurate regardless of which network the wallet is actually on) ──
+  const [inBalance,  setInBalance]  = useState<bigint | null>(null)
+  const [outBalance, setOutBalance] = useState<bigint | null>(null)
+  const fetchBalances = useCallback(async () => {
+    if (!wallet.account) { setInBalance(null); setOutBalance(null); return }
+    try {
+      const [inBal, outBal] = await Promise.all([
+        inT && rpcByChain[srcChain]
+          ? new ethers.Contract(inT.address, ERC_ABI, new ethers.providers.JsonRpcProvider(rpcByChain[srcChain])).balanceOf(wallet.account)
+          : null,
+        outT && rpcByChain[dstChain]
+          ? new ethers.Contract(outT.address, ERC_ABI, new ethers.providers.JsonRpcProvider(rpcByChain[dstChain])).balanceOf(wallet.account)
+          : null,
+      ])
+      setInBalance(inBal ? inBal.toBigInt() : null)
+      setOutBalance(outBal ? outBal.toBigInt() : null)
+    } catch { setInBalance(null); setOutBalance(null) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wallet.account, inT?.address, outT?.address, srcChain, dstChain, rpcByChain[srcChain], rpcByChain[dstChain]])
+
+  useEffect(() => {
+    fetchBalances()
+    const id = setInterval(fetchBalances, 15000)
+    return () => clearInterval(id)
+  }, [fetchBalances])
 
   // Pick a source chain (must host the reactor) and a different destination chain.
   const chooseSrc = (c: number) => {
@@ -76,10 +117,10 @@ export default function CrossChain({ wallet, switchNetwork }: CrossChainProps) {
 
   // ── token directory (every chain, straight from the DB) ──────────────────────
   useEffect(() => {
-    fetch(`${backendUrl}/tokens?chainId=all`)
+    fetch(`${backendUrl}/cc/tokens`)
       .then(r => r.json())
-      .then(data => {
-        const toks: CCTokenInfo[] = data.tokens ?? []
+      .then((data: Record<number, CCTokenInfo[]>) => {
+        const toks: CCTokenInfo[] = Object.values(data ?? {}).flat()
         setAllTokens(toks)
         const cs = [...new Set(toks.map(t => t.chainId))].sort((a, b) => a - b)
         // Source must host the reactor (the configured Chain A); destination is another chain.
@@ -123,9 +164,9 @@ export default function CrossChain({ wallet, switchNetwork }: CrossChainProps) {
   }, [wallet.connected, factory, inT?.address, wrongNetwork, checkApproval])
 
   async function doApproveERC20() {
-    if (!wallet.signer || !inT) return
+    if (!wallet.signer || !wallet.account || !inT) return
     setStep('busy'); setMsg('Approving…')
-    try { await (await new ethers.Contract(inT.address, ERC_ABI, wallet.signer).approve(PERMIT2, ethers.constants.MaxUint256)).wait(); await checkApproval() }
+    try { await safeApproveErc20(inT.address, PERMIT2, ethers.constants.MaxUint256, wallet.signer, wallet.account); await checkApproval() }
     catch (e: any) { setErr(e.message); setStep('erc20') }
     setMsg('')
   }
@@ -140,42 +181,18 @@ export default function CrossChain({ wallet, switchNetwork }: CrossChainProps) {
     setMsg('')
   }
 
-  // ── session (auto init/restore — no manual button) ──────────────────────────
-  // Submitted orders are listed on the Orders page (<CrossChainOrders/>); here we
-  // only need the cosigner address for signing.
-  const ensureSession = useCallback(async () => {
-    if (!wallet.account) return
-    try {
-      const res = await fetch(`${backendUrl}/cc/session/${wallet.account}`)
-      if (res.ok) { setCosignerAddr((await res.json()).cosignerAddr); return }
-    } catch { /* fall through to create */ }
-    try {
-      const res  = await fetch(`${backendUrl}/cc/session`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ swapper: wallet.account }),
-      })
-      const data = await res.json()
-      if (res.ok) setCosignerAddr(data.cosignerAddr)
-    } catch { /* backend not reachable */ }
-  }, [wallet.account, backendUrl])
-
-  useEffect(() => { ensureSession() }, [ensureSession])
-
-  // ── submit ───────────────────────────────────────────────────────────────────
+  // ── submit — intent only. No secret, no Merkle tree, no cosigner: the swapper
+  // signs the order and is passive from here (see CrossChainOrders.tsx for the
+  // per-fill sign/claim flow once a filler quotes against this order). ────────
   async function doSwap() {
     if (!wallet.signer || !factory || !inT || !outT) return
-    if (!cosignerAddr) { setErr('Session is still being set up — try again in a moment.'); return }
     if (wrongNetwork) { setErr(`Switch your wallet to ${chainLabel(srcChain)} first.`); return }
     if (srcChain === dstChain) { setErr('Source and destination must be different chains.'); return }
 
-    setErr(''); setStep('busy'); setMsg('Requesting Merkle tree…')
-    // wallet.blockNumber is a snapshot from the last connect/network-switch and
-    // can be stale by the time the user submits — fetch srcChain's live block
-    // number (wallet.signer is on srcChain, enforced by the wrongNetwork check
-    // above) so the deadline buffer is measured from "now".
-    const srcBlock = wallet.provider ? await wallet.provider.getBlockNumber() : wallet.blockNumber
-    const deadline = adv.deadline ? parseInt(adv.deadline) : srcBlock + DEADLINE_BUFFER_BLOCKS
-    const nonce    = adv.nonce || String(Date.now() % 1000000)
+    setErr(''); setStep('busy'); setMsg('Creating intent…')
+    const deadlineBase = Math.floor(Date.now() / 1000) + (adv.deadlineMin ? parseInt(adv.deadlineMin) * 60 : DEADLINE_BUFFER_SEC)
+    const nonce   = adv.nonce || String(Date.now() % 1000000)
+    const feeTier = parseInt(adv.feeTier || String(DEFAULT_FEE_TIER))
 
     try {
       const res  = await fetch(`${backendUrl}/cc/orders`, {
@@ -184,38 +201,34 @@ export default function CrossChain({ wallet, switchNetwork }: CrossChainProps) {
           swapper: wallet.account,
           inputToken: inT.address, inputAmount: inW.toString(),
           outputToken: outT.address, minOutput: outW.toString(),
-          deadline, nonce,
+          deadlineBase, nonce, feeTier,
           chainAId: srcChain, dstChainId: dstChain,
-          t2Buffer: parseInt(adv.t2Buffer || '50'),
         }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
 
-      // Sign the order with the swapper's wallet (EIP-712) — no on-chain tx.
-      // EscrowSrcFactory registers the order lazily on the first fillSlot()
-      // call by a filler, which requires both this signature and cosignerSig.
-      setMsg('Sign order in wallet…')
+      // Sign the intent with the swapper's wallet (EIP-712) — no on-chain tx.
+      // Fillers can only quote against a signed intent.
+      setMsg('Sign in wallet…')
       const domain = { name: 'NeutronX CrossChain', chainId: srcChain, verifyingContract: factory }
       const types = {
         CrossChainOrder: [
-          { name: 'swapper',     type: 'address' },
-          { name: 'inputToken',  type: 'address' },
-          { name: 'inputAmount', type: 'uint256' },
-          { name: 'outputToken', type: 'address' },
-          { name: 'minOutput',   type: 'uint256' },
-          { name: 'deadline',    type: 'uint256' },
-          { name: 'nonce',       type: 'uint256' },
-          { name: 'merkleRoot',  type: 'bytes32' },
-          { name: 'numSlots',    type: 'uint8' },
+          { name: 'swapper',      type: 'address' },
+          { name: 'inputToken',   type: 'address' },
+          { name: 'inputAmount',  type: 'uint256' },
+          { name: 'outputToken',  type: 'address' },
+          { name: 'minOutput',    type: 'uint256' },
+          { name: 'deadlineBase', type: 'uint256' },
+          { name: 'nonce',        type: 'uint256' },
+          { name: 'feeTier',      type: 'uint24' },
         ],
       }
       const value = {
         swapper: wallet.account,
         inputToken: inT.address, inputAmount: inW.toString(),
         outputToken: outT.address, minOutput: outW.toString(),
-        deadline, nonce,
-        merkleRoot: data.merkleRoot, numSlots: data.numSlots,
+        deadlineBase, nonce, feeTier,
       }
       const swapperSig = await (wallet.signer as ethers.providers.JsonRpcSigner)._signTypedData(domain, types, value)
 
@@ -227,7 +240,7 @@ export default function CrossChain({ wallet, switchNetwork }: CrossChainProps) {
       const sigData = await sigRes.json()
       if (!sigRes.ok) throw new Error(sigData.error)
 
-      setOrderStatus({ msg: `✔ Order signed — ${data.numSlots} slots, ready for fillers · ${short(data.orderHash)} · track it on the Orders page`, cls: 'ok' })
+      setOrderStatus({ msg: `✔ Intent signed · ${short(data.orderHash)} · track it on the Orders page`, cls: 'ok' })
       setInAmt(''); setOutAmt('')
     } catch (e: any) {
       setErr(e.reason ?? e.message)
@@ -239,8 +252,7 @@ export default function CrossChain({ wallet, switchNetwork }: CrossChainProps) {
     if (!wallet.connected)   return <button className="uni-btn" disabled>Connect wallet</button>
     if (!factory)            return <button className="uni-btn" disabled>Cross-chain not configured for {chainLabel(srcChain)}</button>
     if (!inT || !outT)       return <button className="uni-btn" disabled>Loading tokens…</button>
-    if (wrongNetwork)        return <button className="uni-btn active" onClick={() => { setErr(''); switchNetwork(srcChain).catch((e: any) => setErr(e.message)) }}>Switch wallet to {chainLabel(srcChain)}</button>
-    if (!cosignerAddr)       return <button className="uni-btn" disabled>Setting up session…</button>
+    if (wrongNetwork || switching) return <button className="uni-btn" disabled>Switching wallet to {chainLabel(srcChain)}…</button>
     if (step === 'checking') return <button className="uni-btn" disabled>Checking…</button>
     if (step === 'busy')     return <button className="uni-btn" disabled>{msg}</button>
     if (step === 'erc20')    return <button className="uni-btn" onClick={doApproveERC20}>Approve {inT.symbol}</button>
@@ -265,13 +277,12 @@ export default function CrossChain({ wallet, switchNetwork }: CrossChainProps) {
         <div className="uni-card">
           <div className="uni-header">
             <span className="uni-title">Swap</span>
-            <button className="uni-info-btn" title="Session &amp; contract details" onClick={() => setShowInfo(s => !s)}>ⓘ</button>
+            <button className="uni-info-btn" title="Contract details" onClick={() => setShowInfo(s => !s)}>ⓘ</button>
           </div>
 
           {showInfo && (
             <div className="uni-info-panel">
               <HashRow label={`Reactor (${chainLabel(srcChain)})`} value={factory} accent />
-              <HashRow label="Cosigner" value={cosignerAddr} />
             </div>
           )}
 
@@ -287,6 +298,12 @@ export default function CrossChain({ wallet, switchNetwork }: CrossChainProps) {
               <CCTokenPill tokens={inputTokens} value={inKey}
                 onChange={k => { setInKey(k); setStep('idle') }} />
             </div>
+            {wallet.connected && inT && inBalance !== null && (
+              <div className="uni-balance">
+                Balance: {fromWei(inBalance, inT.decimals)}
+                <button className="uni-max-btn" onClick={() => setInAmt(ethers.utils.formatUnits(inBalance, inT.decimals))}>MAX</button>
+              </div>
+            )}
           </div>
 
           <div className="uni-flip-wrap">
@@ -304,19 +321,22 @@ export default function CrossChain({ wallet, switchNetwork }: CrossChainProps) {
                 onChange={e => setOutAmt(e.target.value)} />
               <CCTokenPill tokens={outputTokens} value={outKey} onChange={setOutKey} />
             </div>
+            {wallet.connected && outT && outBalance !== null && (
+              <div className="uni-balance">Balance: {fromWei(outBalance, outT.decimals)}</div>
+            )}
           </div>
 
           {/* Advanced — collapsed by default */}
           <details className="uni-advanced">
             <summary>Advanced</summary>
             <div className="uni-detail-row">
-              <span className="uni-detail-label">Deadline <span className="uni-label-muted">({chainLabel(srcChain)} block)</span></span>
-              <input className="uni-detail-input" type="number" placeholder={String(wallet.blockNumber + 200)}
-                value={adv.deadline} onChange={setAdvField('deadline')} />
+              <span className="uni-detail-label">Deadline <span className="uni-label-muted">(minutes)</span></span>
+              <input className="uni-detail-input" type="number" placeholder={String(DEADLINE_BUFFER_SEC / 60)}
+                value={adv.deadlineMin} onChange={setAdvField('deadlineMin')} />
             </div>
             <div className="uni-detail-row">
-              <span className="uni-detail-label">T2 buffer <span className="uni-label-muted">(blocks)</span></span>
-              <input className="uni-detail-input" type="number" min="0" value={adv.t2Buffer} onChange={setAdvField('t2Buffer')} />
+              <span className="uni-detail-label">Fee tier</span>
+              <input className="uni-detail-input" type="number" value={adv.feeTier} onChange={setAdvField('feeTier')} />
             </div>
             <div className="uni-detail-row">
               <span className="uni-detail-label">Nonce</span>
@@ -363,4 +383,3 @@ function CCTokenPill({ tokens, value, onChange }: { tokens: CCTokenInfo[]; value
     </div>
   )
 }
-

@@ -1,41 +1,27 @@
 import { ethers } from 'ethers'
 import { getChain } from '../config/chains'
-import { getCrossChainOrder } from './crosschainService'
+import { getFillById, getCrossChainOrder } from './crosschainService'
 import { fillerRegistry } from './fillerRegistry'
 import { listTokens } from './tokenService'
-import { ESCROW_SRC_FACTORY_ABI, ESCROW_SRC_ABI, ERC20_ABI, SAFETY_DEPOSIT } from '../chain/abis'
+import { ESCROW_SRC_FACTORY_ABI, ERC20_ABI } from '../chain/abis'
 
 export interface PreflightResult {
-  orderHash:  string
-  slotIndex:  number
-  slotStatus: string
-  slotAmount: string
+  fillId:     number
+  fillStatus: string
+  fillAmount: string
   filler:     string
   srcChainId: number
   dstChainId: number
   srcBlock:   number
   dstBlock:   number
-  // Dry-run of EscrowSrcFactory.fillSlot() via callStatic — the actual call a
-  // filler would send for step 1 of ccFill(), executed against live chain
-  // state without sending a transaction. A revert here surfaces *any* reason
-  // the real fill would fail (bad signature, expired order, Merkle proof
-  // mismatch, insufficient swapper balance/allowance, …) without us having to
-  // reimplement the contract's checks.
+  // Dry-run of EscrowSrcFactory.fillSlot() via callStatic — only meaningful
+  // once BOTH signatures are recorded (fill status 'authorized' or later).
+  // A revert here surfaces the real reason a fillSlot tx would fail, without
+  // reimplementing the contract's checks.
   srcFill: { ok: boolean; reason?: string }
   // ERC-20 balance the filler needs on the destination chain to fund the
-  // EscrowDst clone (step 3 of ccFill). Not covered by srcFill's dry-run since
-  // it's a different chain.
+  // EscrowDst clone (must happen BEFORE fillSlot in Model 2's ordering).
   dstBalance: { token: string; have: string; need: string; ok: boolean }
-  // Native-token balances for gas + the src-chain safety deposit. "src.need"
-  // is a floor (SAFETY_DEPOSIT) — actual gas cost on top of that isn't modeled.
-  nativeBalance: {
-    src: { have: string; need: string; ok: boolean }
-    dst: { have: string; ok: boolean }
-  }
-  // t2Expiry is the src-chain block by which the dst-chain escrow must be
-  // deployed (T1 - t2Buffer, see ccFill.ts step 4). If srcBlock is already
-  // past it, deploying the dst escrow would be rejected as expired.
-  timing: { t2Expiry: number; ok: boolean }
   fillable: boolean
 }
 
@@ -43,90 +29,71 @@ function revertReason(e: any): string {
   return e?.reason ?? e?.error?.reason ?? e?.error?.message ?? e?.message ?? 'fillSlot would revert (unknown reason)'
 }
 
-// Read-only preflight for "would ccFill's step 1 (fillSlot on the src chain)
-// succeed right now for `filler`, and does the filler have what step 3 (fund
-// the dst escrow) needs?" Nothing is sent on-chain — callStatic + getBalance
-// are all eth_call/eth_getBalance reads.
-export async function preflightFillSlot(
-  orderHash: string,
-  slotIndex: number,
-  filler: string,
-): Promise<PreflightResult | null> {
-  const order = await getCrossChainOrder(orderHash)
-  if (!order) return null
-  const slot = order.slots[slotIndex]
-  if (!slot) throw new Error(`Slot ${slotIndex} not found in order`)
+// Read-only preflight for "would fillSlot succeed right now for `filler`?" and
+// "does the filler have what funding the dest escrow needs?" Nothing is sent
+// on-chain. Only meaningful for an already-'authorized' fill (both the order
+// intent and the per-fill FillAuth are signed) — Model 2 requires the
+// swapper's live participation before a real fillSlot call is even
+// constructible, unlike Model 1's pre-computed Merkle proofs.
+export async function previewFill(fillId: number, filler: string): Promise<PreflightResult | null> {
+  const fill = await getFillById(fillId)
+  if (!fill) return null
 
-  const srcChain = getChain(order.chainAId)
-  const dstChain = getChain(order.dstChainId)
+  const srcChain = getChain(fill.order.chainAId)
+  const dstChain = getChain(fill.order.dstChainId)
   const srcProvider = new ethers.providers.JsonRpcProvider(srcChain.rpc)
   const dstProvider = new ethers.providers.JsonRpcProvider(dstChain.rpc)
 
   const srcFactory = new ethers.Contract(srcChain.escrowSrcFactory, ESCROW_SRC_FACTORY_ABI, srcProvider)
-  const tokenDst   = new ethers.Contract(order.outputToken, ERC20_ABI, dstProvider)
+  const tokenDst   = new ethers.Contract(fill.order.outputToken, ERC20_ABI, dstProvider)
 
-  const slotAmount = BigInt(order.minOutput) / BigInt(order.numSlots)
-
-  const [srcBlock, dstBlock, alreadyFilled] = await Promise.all([
+  const [srcBlock, dstBlock] = await Promise.all([
     srcProvider.getBlockNumber(),
     dstProvider.getBlockNumber(),
-    srcFactory.isSlotFilled(orderHash, slotIndex) as Promise<boolean>,
   ])
 
   // ── Step 1 dry-run: EscrowSrcFactory.fillSlot() ─────────────────────────
   let srcFill: PreflightResult['srcFill']
-  if (alreadyFilled) {
-    const escrowAddr: string = await srcFactory.computeAddress(orderHash, slotIndex)
-    const existingFiller: string = await new ethers.Contract(escrowAddr, ESCROW_SRC_ABI, srcProvider).filler()
-    srcFill = existingFiller.toLowerCase() === filler.toLowerCase()
-      ? { ok: true, reason: 'Already filled by this filler — step 1 is done.' }
-      : { ok: false, reason: `Slot already filled by a different filler (${existingFiller}).` }
-  } else if (!order.swapperSig) {
-    srcFill = { ok: false, reason: 'Swapper has not signed the order yet (no swapperSig).' }
+  if (!fill.order.swapperSig || !fill.swapperSig) {
+    srcFill = { ok: false, reason: `Fill is '${fill.status}' — swapper has not yet signed this fill (no per-fill swapperSig).` }
   } else {
     const info = {
-      swapper: order.swapper, inputToken: order.inputToken, inputAmount: order.inputAmount,
-      outputToken: order.outputToken, minOutput: order.minOutput, deadline: order.deadline,
-      nonce: order.nonce, merkleRoot: order.merkleRoot, numSlots: order.numSlots,
+      swapper: fill.order.swapper, inputToken: fill.order.inputToken, inputAmount: fill.order.inputAmount,
+      outputToken: fill.order.outputToken, minOutput: fill.order.minOutput,
+      deadlineBase: fill.order.deadlineBase, nonce: fill.order.nonce, feeTier: fill.order.feeTier,
+    }
+    const auth = {
+      orderHash: fill.orderHash, hashlock: fill.hashlock,
+      fillAmount: fill.fillAmount, t1: fill.t1, t2: fill.t2,
     }
     try {
-      await srcFactory.callStatic.fillSlot(
-        info, order.swapperSig, order.cosignerSig, slotIndex, slot.hashlock, slot.proof,
-        { value: SAFETY_DEPOSIT, from: filler },
+      const required: ethers.BigNumber = await srcFactory.previewRequiredStake(
+        fill.fillAmount, fill.order.inputToken, fill.order.feeTier, fill.t1
       )
+      await srcFactory.callStatic.fillSlot(info, fill.order.swapperSig, auth, fill.swapperSig, {
+        from: filler, value: required,
+      })
       srcFill = { ok: true }
     } catch (e: any) {
       srcFill = { ok: false, reason: revertReason(e) }
     }
   }
 
-  // ── Step 3 prerequisite: filler's output-token balance on the dst chain ──
+  // ── Step: filler's output-token balance on the dst chain ──────────────
   const dstHave: ethers.BigNumber = await tokenDst.balanceOf(filler)
+  const need = BigInt(fill.fillAmount)
   const dstBalance: PreflightResult['dstBalance'] = {
-    token: order.outputToken,
+    token: fill.order.outputToken,
     have:  dstHave.toString(),
-    need:  slotAmount.toString(),
-    ok:    dstHave.toBigInt() >= slotAmount,
+    need:  need.toString(),
+    ok:    dstHave.toBigInt() >= need,
   }
-
-  // ── Native balances for gas + the src-chain safety deposit ──────────────
-  const [srcNative, dstNative] = await Promise.all([
-    srcProvider.getBalance(filler),
-    dstProvider.getBalance(filler),
-  ])
-  const nativeBalance: PreflightResult['nativeBalance'] = {
-    src: { have: srcNative.toString(), need: SAFETY_DEPOSIT.toString(), ok: srcNative.gte(SAFETY_DEPOSIT) },
-    dst: { have: dstNative.toString(), ok: dstNative.gt(0) },
-  }
-
-  // ── Timing: is there still time to deploy the dst escrow before t2Expiry ─
-  const timing: PreflightResult['timing'] = { t2Expiry: order.t2Expiry, ok: srcBlock < order.t2Expiry }
 
   return {
-    orderHash, slotIndex, slotStatus: slot.status, slotAmount: slotAmount.toString(), filler,
-    srcChainId: order.chainAId, dstChainId: order.dstChainId, srcBlock, dstBlock,
-    srcFill, dstBalance, nativeBalance, timing,
-    fillable: srcFill.ok && dstBalance.ok && nativeBalance.src.ok && nativeBalance.dst.ok && timing.ok,
+    fillId, fillStatus: fill.status, fillAmount: fill.fillAmount, filler,
+    srcChainId: fill.order.chainAId, dstChainId: fill.order.dstChainId, srcBlock, dstBlock,
+    srcFill, dstBalance,
+    fillable: srcFill.ok && dstBalance.ok,
   }
 }
 
@@ -138,21 +105,15 @@ export interface FillerBalance {
 }
 
 // Ranks registered fillers (Admin → Fillers tab) that operate on this order's
-// destination chain by their current balance of the slot's output token —
-// the Simulate page's "Cross-chain order" tab uses this to suggest which
-// filler is most likely to be able to fund the EscrowDst clone (step 3).
-// Read-only (balanceOf is an eth_call), same zero-cost reasoning as preflightFillSlot.
-export async function rankFillersByOutputBalance(
-  orderHash: string,
-  slotIndex: number,
-): Promise<FillerBalance[] | null> {
+// destination chain by their current balance of the order's output token —
+// suggests which filler is most likely to be able to fund a dest escrow.
+export async function rankFillersByOutputBalance(orderHash: string): Promise<FillerBalance[] | null> {
   const order = await getCrossChainOrder(orderHash)
   if (!order) return null
-  if (!order.slots[slotIndex]) throw new Error(`Slot ${slotIndex} not found in order`)
 
-  const dstChain   = getChain(order.dstChainId)
-  const dstProvider = new ethers.providers.JsonRpcProvider(dstChain.rpc)
-  const tokenDst   = new ethers.Contract(order.outputToken, ERC20_ABI, dstProvider)
+  const dstChain    = getChain(order.dstChainId)
+  const dstProvider  = new ethers.providers.JsonRpcProvider(dstChain.rpc)
+  const tokenDst     = new ethers.Contract(order.outputToken, ERC20_ABI, dstProvider)
 
   const tokens   = await listTokens(order.dstChainId)
   const decimals = tokens.find(t => t.address.toLowerCase() === order.outputToken.toLowerCase())?.decimals ?? 18

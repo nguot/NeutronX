@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { ethers } from 'ethers'
 import type { WalletState } from '../hooks/useWallet'
-import { useAppConfig } from '../context/AppConfig'
+import { useAppConfig, type ChainConfig } from '../context/AppConfig'
 import { type TokenInfo, toWei, fromWei, calcStartPrice, contractToHumanPrice, humanPriceToContract, formatPrice, maxHumanDecay, DECAY_PER_BLOCK_MAX, TokenPill } from '../lib/tokens'
 import { AuctionChart, colorForFiller } from '../components/AuctionChart'
 import { BlockEta, formatDuration, NOMINAL_BLOCK_SEC } from '../lib/blocktime'
@@ -31,7 +31,16 @@ interface ActiveOrder {
 type Step = 'idle' | 'checking' | 'erc20' | 'p2' | 'ready' | 'busy'
 
 export default function DutchAuction({ wallet }: { wallet: WalletState }) {
-  const { backendUrl, partialFillReactor, fallbackExecutor, tokens } = useAppConfig()
+  const { backendUrl, partialFillReactor, fallbackExecutor, tokens, chains } = useAppConfig()
+
+  // PartialFillReactor/FallbackExecutor are only deployed on Chain A today —
+  // production would deploy them per-chain like the cross-chain factories.
+  // Only chains[0] (Chain A) is offered here; wiring this up for real once
+  // more chains are deployed just means populating this list from config
+  // instead of slicing to one entry.
+  const singleSwapChains = chains.slice(0, 1)
+  const [chainSel, setChainSel] = useState<number>(0)
+  useEffect(() => { if (singleSwapChains[0]) setChainSel(singleSwapChains[0].id) }, [singleSwapChains[0]?.id])
 
   const [inKey,  setInKey]  = useState('WETH')
   const [outKey, setOutKey] = useState('USDC')
@@ -104,7 +113,15 @@ export default function DutchAuction({ wallet }: { wallet: WalletState }) {
     } catch { setInBalance(null); setOutBalance(null) }
   }, [wallet.provider, wallet.account, inT?.address, outT?.address])
 
-  useEffect(() => { fetchBalances() }, [fetchBalances, order])
+  // Poll instead of only refetching on local state changes — balances can
+  // change from activity this page never sees (e.g. a cross-chain fill
+  // settled via the filler CLI), so relying solely on `order` transitions
+  // leaves the displayed balance stale indefinitely.
+  useEffect(() => {
+    fetchBalances()
+    const id = setInterval(fetchBalances, 15000)
+    return () => clearInterval(id)
+  }, [fetchBalances, order])
 
   // ── fallback aggregator options ───────────────────────────────────────────
   // Lets the swapper pin which DEX aggregator the fallback route uses near the
@@ -375,7 +392,10 @@ export default function DutchAuction({ wallet }: { wallet: WalletState }) {
   return (
     <div className="uni-page">
       <div className="uni-card">
-        <div className="uni-header"><span className="uni-title">Swap</span></div>
+        <div className="uni-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span className="uni-title">Swap</span>
+          <SingleChainPill chains={singleSwapChains} value={chainSel} onChange={setChainSel} />
+        </div>
 
         {/* Sell box */}
         <div className="uni-input-box">
@@ -524,6 +544,21 @@ export default function DutchAuction({ wallet }: { wallet: WalletState }) {
 
         <SwapButton />
       </div>
+    </div>
+  )
+}
+
+// ── Chain selector — currently only Chain A hosts PartialFillReactor/
+// FallbackExecutor, so `chains` is a single-entry list; this stays a real
+// dropdown (not a static badge) so adding more entries to `chains` later is
+// the only change needed to make it functional across chains.
+function SingleChainPill({ chains, value, onChange }: { chains: ChainConfig[]; value: number; onChange: (id: number) => void }) {
+  return (
+    <div className="uni-token-pill" style={{ background: '#eef2ff' }}>
+      <select value={value} onChange={e => onChange(Number(e.target.value))}>
+        {chains.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+      </select>
+      <span className="uni-pill-arrow">▾</span>
     </div>
   )
 }

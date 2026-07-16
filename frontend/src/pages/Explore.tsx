@@ -2,17 +2,12 @@ import { useEffect, useMemo, useState, useCallback } from 'react'
 import { ethers } from 'ethers'
 import { useAppConfig } from '../context/AppConfig'
 import type { WalletState } from '../hooks/useWallet'
+import { safeApproveErc20 } from '../lib/erc20'
 
 interface CCTokenInfo { symbol: string; address: string; decimals: number; chainId: number; name?: string }
 interface Row extends CCTokenInfo { name: string; role: 'input' | 'output' }
 
-interface ApprovalRow {
-  symbol:     string
-  address:    string
-  erc20Ok:    boolean
-  reactorOk:  boolean
-  fallbackOk: boolean
-}
+interface SpenderSpec { key: string; label: string; address: string }
 
 const ICON_COLORS = ['#7c3aed', '#2563eb', '#16a34a', '#ea580c', '#db2777', '#0891b2']
 function iconColor(symbol: string) {
@@ -33,27 +28,159 @@ const MAX_UINT48  = ethers.BigNumber.from('0xffffffffffff')
 // Shows the allowance state for one (token, spender) pair, with an inline
 // "Approve" button when it isn't enabled yet — so the whole approval set can
 // be granted here instead of one-at-a-time from the Swap page.
-function ApprovalCell({ ok, busy, err, onApprove }: { ok: boolean; busy: boolean; err?: string; onApprove: () => void }) {
+function ApprovalCell({ ok, busy, err, onApprove, label }: { ok: boolean; busy: boolean; err?: string; onApprove: () => void; label?: string }) {
   if (ok) return <span className="status ok">✓ enabled</span>
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 4 }}>
       <span className="status bad">✗ not enabled</span>
       <button className="ghost sm" disabled={busy} onClick={onApprove}>
-        {busy ? 'Approving…' : 'Approve'}
+        {busy ? 'Approving…' : (label ?? 'Approve')}
       </button>
       {err && <span style={{ fontSize: '0.7rem', color: '#dc2626' }}>{err}</span>}
     </div>
   )
 }
 
-export default function Explore({ wallet }: { wallet: WalletState }) {
-  const { backendUrl, chainId, chainARpc, chainBRpc, chains, partialFillReactor, fallbackExecutor } = useAppConfig()
+// ── Approvals (manual alternative to setup_cc.sh's fund_and_approve_swapper) ──
+//
+// One table per chain, one column per spender that can pull that chain's
+// tokens through Permit2 (Reactor/FallbackExecutor on Chain A, EscrowSrcFactory
+// on whichever chain is acting as the swap's source). Reads allowances straight
+// from that chain's RPC (not wallet.provider) so it's accurate no matter which
+// network MetaMask is currently on; writing still needs the wallet's signer to
+// actually be on that chain, so cells offer "Switch network" until it is.
+interface ApprovalTableRow { symbol: string; address: string; erc20Ok: boolean; spenderOk: Record<string, boolean> }
+
+function useApprovals(rpcUrl: string, tokens: CCTokenInfo[], spenders: SpenderSpec[], account: string) {
+  const [rows, setRows] = useState<ApprovalTableRow[]>([])
+  const [loading, setLoading] = useState(false)
+
+  const refresh = useCallback(async () => {
+    if (!account || spenders.length === 0 || tokens.length === 0 || !rpcUrl) { setRows([]); return }
+    setLoading(true)
+    try {
+      const provider = new ethers.providers.JsonRpcProvider(rpcUrl)
+      const p2  = new ethers.Contract(PERMIT2, P2_ABI, provider)
+      const now = Date.now() / 1000
+      const result = await Promise.all(tokens.map(async t => {
+        try {
+          const erc = new ethers.Contract(t.address, ERC_ABI, provider)
+          const erc20Ok = (await erc.allowance(account, PERMIT2)).gt(0)
+          const spenderOk: Record<string, boolean> = {}
+          await Promise.all(spenders.map(async s => {
+            const [amount, expiration] = await p2.allowance(account, t.address, s.address)
+            spenderOk[s.key] = amount.gt(0) && Number(expiration) > now
+          }))
+          return { symbol: t.symbol, address: t.address, erc20Ok, spenderOk }
+        } catch {
+          return { symbol: t.symbol, address: t.address, erc20Ok: false, spenderOk: {} }
+        }
+      }))
+      setRows(result)
+    } finally {
+      setLoading(false)
+    }
+  }, [rpcUrl, tokens, spenders, account])
+
+  useEffect(() => { refresh() }, [refresh])
+  return { rows, loading, refresh }
+}
+
+function ApprovalsTable({ chainLabel, chainId, rpcUrl, tokens, spenders, wallet, switchNetwork }: {
+  chainLabel: string
+  chainId: number
+  rpcUrl: string
+  tokens: CCTokenInfo[]
+  spenders: SpenderSpec[]
+  wallet: WalletState
+  switchNetwork: (chainId: number) => Promise<void>
+}) {
+  const { rows, loading, refresh } = useApprovals(rpcUrl, tokens, spenders, wallet.account)
+  const [busy, setBusy] = useState<Record<string, boolean>>({})
+  const [errs, setErrs]  = useState<Record<string, string>>({})
+  const onRightChain = wallet.connected && wallet.chainId === chainId
+
+  async function run(key: string, fn: () => Promise<void>) {
+    setBusy(b => ({ ...b, [key]: true })); setErrs(e => ({ ...e, [key]: '' }))
+    try { await fn(); await refresh() }
+    catch (e: any) { setErrs(er => ({ ...er, [key]: e.message ?? String(e) })) }
+    finally { setBusy(b => ({ ...b, [key]: false })) }
+  }
+
+  function onSwitch(key: string) {
+    return run(key, () => switchNetwork(chainId))
+  }
+  function approveErc20(row: ApprovalTableRow) {
+    if (!wallet.signer || !wallet.account) return
+    return run(`${row.address}:erc20`, () => safeApproveErc20(row.address, PERMIT2, ethers.constants.MaxUint256, wallet.signer!, wallet.account))
+  }
+  function approveSpender(row: ApprovalTableRow, spender: SpenderSpec) {
+    if (!wallet.signer) return
+    return run(`${row.address}:${spender.key}`, async () => {
+      const p2 = new ethers.Contract(PERMIT2, P2_ABI, wallet.signer!)
+      await (await p2.approve(row.address, spender.address, MAX_UINT160, MAX_UINT48)).wait()
+    })
+  }
+
+  if (spenders.length === 0) return <div className="status warn">Nothing to approve on {chainLabel} yet.</div>
+
+  return (
+    <>
+      {loading && <div className="status info">Checking allowances…</div>}
+      {!loading && rows.length === 0 && <div className="status warn">No tokens on {chainLabel}.</div>}
+
+      {!loading && rows.length > 0 && (
+        <table className="table">
+          <thead>
+            <tr>
+              <th>Token</th>
+              <th>ERC20 → Permit2</th>
+              {spenders.map(s => <th key={s.key}>Permit2 → {s.label}</th>)}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(r => {
+              const erc20Key = `${r.address}:erc20`
+              return (
+                <tr key={r.address}>
+                  <td>{r.symbol}</td>
+                  <td>
+                    <ApprovalCell ok={r.erc20Ok} busy={!!busy[erc20Key]} err={errs[erc20Key]}
+                      label={onRightChain ? undefined : `Switch to ${chainLabel}`}
+                      onApprove={() => onRightChain ? approveErc20(r) : onSwitch(erc20Key)} />
+                  </td>
+                  {spenders.map(s => {
+                    const key = `${r.address}:${s.key}`
+                    return (
+                      <td key={s.key}>
+                        <ApprovalCell ok={!!r.spenderOk[s.key]} busy={!!busy[key]} err={errs[key]}
+                          label={onRightChain ? undefined : `Switch to ${chainLabel}`}
+                          onApprove={() => onRightChain ? approveSpender(r, s) : onSwitch(key)} />
+                      </td>
+                    )
+                  })}
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      )}
+    </>
+  )
+}
+
+interface ExploreProps {
+  wallet: WalletState
+  switchNetwork: (chainId: number) => Promise<void>
+}
+
+export default function Explore({ wallet, switchNetwork }: ExploreProps) {
+  const { backendUrl, chainId, chainARpc, chainBRpc, chains, partialFillReactor, fallbackExecutor, crossChainReactor, escrowSrcFactoryB } = useAppConfig()
   const [inputTokens,  setInputTokens]  = useState<CCTokenInfo[]>([])
   const [outputTokens, setOutputTokens] = useState<CCTokenInfo[]>([])
   const [loaded, setLoaded] = useState(false)
   const [search, setSearch] = useState('')
-  const [approvals, setApprovals] = useState<ApprovalRow[]>([])
-  const [approvalsLoading, setApprovalsLoading] = useState(false)
+  const [ccChain, setCcChain] = useState<'A' | 'B'>('A')
 
   // /cc/tokens returns a map of chainId -> tokens on that chain. chains[0] is
   // the input (source) side, chains[1] the output (destination) side.
@@ -71,86 +198,21 @@ export default function Explore({ wallet }: { wallet: WalletState }) {
       .finally(() => setLoaded(true))
   }, [backendUrl, chains])
 
-  // ── approvals ──────────────────────────────────────────────────────────────
-  // For each Chain-A input token, check the three Permit2 allowances the swap
-  // flow depends on: ERC20→Permit2, and Permit2→{PartialFillReactor,FallbackExecutor}.
-  const refreshApprovals = useCallback(async () => {
-    if (!wallet.connected || !wallet.provider || !wallet.account || inputTokens.length === 0 || !partialFillReactor) {
-      setApprovals([])
-      return
-    }
-    setApprovalsLoading(true)
-    const provider = wallet.provider
-    const account = wallet.account
-    try {
-      const p2  = new ethers.Contract(PERMIT2, P2_ABI, provider)
-      const now = Date.now() / 1000
-      const checkSpender = async (token: string, spender: string) => {
-        if (!spender) return false
-        const [amount, expiration] = await p2.allowance(account, token, spender)
-        return amount.gt(0) && Number(expiration) > now
-      }
-      const rows = await Promise.all(inputTokens.map(async t => {
-        try {
-          const erc = new ethers.Contract(t.address, ERC_ABI, provider)
-          const erc20Ok = (await erc.allowance(account, PERMIT2)).gt(0)
-          const [reactorOk, fallbackOk] = await Promise.all([
-            checkSpender(t.address, partialFillReactor),
-            checkSpender(t.address, fallbackExecutor),
-          ])
-          return { symbol: t.symbol, address: t.address, erc20Ok, reactorOk, fallbackOk }
-        } catch {
-          return { symbol: t.symbol, address: t.address, erc20Ok: false, reactorOk: false, fallbackOk: false }
-        }
-      }))
-      setApprovals(rows)
-    } finally {
-      setApprovalsLoading(false)
-    }
-  }, [wallet.connected, wallet.provider, wallet.account, inputTokens, partialFillReactor, fallbackExecutor])
-
-  useEffect(() => { refreshApprovals() }, [refreshApprovals])
-
-  // ── approve actions ───────────────────────────────────────────────────────
-  // Lets the swapper grant every allowance the swap flow needs right here,
-  // instead of being walked through "Approve" / "Enable spending" one token
-  // at a time on the Swap page.
-  const [approving,  setApproving]  = useState<Record<string, boolean>>({})
-  const [approveErr, setApproveErr] = useState<Record<string, string>>({})
-
-  async function withApproval(key: string, fn: () => Promise<void>) {
-    setApproving(a => ({ ...a, [key]: true }))
-    setApproveErr(e => ({ ...e, [key]: '' }))
-    try {
-      await fn()
-      await refreshApprovals()
-    } catch (e: any) {
-      setApproveErr(err => ({ ...err, [key]: e.message ?? String(e) }))
-    } finally {
-      setApproving(a => ({ ...a, [key]: false }))
-    }
-  }
-
-  function approveErc20(token: ApprovalRow) {
-    const signer = wallet.signer
-    if (!signer) return
-    return withApproval(`${token.address}:erc20`, async () => {
-      const erc = new ethers.Contract(token.address, ERC_ABI, signer)
-      await (await erc.approve(PERMIT2, ethers.constants.MaxUint256)).wait()
-    })
-  }
-
-  function approvePermit2(token: ApprovalRow, spender: string, key: string) {
-    const signer = wallet.signer
-    if (!signer || !spender) return
-    return withApproval(key, async () => {
-      const p2 = new ethers.Contract(PERMIT2, P2_ABI, signer)
-      await (await p2.approve(token.address, spender, MAX_UINT160, MAX_UINT48)).wait()
-    })
-  }
-
   const chainAId = inputTokens[0]?.chainId  ?? Number(chainId) ?? 31337
   const chainBId = outputTokens[0]?.chainId ?? 31338
+
+  // Every spender that can pull a chain's tokens through Permit2. Chain A hosts
+  // the single-chain swap's Reactor/FallbackExecutor as well as its EscrowSrcFactory
+  // (A→B cross-chain source); Chain B only has the latter (B→A source).
+  const chainASpenders: SpenderSpec[] = useMemo(() => ([
+    { key: 'reactor',    label: 'Reactor',           address: partialFillReactor },
+    { key: 'fallback',   label: 'FallbackExecutor',  address: fallbackExecutor },
+    { key: 'srcFactory', label: 'EscrowSrcFactory',  address: crossChainReactor },
+  ].filter(s => s.address)), [partialFillReactor, fallbackExecutor, crossChainReactor])
+
+  const chainBSpenders: SpenderSpec[] = useMemo(() => ([
+    { key: 'srcFactory', label: 'EscrowSrcFactory', address: escrowSrcFactoryB },
+  ].filter(s => s.address)), [escrowSrcFactoryB])
 
   const chainChips = [
     { id: chainAId, name: 'Anvil — Chain A', role: 'Source chain', rpcUrl: chainARpc },
@@ -190,61 +252,32 @@ export default function Explore({ wallet }: { wallet: WalletState }) {
         ))}
       </div>
 
-      {/* Your Approvals */}
+      {/* Approvals — every Permit2 allowance the swap flows depend on, one chain at a time */}
       {wallet.connected && (
         <div className="card">
           <div className="flex-between" style={{ marginBottom: 12 }}>
             <h2 style={{ margin: 0 }}>Your Approvals</h2>
-            <div className="addr-cell">
-              <span title={wallet.account}>{short(wallet.account)}</span>
-              <button className="copy-btn" onClick={() => copy(wallet.account)} title="Copy address">⧉</button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <div className="addr-cell">
+                <span title={wallet.account}>{short(wallet.account)}</span>
+                <button className="copy-btn" onClick={() => copy(wallet.account)} title="Copy address">⧉</button>
+              </div>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <button className={`ghost sm${ccChain === 'A' ? ' active' : ''}`} onClick={() => setCcChain('A')}>
+                  Chain A ({chainAId})
+                </button>
+                <button className={`ghost sm${ccChain === 'B' ? ' active' : ''}`} onClick={() => setCcChain('B')}>
+                  Chain B ({chainBId})
+                </button>
+              </div>
             </div>
           </div>
 
-          {approvalsLoading && <div className="status info">Checking allowances…</div>}
-
-          {!approvalsLoading && approvals.length === 0 && (
-            <div className="status warn">No Chain-A input tokens to check.</div>
-          )}
-
-          {!approvalsLoading && approvals.length > 0 && (
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>Token</th>
-                  <th>ERC20 → Permit2</th>
-                  <th>Permit2 → Reactor</th>
-                  <th>Permit2 → FallbackExecutor</th>
-                </tr>
-              </thead>
-              <tbody>
-                {approvals.map(a => {
-                  const erc20Key    = `${a.address}:erc20`
-                  const reactorKey  = `${a.address}:reactor`
-                  const fallbackKey = `${a.address}:fallback`
-                  return (
-                    <tr key={a.address}>
-                      <td>{a.symbol}</td>
-                      <td>
-                        <ApprovalCell ok={a.erc20Ok} busy={!!approving[erc20Key]} err={approveErr[erc20Key]}
-                          onApprove={() => approveErc20(a)} />
-                      </td>
-                      <td>
-                        <ApprovalCell ok={a.reactorOk} busy={!!approving[reactorKey]} err={approveErr[reactorKey]}
-                          onApprove={() => approvePermit2(a, partialFillReactor, reactorKey)} />
-                      </td>
-                      <td>
-                        {fallbackExecutor
-                          ? <ApprovalCell ok={a.fallbackOk} busy={!!approving[fallbackKey]} err={approveErr[fallbackKey]}
-                              onApprove={() => approvePermit2(a, fallbackExecutor, fallbackKey)} />
-                          : <span className="text-muted">not configured</span>}
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          )}
+          {ccChain === 'A'
+            ? <ApprovalsTable chainLabel="Chain A" chainId={chainAId} rpcUrl={chainARpc}
+                tokens={inputTokens} spenders={chainASpenders} wallet={wallet} switchNetwork={switchNetwork} />
+            : <ApprovalsTable chainLabel="Chain B" chainId={chainBId} rpcUrl={chainBRpc}
+                tokens={outputTokens} spenders={chainBSpenders} wallet={wallet} switchNetwork={switchNetwork} />}
         </div>
       )}
 

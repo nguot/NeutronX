@@ -5,6 +5,7 @@ import "forge-std/Test.sol";
 import "../../src/PartialFillReactor.sol";
 import "../../src/FillAuction.sol";
 import { DynamicStakeLib } from "../../src/libs/DynamicStakeLib.sol";
+import { IEthNotionalOracle } from "../../src/interfaces/IEthNotionalOracle.sol";
 import "../mocks/MockERC20.sol";
 import "../mocks/MockPermit2.sol";
 
@@ -38,7 +39,7 @@ abstract contract AdversarialBase is Test {
 
     function _deployCore() internal {
         permit2 = new MockPermit2();
-        auction = new FillAuction(treasury, address(0), address(0), 0, true); // oracle-disabled (notional == fill)
+        auction = new FillAuction(treasury, IEthNotionalOracle(address(0)), true); // oracle-disabled (notional == fill)
         reactor = new PartialFillReactor(address(permit2), address(auction), cosigner);
         auction.setReactor(address(reactor));
         // B1: this contract deployed `auction` (holds DEFAULT_ADMIN_ROLE) but stake-param

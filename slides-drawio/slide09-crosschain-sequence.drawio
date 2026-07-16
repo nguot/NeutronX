@@ -1,0 +1,76 @@
+<mxfile host="app.diagrams.net">
+  <diagram id="slide09seq" name="Slide 9 - Cross-chain sequence">
+    <mxGraphModel dx="1500" dy="900" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1460" pageHeight="780" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <!-- ============ LIFELINE HEADERS ============ -->
+        <mxCell id="hS" value="Swapper" style="rounded=1;arcSize=14;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#16305C;strokeWidth=2;fontColor=#16305C;fontSize=15;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="60" y="70" width="200" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="hF" value="Filler" style="rounded=1;arcSize=14;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#16305C;strokeWidth=2;fontColor=#16305C;fontSize=15;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="330" y="70" width="200" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="hES" value="EscrowSrc (Chain A)" style="rounded=1;arcSize=10;whiteSpace=wrap;html=1;fillColor=#16305C;strokeColor=none;fontColor=#FFFFFF;fontSize=15;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="620" y="70" width="200" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="hED" value="EscrowDst (Chain B)" style="rounded=1;arcSize=10;whiteSpace=wrap;html=1;fillColor=#16305C;strokeColor=none;fontColor=#FFFFFF;fontSize=15;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="910" y="70" width="200" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="hR" value="Relayer" style="rounded=1;arcSize=14;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#16305C;strokeWidth=2;fontColor=#16305C;fontSize=15;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="1200" y="70" width="200" height="56" as="geometry" />
+        </mxCell>
+
+        <!-- ============ LIFELINES (dashed) ============ -->
+        <mxCell id="llS" style="html=1;endArrow=none;dashed=1;strokeColor=#B0B6C2;strokeWidth=2;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry"><mxPoint x="160" y="126" as="sourcePoint" /><mxPoint x="160" y="670" as="targetPoint" /></mxGeometry>
+        </mxCell>
+        <mxCell id="llF" style="html=1;endArrow=none;dashed=1;strokeColor=#B0B6C2;strokeWidth=2;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry"><mxPoint x="430" y="126" as="sourcePoint" /><mxPoint x="430" y="670" as="targetPoint" /></mxGeometry>
+        </mxCell>
+        <mxCell id="llES" style="html=1;endArrow=none;dashed=1;strokeColor=#B0B6C2;strokeWidth=2;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry"><mxPoint x="720" y="126" as="sourcePoint" /><mxPoint x="720" y="670" as="targetPoint" /></mxGeometry>
+        </mxCell>
+        <mxCell id="llED" style="html=1;endArrow=none;dashed=1;strokeColor=#B0B6C2;strokeWidth=2;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry"><mxPoint x="1010" y="126" as="sourcePoint" /><mxPoint x="1010" y="670" as="targetPoint" /></mxGeometry>
+        </mxCell>
+        <mxCell id="llR" style="html=1;endArrow=none;dashed=1;strokeColor=#B0B6C2;strokeWidth=2;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry"><mxPoint x="1300" y="126" as="sourcePoint" /><mxPoint x="1300" y="670" as="targetPoint" /></mxGeometry>
+        </mxCell>
+
+        <!-- ============ MESSAGES ============ -->
+        <mxCell id="m1" value="① fund EscrowDst  (khoá output)" style="html=1;endArrow=block;endFill=1;strokeColor=#16305C;strokeWidth=2;fontSize=13;fontColor=#16305C;labelBackgroundColor=#FFFFFF;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry"><mxPoint x="430" y="180" as="sourcePoint" /><mxPoint x="1010" y="180" as="targetPoint" /></mxGeometry>
+        </mxCell>
+        <mxCell id="m2" value="② verify EscrowDst thật → ký FillAuth  (Điểm A)" style="html=1;endArrow=block;endFill=1;strokeColor=#16305C;strokeWidth=2;fontSize=13;fontColor=#16305C;labelBackgroundColor=#FFFFFF;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry"><mxPoint x="160" y="255" as="sourcePoint" /><mxPoint x="430" y="255" as="targetPoint" /></mxGeometry>
+        </mxCell>
+        <mxCell id="m3" value="③ fillSlot  (khoá input + bond)" style="html=1;endArrow=block;endFill=1;strokeColor=#16305C;strokeWidth=2;fontSize=13;fontColor=#16305C;labelBackgroundColor=#FFFFFF;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry"><mxPoint x="430" y="330" as="sourcePoint" /><mxPoint x="720" y="330" as="targetPoint" /></mxGeometry>
+        </mxCell>
+        <mxCell id="m4" value="④ withdraw(secret) → lộ S" style="html=1;endArrow=block;endFill=1;strokeColor=#C89B2E;strokeWidth=2;fontSize=13;fontColor=#8A6D1A;labelBackgroundColor=#FFFFFF;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry"><mxPoint x="430" y="405" as="sourcePoint" /><mxPoint x="720" y="405" as="targetPoint" /></mxGeometry>
+        </mxCell>
+        <mxCell id="m4r" value="input → filler" style="html=1;endArrow=open;dashed=1;strokeColor=#8A93A6;strokeWidth=2;fontSize=12;fontColor=#5B6472;labelBackgroundColor=#FFFFFF;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry"><mxPoint x="720" y="445" as="sourcePoint" /><mxPoint x="430" y="445" as="targetPoint" /></mxGeometry>
+        </mxCell>
+        <mxCell id="m5" value="secret S công khai  (watcher / relayer đọc)" style="html=1;endArrow=open;dashed=1;strokeColor=#C89B2E;strokeWidth=2;fontSize=13;fontColor=#8A6D1A;labelBackgroundColor=#FFFFFF;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry"><mxPoint x="720" y="515" as="sourcePoint" /><mxPoint x="1300" y="515" as="targetPoint" /></mxGeometry>
+        </mxCell>
+        <mxCell id="m6" value="⑤ claim(secret)" style="html=1;endArrow=block;endFill=1;strokeColor=#16305C;strokeWidth=2;fontSize=13;fontColor=#16305C;labelBackgroundColor=#FFFFFF;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry"><mxPoint x="1300" y="585" as="sourcePoint" /><mxPoint x="1010" y="585" as="targetPoint" /></mxGeometry>
+        </mxCell>
+        <mxCell id="m6r" value="output → swapper" style="html=1;endArrow=open;dashed=1;strokeColor=#2E7D32;strokeWidth=2;fontSize=13;fontColor=#2E7D32;labelBackgroundColor=#FFFFFF;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry"><mxPoint x="1010" y="632" as="sourcePoint" /><mxPoint x="160" y="632" as="targetPoint" /></mxGeometry>
+        </mxCell>
+
+        <!-- ============ FAILURE NOTE ============ -->
+        <mxCell id="fail" value="Nếu filler bỏ cuộc (không lộ S):  quá T1 → bất kỳ ai gọi EscrowSrc.cancel() → swapper hoàn input + bond.        (T1 &lt; T2,  buffer ≥ finality chain đích)" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#FBEDEE;strokeColor=#C8102E;strokeWidth=1;fontColor=#C8102E;fontSize=13;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="60" y="695" width="1340" height="56" as="geometry" />
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

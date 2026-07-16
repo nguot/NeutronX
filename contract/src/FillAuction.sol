@@ -6,6 +6,7 @@ import { AccessControl } from "@openzeppelin/contracts/access/AccessControl.sol"
 import { DynamicStakeLib } from "./libs/DynamicStakeLib.sol";
 
 import { IFillAuction } from "./interfaces/IFillAuction.sol";
+import { IEthNotionalOracle } from "./interfaces/IEthNotionalOracle.sol";
 
 // ─────────────────────────────────────────────────────────────────────────
 // COMMENT-CODE LEGEND — every short label cited below, spelled out once here
@@ -35,7 +36,9 @@ import { IFillAuction } from "./interfaces/IFillAuction.sol";
 //                           value, regardless of which token or its price/
 //                           decimals — so a non-WETH order could require ≈0
 //                           collateral. Fixed by pricing the notional through
-//                           a Uniswap V3 TWAP into ETH (toEthNotional).
+//                           an ETH-denominated oracle (IEthNotionalOracle —
+//                           see UniswapV3NotionalOracle for the default
+//                           Uniswap V3 TWAP implementation).
 //   D-2  (Medium, audit.md) The refund schedule measured "how much did they
 //                           fill" as a fraction of the WHOLE order instead of
 //                           the filler's OWN committed amount, so an honest
@@ -166,10 +169,25 @@ contract FillAuction is IFillAuction, ReentrancyGuard, AccessControl {
     // tightening (safer) applies immediately, loosening (riskier) does not.
     uint256 public constant LOOSEN_DELAY = 7 days;
     // B4/D1: floor on the penalty (bps of collateral forfeited) sampled at the
-    // low, attacker-relevant fill points (1%/5%/20%) — stops PARAM_ADMIN from
-    // reshaping the ratio buckets to gut the "sniping fee" at exactly the fill
-    // ratios a griefer would pick, without touching the raw MAX_REFUND_BPS bound.
+    // low, attacker-relevant fill points (1%/5%/20%) and at every non-honest
+    // ratio-bucket edge — stops PARAM_ADMIN from reshaping the ratio buckets
+    // to gut the "sniping fee" at exactly the fill ratios a griefer would
+    // pick, without touching the raw MAX_REFUND_BPS bound.
     uint256 public constant MIN_PENALTY_BPS = 500; // 5%
+    // Direct floor on the config's actual worst-case economics (see
+    // DynamicStakeLib.worstCaseKappaBps): the minimum price edge a filler
+    // would need, on the fill% that actually maximises a snipe's profit, for
+    // ANY partial-fill-then-abandon strategy to turn a profit under this
+    // config. Deliberately a single check on the COMBINED (rate x time x
+    // penalty) economics rather than raising MIN_COLLATERAL_RATE or
+    // MIN_PENALTY_BPS individually — those would each have to climb much
+    // higher (and fight with wanting low per-field floors for flexibility) to
+    // reach the same guarantee, since the three multiply together. Also
+    // closes two gaps neither field-level floor reaches: timeMult has no
+    // floor of its own (this catches it via the same formula), and a config
+    // with zero non-honest ratio buckets (R==1) correctly reads as 0 here
+    // (rejected), since it offers no deterrent at all.
+    uint256 public constant MIN_WORST_CASE_KAPPA_BPS = 1000; // 10%
 
     // B1: AccessControl replaces the single `owner`. DEFAULT_ADMIN_ROLE (from
     // AccessControl) grants/revokes the roles below and wires the one-time
@@ -182,14 +200,12 @@ contract FillAuction is IFillAuction, ReentrancyGuard, AccessControl {
     address public immutable treasury;
     address public reactor;
 
-    // D-1: ETH-denominated collateral oracle config. `weth` is the ETH wrapper
-    // used as the value reference; `uniV3Factory` locates the (token, WETH) pool
-    // for the TWAP; `twapWindow` is the look-back in seconds. If uniV3Factory is
-    // the zero address the oracle is disabled (raw amount treated as notional) —
-    // intended only for local/mock environments without a Uniswap deployment.
-    address public immutable weth;
-    address public immutable uniV3Factory;
-    uint32  public immutable twapWindow;
+    // D-1: ETH-denominated collateral oracle. Pluggable — any implementation
+    // of IEthNotionalOracle works (see UniswapV3NotionalOracle for the default
+    // Uniswap V3 TWAP one). If `oracle` is the zero address the oracle is
+    // disabled (raw amount treated as notional) — intended only for
+    // local/mock environments or chains without a compatible DEX.
+    IEthNotionalOracle public immutable oracle;
 
     // Trufy 3.6: oracle-disabled mode (raw amount treated as ETH notional) must
     // be chosen EXPLICITLY at deploy time via this flag. When false, the
@@ -255,24 +271,19 @@ contract FillAuction is IFillAuction, ReentrancyGuard, AccessControl {
         _;
     }
 
-    constructor(address _treasury, address _weth, address _uniV3Factory, uint32 _twapWindow, bool _oracleDisabled) {
+    constructor(address _treasury, IEthNotionalOracle _oracle, bool _oracleDisabled) {
         require(_treasury != address(0), "zero treasury");
         // Trufy 3.6: fail closed on a half/zero oracle config unless oracle-disabled
-        // mode was deliberately requested. The TWAP path only runs when
-        // uniV3Factory != 0 (see DynamicStakeLib), so that is the switch that must
-        // be intentional.
+        // mode was deliberately requested — must be an intentional choice, not
+        // a misconfigured deploy silently falling back to mispriced raw units.
         if (_oracleDisabled) {
-            require(_uniV3Factory == address(0), "disabled needs zero factory");
+            require(address(_oracle) == address(0), "disabled needs zero oracle");
         } else {
-            require(_weth         != address(0), "zero weth");
-            require(_uniV3Factory != address(0), "zero univ3 factory");
-            require(_twapWindow    > 0,          "zero twap window");
+            require(address(_oracle) != address(0), "zero oracle");
         }
         treasury       = _treasury;
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
-        weth           = _weth;
-        uniV3Factory   = _uniV3Factory;
-        twapWindow     = _twapWindow;
+        oracle         = _oracle;
         oracleDisabled = _oracleDisabled;
 
         // B2: seed with the pre-refactor fixed-array defaults (4 size buckets x
@@ -304,7 +315,8 @@ contract FillAuction is IFillAuction, ReentrancyGuard, AccessControl {
         // measured from a change that never happened.
         if (lastChange != 0 && block.timestamp < lastChange + CHANGE_COOLDOWN) revert Cooldown(); // D3
         if (_pending.collateralRate.length != 0) revert PendingExists();           // D3: only one at a time
-        DynamicStakeLib.validate(c, MIN_COLLATERAL_RATE, MAX_COLLATERAL_RATE, MAX_REFUND_BPS, MAX_BUCKETS);
+        // also enforces the direct worst-case-kappa floor (Invariant 8)
+        DynamicStakeLib.validate(c, MIN_COLLATERAL_RATE, MAX_COLLATERAL_RATE, MAX_REFUND_BPS, MAX_BUCKETS, MIN_WORST_CASE_KAPPA_BPS);
         // also enforces MAX_DELTA_BPS (D1)
         bool loosening = DynamicStakeLib.guardCheck(_config, c, MAX_DELTA_BPS, MIN_PENALTY_BPS, MAX_REFUND_BPS);
 
@@ -383,10 +395,17 @@ contract FillAuction is IFillAuction, ReentrancyGuard, AccessControl {
         uint256 fillAmount,
         uint256 deadline
     ) external view returns (uint256) {
-        uint256 notionalEth = DynamicStakeLib.toEthNotional(
-            fillAmount, inputToken, feeTier, weth, uniV3Factory, twapWindow
-        );
+        uint256 notionalEth = _notionalEth(inputToken, feeTier, fillAmount);
         return DynamicStakeLib.requiredStake(_config, notionalEth, deadline); // Trufy 3.1 floor applied inside
+    }
+
+    /// D-1: `fillAmount` of `inputToken` valued in ETH wei, via the pluggable
+    /// oracle — or the raw amount unchanged when oracle-disabled (test/mock
+    /// mode, or a chain with no compatible price source, chosen explicitly at
+    /// deploy time — see the constructor's Trufy 3.6 check).
+    function _notionalEth(address inputToken, uint24 feeTier, uint256 fillAmount) private view returns (uint256) {
+        if (address(oracle) == address(0)) return fillAmount;
+        return oracle.quoteEthNotional(inputToken, fillAmount, feeTier);
     }
 
     function register(
@@ -410,9 +429,7 @@ contract FillAuction is IFillAuction, ReentrancyGuard, AccessControl {
         require(orderTotal <= type(uint128).max, "total too large");
 
         // D-1: size the stake off the fill's ETH-denominated notional.
-        uint256 notionalEth = DynamicStakeLib.toEthNotional(
-            fillAmount, inputToken, feeTier, weth, uniV3Factory, twapWindow
-        );
+        uint256 notionalEth = _notionalEth(inputToken, feeTier, fillAmount);
         // M-2 / #3: `refundRow`/`ratioSnapshot` are this order's SNAPSHOT of the
         // refund schedule — settlement must bucket against these, never the live
         // _config (see DynamicStakeLib.computeRefund).

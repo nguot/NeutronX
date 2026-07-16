@@ -4,6 +4,7 @@ pragma solidity ^0.8.20;
 import "./adversarial/AdversarialBase.sol";
 import { IAccessControl } from "@openzeppelin/contracts/access/IAccessControl.sol";
 import { DynamicStakeLib } from "../src/libs/DynamicStakeLib.sol";
+import { IEthNotionalOracle } from "../src/interfaces/IEthNotionalOracle.sol";
 
 /// Branch-coverage batch for the protective shell around the two core contracts:
 /// owner/access guards, one-time setters, L-2 input-bound checks, and the
@@ -49,7 +50,7 @@ contract CoreGuardsTest is AdversarialBase {
 
     function test_setReactor_revert_zero() public {
         // A fresh auction has no reactor yet, so we reach the zero-address guard.
-        FillAuction fresh = new FillAuction(treasury, address(0), address(0), 0, true);
+        FillAuction fresh = new FillAuction(treasury, IEthNotionalOracle(address(0)), true);
         vm.expectRevert("zero reactor");
         fresh.setReactor(address(0));
     }

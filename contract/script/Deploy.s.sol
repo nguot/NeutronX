@@ -5,6 +5,7 @@ import "forge-std/Script.sol";
 import "../src/FillAuction.sol";
 import "../src/PartialFillReactor.sol";
 import "../src/FallbackExecutor.sol";
+import "../src/oracles/UniswapV3NotionalOracle.sol";
 
 contract Deploy is Script {
     // địa chỉ thật trên mainnet
@@ -17,6 +18,10 @@ contract Deploy is Script {
     // MetaAggregationRouterV2 — same address on every chain KyberSwap supports.
     // Single-address approve+call model, unlike ParaSwap's Augustus/tokenTransferProxy split.
     address constant KYBER_ROUTER    = 0x6131B5fae19EA4f9D964eAc0408E4408b66337b5;
+    // ParaSwap (now Velora) v5 — two-address model: Augustus is the call target,
+    // TokenTransferProxy is the separate spender that must hold the approval.
+    address constant PARASWAP_AUGUSTUS           = 0xDEF171Fe48CF0115B1d80b88dc8eAB59176FEe57;
+    address constant PARASWAP_TOKEN_TRANSFER_PROXY = 0x216B4B4Ba9F3e719726886d34a177484278Bfcae;
     // D-1 collateral oracle: real mainnet WETH + Uniswap V3 factory (present on a fork too).
     address constant WETH           = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
     address constant UNIV3_FACTORY  = 0x1F98431c8aD98523631AE4a59f267346ea31F984;
@@ -40,8 +45,10 @@ contract Deploy is Script {
 
         vm.startBroadcast(deployerKey);
 
-        // 1. Deploy FillAuction
-        FillAuction fillAuction = new FillAuction(deployer, WETH, UNIV3_FACTORY, TWAP_WINDOW, false);
+        // 1. Deploy the notional oracle, then FillAuction pointed at it.
+        UniswapV3NotionalOracle oracle = new UniswapV3NotionalOracle(WETH, UNIV3_FACTORY, TWAP_WINDOW);
+        console.log("UniswapV3NotionalOracle:", address(oracle));
+        FillAuction fillAuction = new FillAuction(deployer, oracle, false);
         console.log("FillAuction:        ", address(fillAuction));
 
         // 1b. Wire the 3 roles (deployer keeps DEFAULT_ADMIN_ROLE to grant/revoke later).
@@ -77,11 +84,16 @@ contract Deploy is Script {
         console.log("setFallbackExecutor done");
 
         // 6. Allowlist further fallback aggregators alongside Uniswap.
-        fallbackExecutor.setRouterAllowed(ONEINCH_ROUTER, true);
+        // Single-address aggregators: approveTarget == router itself.
+        fallbackExecutor.setRouterAllowed(ONEINCH_ROUTER, ONEINCH_ROUTER, true);
         console.log("1inch router allowlisted");
 
-        fallbackExecutor.setRouterAllowed(KYBER_ROUTER, true);
+        fallbackExecutor.setRouterAllowed(KYBER_ROUTER, KYBER_ROUTER, true);
         console.log("KyberSwap router allowlisted");
+
+        // ParaSwap: approveTarget is the separate TokenTransferProxy, not Augustus.
+        fallbackExecutor.setRouterAllowed(PARASWAP_AUGUSTUS, PARASWAP_TOKEN_TRANSFER_PROXY, true);
+        console.log("ParaSwap (Augustus) router allowlisted");
 
         vm.stopBroadcast();
     }

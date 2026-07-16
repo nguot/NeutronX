@@ -17,6 +17,10 @@ export const FILL_AUCTION_ABI = [
   'function pendingEffective() view returns (uint256)',
   'function lastChange() view returns (uint256)',
 
+  // Permissionless — anyone can call it, funds always go to `filler`. See the
+  // Fillers page's "Stake registrations" reclaim button.
+  'function releaseRegistration(bytes32 orderHash, address filler) external',
+
   'function hasRole(bytes32 role, address account) view returns (bool)',
   'function grantRole(bytes32 role, address account) external',
   'function revokeRole(bytes32 role, address account) external',
@@ -31,6 +35,7 @@ export const FILL_AUCTION_ABI = [
   'function MAX_BUCKETS() view returns (uint256)',
   'function MAX_DELTA_BPS() view returns (uint256)',
   'function MIN_PENALTY_BPS() view returns (uint256)',
+  'function MIN_WORST_CASE_KAPPA_BPS() view returns (uint256)',
   'function CHANGE_COOLDOWN() view returns (uint256)',
   'function LOOSEN_DELAY() view returns (uint256)',
 
@@ -90,6 +95,21 @@ export function weiToEth(wei: ethers.BigNumberish): string {
   return ethers.utils.formatEther(wei)
 }
 
+// Plain-English rewrites for the terse require(string) reverts the contract
+// throws — so the UI surfaces "why + how to fix" instead of a raw internal
+// phrase. Keyed by the exact revert string in DynamicStakeLib/FillAuction.
+const FRIENDLY_REVERT: Record<string, string> = {
+  'kappa floor breached':
+    'Config rejected: it would let a filler snipe (partial-fill then abandon) at a smaller price edge than the required floor (~10%). ' +
+    'Usually caused by a refund that is too generous at a near-honest fill % — lower that refund, or raise the collateral rate for the smallest size bucket.',
+  'penalty floor breached':
+    'Config rejected: at some fill %, the penalty for stopping early drops below the required minimum. Reduce the refund at that fill %.',
+  'collateral delta too large':
+    'Change too large in one step: the collateral required moved more than the per-call cap (20%) at some sample point. Make a smaller change, or split it across calls.',
+  'penalty delta too large':
+    'Change too large in one step: the penalty moved more than the per-call cap (20%) at some sample point. Make a smaller change, or split it across calls.',
+}
+
 // Best-effort human message out of an ethers v5 revert — require(string) reverts
 // usually surface via err.reason already; custom errors (Cooldown, etc.) need the
 // ABI's `error` fragments to decode, which FILL_AUCTION_ABI provides.
@@ -98,5 +118,10 @@ export function extractRevertReason(err: any, iface: ethers.utils.Interface): st
   if (typeof data === 'string' && data.startsWith('0x') && data.length >= 10) {
     try { return iface.parseError(data).name } catch { /* not a known custom error */ }
   }
-  return err?.reason || err?.error?.message || err?.message || 'Transaction failed'
+  const raw = err?.reason || err?.error?.message || err?.message || 'Transaction failed'
+  // Some providers prefix the string ("execution reverted: kappa floor breached").
+  for (const key of Object.keys(FRIENDLY_REVERT)) {
+    if (typeof raw === 'string' && raw.includes(key)) return FRIENDLY_REVERT[key]
+  }
+  return raw
 }

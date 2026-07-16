@@ -4,6 +4,7 @@ pragma solidity ^0.8.20;
 import "forge-std/Test.sol";
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "../src/FillAuction.sol";
+import "../src/oracles/UniswapV3NotionalOracle.sol";
 
 /// Minimal slice of the Uniswap V3 SwapRouter (original, with a `deadline` field).
 interface ISwapRouter {
@@ -70,7 +71,8 @@ contract TwapWindowComparisonTest is Test {
         vm.createSelectFork(vm.envString("ALCHEMY_RPC_URL"), FORK_BLOCK);
         deadline = block.number + 100;
         for (uint256 i = 0; i < 3; i++) {
-            auctions[i] = new FillAuction(treasury, WETH, FACTORY, windows[i], false);
+            UniswapV3NotionalOracle oracleI = new UniswapV3NotionalOracle(WETH, FACTORY, windows[i]);
+            auctions[i] = new FillAuction(treasury, oracleI, false);
             baseline[i] = auctions[i].previewCollateral(USDC, FEE, FILL_USDC, deadline);
             assertGt(baseline[i], 0, "baseline collateral must be non-zero");
         }

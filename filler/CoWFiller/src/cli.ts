@@ -2,8 +2,8 @@
 import { Command } from 'commander'
 import {
   FILLER_NAME, renderOrders, renderBalances, renderSim, runFill,
-  renderCcOrders, runCcFill, runCcClaim, runCcReset, runQuote, withWatch,
-  resolveOrderHash, resolveCcOrderHash,
+  renderCcOrders, runCcFill, runCcResume, runQuote, withWatch,
+  resolveOrderHash, resolveCcOrderHash, shutdownFiller,
 } from './cli/actions'
 import { seedInventory } from './funding/seed'
 
@@ -25,16 +25,20 @@ program.command('fill <hash>').description('execute a partial fill — accepts a
   .option('-p, --pct <n>', 'percent of remaining to fill', '100')
   .action(async (hash, o) => runFill(await resolveOrderHash(hash), Number(o.pct)))
 
-const cc = program.command('cc').description('cross-chain (Merkle-slot) operations')
-cc.command('list').description('list cross-chain orders and their slots')
+const cc = program.command('cc').description('cross-chain (filler-holds-key, continuous fill) operations')
+cc.command('list').description('list cross-chain orders and their fills')
   .option('-w, --watch [seconds]', 'auto-refresh every N seconds (default 15)')
   .action(o => withWatch(o.watch === true ? 15 : o.watch ? Number(o.watch) : undefined, renderCcOrders))
-cc.command('fill <hash> <slot>').description('fill a cross-chain slot (deploy dst escrow → withdraw on src)')
-  .action(async (hash, slot) => runCcFill(await resolveCcOrderHash(hash), Number(slot)))
-cc.command('claim <hash> <slot>').description('recover a slot the backend already claimed (withdraw on src)')
-  .action(async (hash, slot) => runCcClaim(await resolveCcOrderHash(hash), Number(slot)))
-cc.command('reset <hash> <slot>').description('reset a stuck locked slot back to available')
-  .action(async (hash, slot) => runCcReset(await resolveCcOrderHash(hash), Number(slot)))
+cc.command('fill <hash> <pct>').description('start a new fill for <pct>% of what\'s still fillable (fund dst → wait swapper → lock src → reveal)')
+  .option('--min-margin-sec <n>', 'required time margin (sec) before T1 to create EscrowSrc / reveal — aborts if tighter', '60')
+  .option('--force', 'skip the T1 margin check and proceed even if T1 is dangerously close')
+  .action(async (hash, pct, o) => runCcFill(await resolveCcOrderHash(hash), Number(pct),
+    { minMarginSeconds: Number(o.minMarginSec), force: !!o.force }))
+cc.command('resume <hash> <fillId>').description('resume an in-flight fill after a crash/restart (uses the locally-saved secret)')
+  .option('--min-margin-sec <n>', 'required time margin (sec) before T1 to create EscrowSrc / reveal — aborts if tighter', '60')
+  .option('--force', 'skip the T1 margin check and proceed even if T1 is dangerously close')
+  .action(async (hash, fillId, o) => runCcResume(await resolveCcOrderHash(hash), Number(fillId),
+    { minMarginSeconds: Number(o.minMarginSec), force: !!o.force }))
 
 program.command('quote').description('run the fill strategy against an ad-hoc order (parity with /quote)')
   .requiredOption('--in <addr>', 'input token address')
@@ -49,5 +53,8 @@ program.command('quote').description('run the fill strategy against an ad-hoc or
 
 program.command('seed').description('dev-only: seed wallet inventory on all chains')
   .action(async () => { await seedInventory(); process.exit(0) })
+
+program.command('shutdown').description('stop the running watcher (npm start process)')
+  .action(shutdownFiller)
 
 program.parseAsync(process.argv)

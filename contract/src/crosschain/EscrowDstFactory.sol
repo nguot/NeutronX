@@ -7,20 +7,25 @@ pragma solidity ^0.8.20;
 //
 //  FILLER FLOW (no ERC-20 approval required)
 //  ──────────────────────────────────────────
-//  Step 1  off-chain:  escrowAddr = factory.computeAddress(H_i, filler)
-//  Step 2  on-chain:   USDC.transfer(escrowAddr, amount)
+//  Filler-holds-key model: the filler generates its own secret S per fill,
+//  H = keccak256(S), and funds THIS dest escrow BEFORE the matching EscrowSrc
+//  even exists on chain A — the swapper verifies this escrow (via the backend
+//  or its own client) before signing off on the source leg.
+//
+//  Step 1  off-chain:  escrowAddr = factory.computeAddress(H, filler)
+//  Step 2  on-chain:   token.transfer(escrowAddr, amount)
 //                        tokens land at the precomputed address before
 //                        the clone contract exists there
-//  Step 3  on-chain:   factory.deploy(H_i, swapper, USDC, amount, T2)
+//  Step 3  on-chain:   factory.deploy(H, swapper, token, amount, T2)
 //                        deploys the clone, initialize() verifies balance
 //
 //  WHY CREATE2?
 //  ────────────
 //  CREATE2 makes the address deterministic from (implementation, salt).
-//  salt = keccak256(H_i, filler) so:
-//    • different fillers filling the same slot → different addresses
+//  salt = keccak256(H, filler) so:
+//    • different fillers using the same hashlock → different addresses
 //    • same filler re-deploying the same hashlock → collision → reverts
-//      (each slot should be filled exactly once)
+//      (each (hashlock, filler) pair funds exactly one escrow)
 
 import { Clones }    from "@openzeppelin/contracts/proxy/Clones.sol";
 import { EscrowDst } from "./EscrowDst.sol";
@@ -32,11 +37,11 @@ contract EscrowDstFactory {
     event EscrowCreated(
         address indexed escrow,     // clone address (unique per fill)
         address indexed filler,     // who deployed (and funded) this escrow
-        bytes32 indexed hashlock,   // H_i — links to the Merkle slot on Chain A
+        bytes32 indexed hashlock,   // H — links to this filler's fill on chain A
         address recipient,          // swapper — receives USDC when claimed
         address token,
         uint256 amount,
-        uint256 expiry              // T2 block number
+        uint256 expiry              // T2 unix timestamp
     );
 
     constructor(address _implementation) {
@@ -46,14 +51,14 @@ contract EscrowDstFactory {
 
     // ── deploy ──────────────────────────────────────────────────────────────────
     /**
-     * Deploys an EscrowDst clone for slot fill i.
+     * Deploys an EscrowDst clone for one filler's fill.
      * Filler must have already transferred `amount` tokens to computeAddress().
      *
-     * @param hashlock   H_i from the order's Merkle tree leaf
-     * @param recipient  Swapper address (receives output tokens when S_i is revealed)
+     * @param hashlock   H — hashlock chosen by the filler for this fill
+     * @param recipient  Swapper address (receives output tokens when the secret is revealed)
      * @param token      Output token (e.g. USDC on Chain B)
-     * @param amount     Must match ≥ minOutput / numSlots
-     * @param expiry     T2 block — filler can refund() after this if no claim
+     * @param amount     This fill's output amount
+     * @param expiry     T2 (unix timestamp) — filler can refund() after this if no claim
      * @return escrow    Address of the newly deployed clone
      */
     function deploy(
@@ -77,7 +82,7 @@ contract EscrowDstFactory {
      * Returns the address the clone WILL be deployed to.
      * Filler calls this off-chain, then sends tokens there before calling deploy().
      *
-     * @param hashlock  H_i for the slot being filled
+     * @param hashlock  H for the fill being funded
      * @param filler    Address that will call deploy() (msg.sender of that call)
      */
     function computeAddress(bytes32 hashlock, address filler)

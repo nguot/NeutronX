@@ -2,6 +2,7 @@ import http from 'http'
 import { decide } from '../strategy/strategy'
 import { provider } from '../contract/contracts'
 import { SUPPORTED_TOKENS } from '../config'
+import { bgLog } from '../bgLog'
 import type { OrderInfo } from '../types'
 import * as dotenv from 'dotenv'
 dotenv.config()
@@ -108,8 +109,22 @@ export function startQuoteServer(): void {
     json(res, 404, { error: 'Not found — interactive UI removed, use the CLI (npm run cli)' })
   })
 
+  // An unhandled 'error' event on an EventEmitter is a THROW by default — an
+  // EADDRINUSE here (e.g. a previous npm start instance still holding the
+  // port because Ctrl+C/shutdown didn't actually kill it) used to crash the
+  // whole process silently, well after the REPL had already drawn its prompt
+  // and put the terminal in raw mode. The dead process never got a chance to
+  // restore it, so the terminal looked "frozen" — keys typed nowhere, Ctrl+C
+  // hitting nothing, because there was no process left to receive them.
+  server.on('error', (e: any) => {
+    if (e.code === 'EADDRINUSE') {
+      bgLog(`[${FILLER_NAME}] port ${PORT} already in use — is another instance of this filler already running? (npm run cli -- shutdown to stop it)`)
+    } else {
+      bgLog(`[${FILLER_NAME}] quote server error: ${e.message ?? e}`)
+    }
+  })
+
   server.listen(PORT, () => {
-    console.log(`[${FILLER_NAME}] quote API on http://localhost:${PORT}  (POST /quote, GET /health)`)
-    console.log(`[${FILLER_NAME}] interactive console → run:  npm run cli -- orders`)
+    bgLog(`[${FILLER_NAME}] quote API on http://localhost:${PORT}  (POST /quote, GET /health)`)
   })
 }

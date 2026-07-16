@@ -1,0 +1,68 @@
+<mxfile host="app.diagrams.net">
+  <diagram id="slide09" name="Slide 9 - Cross-chain contracts">
+    <mxGraphModel dx="1500" dy="900" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1420" pageHeight="740" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <!-- ============ LANES ============ -->
+        <mxCell id="laneA" value="CHAIN A  —  token của SWAPPER" style="rounded=1;arcSize=1;whiteSpace=wrap;html=1;fillColor=#F3F5FA;strokeColor=#C6CBD9;strokeWidth=1;verticalAlign=top;align=center;fontSize=16;fontStyle=1;fontColor=#16305C;spacingTop=12;" vertex="1" parent="1">
+          <mxGeometry x="40" y="80" width="620" height="490" as="geometry" />
+        </mxCell>
+        <mxCell id="laneB" value="CHAIN B  —  token của FILLER" style="rounded=1;arcSize=1;whiteSpace=wrap;html=1;fillColor=#EAF1FB;strokeColor=#9FB6D9;strokeWidth=1;verticalAlign=top;align=center;fontSize=16;fontStyle=1;fontColor=#16305C;spacingTop=12;" vertex="1" parent="1">
+          <mxGeometry x="760" y="80" width="620" height="490" as="geometry" />
+        </mxCell>
+
+        <!-- ============ FACTORIES ============ -->
+        <mxCell id="fsrc" value="EscrowSrcFactory   (Chain A)&#10;fillSlot()  ·  restoreRemaining()" style="rounded=1;arcSize=10;whiteSpace=wrap;html=1;fillColor=#16305C;strokeColor=none;fontColor=#FFFFFF;fontSize=15;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="110" y="150" width="480" height="72" as="geometry" />
+        </mxCell>
+        <mxCell id="fdst" value="EscrowDstFactory   (Chain B)&#10;deploy()" style="rounded=1;arcSize=10;whiteSpace=wrap;html=1;fillColor=#16305C;strokeColor=none;fontColor=#FFFFFF;fontSize=15;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="830" y="150" width="480" height="72" as="geometry" />
+        </mxCell>
+
+        <!-- ============ CLONES ============ -->
+        <mxCell id="esrc" value="EscrowSrc   (clone CREATE2)&#10;&#10;Giữ INPUT của swapper  +  BOND của filler&#10;&#10;withdraw(secret) → filler lấy input (lộ S)&#10;cancel() sau T1 → swapper hoàn input + bond" style="rounded=1;arcSize=6;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#16305C;strokeWidth=2;fontColor=#16305C;fontSize=14;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="110" y="300" width="480" height="240" as="geometry" />
+        </mxCell>
+        <mxCell id="edst" value="EscrowDst   (clone CREATE2)&#10;&#10;Giữ OUTPUT trả cho swapper&#10;&#10;claim(secret) → trả swapper&#10;refund() sau T2 → chỉ filler" style="rounded=1;arcSize=6;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#16305C;strokeWidth=2;fontColor=#16305C;fontSize=14;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="830" y="300" width="480" height="240" as="geometry" />
+        </mxCell>
+
+        <!-- ============ DEPLOY ARROWS ============ -->
+        <mxCell id="da" value="deploy clone (CREATE2)" style="edgeStyle=none;html=1;endArrow=block;endFill=1;strokeColor=#16305C;strokeWidth=2;fontSize=13;fontColor=#16305C;labelBackgroundColor=#F3F5FA;" edge="1" parent="1" source="fsrc" target="esrc">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="db" value="deploy clone (CREATE2)" style="edgeStyle=none;html=1;endArrow=block;endFill=1;strokeColor=#16305C;strokeWidth=2;fontSize=13;fontColor=#16305C;labelBackgroundColor=#EAF1FB;" edge="1" parent="1" source="fdst" target="edst">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- ============ SECRET + HASHLOCK (center) ============ -->
+        <mxCell id="secret" value="FILLER giữ secret S" style="rounded=1;arcSize=16;whiteSpace=wrap;html=1;fillColor=#FFF3D6;strokeColor=#C89B2E;strokeWidth=2;fontColor=#8A6D1A;fontSize=14;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="600" y="156" width="220" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="hlock" value="HASHLOCK H&#10;H = keccak256(S)" style="rounded=1;arcSize=14;whiteSpace=wrap;html=1;fillColor=#16305C;strokeColor=none;fontColor=#FFFFFF;fontSize=14;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="600" y="380" width="220" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="hl_s" style="edgeStyle=none;html=1;dashed=1;endArrow=none;strokeColor=#8A93A6;strokeWidth=2;" edge="1" parent="1" source="hlock" target="esrc">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="hl_d" style="edgeStyle=none;html=1;dashed=1;endArrow=none;strokeColor=#8A93A6;strokeWidth=2;" edge="1" parent="1" source="hlock" target="edst">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="sk" style="edgeStyle=none;html=1;dashed=1;endArrow=open;strokeColor=#C89B2E;strokeWidth=2;" edge="1" parent="1" source="secret" target="hlock">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- ============ BOTTOM NOTES ============ -->
+        <mxCell id="n1" value="Hai timelock:   T1 (cancel EscrowSrc)  &lt;  T2 (refund EscrowDst)&#10;buffer  T2 − T1  ≥  finality của chain đích" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#EAF1FB;strokeColor=#16305C;strokeWidth=2;fontColor=#16305C;fontSize=14;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="40" y="600" width="640" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="n2" value="Mỗi fill = một cặp escrow clone RIÊNG&#10;salt CREATE2 = keccak256(orderHash, hashlock)  →  lỗi cái nào chỉ ảnh hưởng cái đó" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#F3F5FA;strokeColor=#9FB6D9;strokeWidth=1;fontColor=#5B6472;fontSize=14;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="740" y="600" width="640" height="90" as="geometry" />
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

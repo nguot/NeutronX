@@ -1,0 +1,168 @@
+<mxfile host="app.diagrams.net">
+  <diagram id="slide07" name="Slide 7 - DynamicStakeLib config">
+    <mxGraphModel dx="1500" dy="900" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1480" pageHeight="740" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <!-- ============ HEADLINE ============ -->
+        <mxCell id="head" value="Không whitelist ai cả — thay bằng STAKE (đặt cọc).  Muốn khớp phải stake.  Ôm order rồi bỏ → MẤT stake." style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#16305C;strokeColor=none;fontColor=#FFFFFF;fontSize=17;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="40" y="50" width="1400" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="formula" value="stake  =  giá trị order (notional)  ×  rate(size)  ×  multiplier(thời gian còn lại)          —  có sàn tối thiểu minCollateral" style="rounded=1;arcSize=10;whiteSpace=wrap;html=1;fillColor=#EAF1FB;strokeColor=#16305C;strokeWidth=2;fontColor=#16305C;fontSize=16;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="40" y="120" width="1400" height="50" as="geometry" />
+        </mxCell>
+
+        <!-- ============ PANEL A: rate theo size ============ -->
+        <mxCell id="pa_h" value="rate theo ORDER SIZE" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#16305C;strokeColor=#16305C;fontColor=#FFFFFF;fontSize=15;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="40" y="200" width="440" height="42" as="geometry" />
+        </mxCell>
+        <mxCell id="pa1" value="&lt; 1 ETH          —          20%" style="whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#D5DAE5;fontColor=#333333;fontSize=15;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="40" y="242" width="440" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="pa2" value="1 – 10 ETH          —          50%" style="whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#D5DAE5;fontColor=#333333;fontSize=15;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="40" y="282" width="440" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="pa3" value="10 – 100 ETH          —          100%" style="whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#D5DAE5;fontColor=#333333;fontSize=15;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="40" y="322" width="440" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="pa4" value="&gt; 100 ETH          —          300%" style="whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#D5DAE5;fontColor=#333333;fontSize=15;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="40" y="362" width="440" height="40" as="geometry" />
+        </mxCell>
+
+        <!-- ============ PANEL B: multiplier theo time ============ -->
+        <mxCell id="pb_h" value="multiplier theo THỜI GIAN CÒN LẠI" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#16305C;strokeColor=#16305C;fontColor=#FFFFFF;fontSize=15;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="40" y="430" width="440" height="42" as="geometry" />
+        </mxCell>
+        <mxCell id="pb1" value="&gt; 50 block          —          1×" style="whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#D5DAE5;fontColor=#333333;fontSize=15;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="40" y="472" width="440" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="pb2" value="&gt; 20 block          —          1.5×" style="whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#D5DAE5;fontColor=#333333;fontSize=15;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="40" y="512" width="440" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="pb3" value="&gt; 5 block          —          3×" style="whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#D5DAE5;fontColor=#333333;fontSize=15;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="40" y="552" width="440" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="pb4" value="≤ 5 block          —          5×   (cao nhất)" style="whiteSpace=wrap;html=1;fillColor=#FBEDEE;strokeColor=#D5DAE5;fontColor=#C8102E;fontSize=15;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="40" y="592" width="440" height="40" as="geometry" />
+        </mxCell>
+
+        <!-- ============ REFUND TABLE (heatmap 4x5) ============ -->
+        <mxCell id="rt_title" value="REFUND TABLE — % stake được HOÀN  =  f( order size ,  % đã fill so với CAM KẾT )" style="text;html=1;fillColor=none;strokeColor=none;fontColor=#16305C;fontSize=15;fontStyle=1;align=left;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="520" y="196" width="920" height="30" as="geometry" />
+        </mxCell>
+
+        <!-- corner + column headers -->
+        <mxCell id="c00" value="size  ＼  % fill" style="whiteSpace=wrap;html=1;fillColor=#16305C;strokeColor=#0E2144;fontColor=#FFFFFF;fontSize=12;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="520" y="230" width="160" height="54" as="geometry" />
+        </mxCell>
+        <mxCell id="ch1" value="fill &lt; 2%" style="whiteSpace=wrap;html=1;fillColor=#16305C;strokeColor=#0E2144;fontColor=#FFFFFF;fontSize=13;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="680" y="230" width="150" height="54" as="geometry" />
+        </mxCell>
+        <mxCell id="ch2" value="fill &lt; 10%" style="whiteSpace=wrap;html=1;fillColor=#16305C;strokeColor=#0E2144;fontColor=#FFFFFF;fontSize=13;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="830" y="230" width="150" height="54" as="geometry" />
+        </mxCell>
+        <mxCell id="ch3" value="fill &lt; 30%" style="whiteSpace=wrap;html=1;fillColor=#16305C;strokeColor=#0E2144;fontColor=#FFFFFF;fontSize=13;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="980" y="230" width="150" height="54" as="geometry" />
+        </mxCell>
+        <mxCell id="ch4" value="fill &lt; 70%" style="whiteSpace=wrap;html=1;fillColor=#16305C;strokeColor=#0E2144;fontColor=#FFFFFF;fontSize=13;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="1130" y="230" width="150" height="54" as="geometry" />
+        </mxCell>
+        <mxCell id="ch5" value="fill ≥ 70%" style="whiteSpace=wrap;html=1;fillColor=#16305C;strokeColor=#0E2144;fontColor=#FFFFFF;fontSize=13;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="1280" y="230" width="150" height="54" as="geometry" />
+        </mxCell>
+
+        <!-- Row 0: < 1 ETH -->
+        <mxCell id="rh0" value="&lt; 1 ETH" style="whiteSpace=wrap;html=1;fillColor=#DCE6F6;strokeColor=#C6CBD9;fontColor=#16305C;fontSize=13;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="520" y="284" width="160" height="48" as="geometry" />
+        </mxCell>
+        <mxCell id="v00" value="5%" style="whiteSpace=wrap;html=1;fillColor=#FBEDEE;strokeColor=#E6BFC4;fontColor=#C8102E;fontSize=14;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="680" y="284" width="150" height="48" as="geometry" />
+        </mxCell>
+        <mxCell id="v01" value="10%" style="whiteSpace=wrap;html=1;fillColor=#FDF3E6;strokeColor=#EDD9BD;fontColor=#8A6D1A;fontSize=14;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="830" y="284" width="150" height="48" as="geometry" />
+        </mxCell>
+        <mxCell id="v02" value="25%" style="whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#D5DAE5;fontColor=#333333;fontSize=14;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="980" y="284" width="150" height="48" as="geometry" />
+        </mxCell>
+        <mxCell id="v03" value="50%" style="whiteSpace=wrap;html=1;fillColor=#EAF3EA;strokeColor=#CFE3CF;fontColor=#2E7D32;fontSize=14;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="1130" y="284" width="150" height="48" as="geometry" />
+        </mxCell>
+        <mxCell id="v04" value="100%" style="whiteSpace=wrap;html=1;fillColor=#DDEFDD;strokeColor=#B7DBB7;fontColor=#2E7D32;fontSize=14;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="1280" y="284" width="150" height="48" as="geometry" />
+        </mxCell>
+
+        <!-- Row 1: 1-10 ETH -->
+        <mxCell id="rh1" value="1 – 10 ETH" style="whiteSpace=wrap;html=1;fillColor=#DCE6F6;strokeColor=#C6CBD9;fontColor=#16305C;fontSize=13;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="520" y="332" width="160" height="48" as="geometry" />
+        </mxCell>
+        <mxCell id="v10" value="3.3%" style="whiteSpace=wrap;html=1;fillColor=#FBEDEE;strokeColor=#E6BFC4;fontColor=#C8102E;fontSize=14;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="680" y="332" width="150" height="48" as="geometry" />
+        </mxCell>
+        <mxCell id="v11" value="10%" style="whiteSpace=wrap;html=1;fillColor=#FDF3E6;strokeColor=#EDD9BD;fontColor=#8A6D1A;fontSize=14;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="830" y="332" width="150" height="48" as="geometry" />
+        </mxCell>
+        <mxCell id="v12" value="20%" style="whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#D5DAE5;fontColor=#333333;fontSize=14;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="980" y="332" width="150" height="48" as="geometry" />
+        </mxCell>
+        <mxCell id="v13" value="50%" style="whiteSpace=wrap;html=1;fillColor=#EAF3EA;strokeColor=#CFE3CF;fontColor=#2E7D32;fontSize=14;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="1130" y="332" width="150" height="48" as="geometry" />
+        </mxCell>
+        <mxCell id="v14" value="100%" style="whiteSpace=wrap;html=1;fillColor=#DDEFDD;strokeColor=#B7DBB7;fontColor=#2E7D32;fontSize=14;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="1280" y="332" width="150" height="48" as="geometry" />
+        </mxCell>
+
+        <!-- Row 2: 10-100 ETH -->
+        <mxCell id="rh2" value="10 – 100 ETH" style="whiteSpace=wrap;html=1;fillColor=#DCE6F6;strokeColor=#C6CBD9;fontColor=#16305C;fontSize=13;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="520" y="380" width="160" height="48" as="geometry" />
+        </mxCell>
+        <mxCell id="v20" value="1%" style="whiteSpace=wrap;html=1;fillColor=#F7D9DD;strokeColor=#E6BFC4;fontColor=#C8102E;fontSize=14;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="680" y="380" width="150" height="48" as="geometry" />
+        </mxCell>
+        <mxCell id="v21" value="3.3%" style="whiteSpace=wrap;html=1;fillColor=#FBEDEE;strokeColor=#E6BFC4;fontColor=#C8102E;fontSize=14;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="830" y="380" width="150" height="48" as="geometry" />
+        </mxCell>
+        <mxCell id="v22" value="10%" style="whiteSpace=wrap;html=1;fillColor=#FDF3E6;strokeColor=#EDD9BD;fontColor=#8A6D1A;fontSize=14;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="980" y="380" width="150" height="48" as="geometry" />
+        </mxCell>
+        <mxCell id="v23" value="33.3%" style="whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#D5DAE5;fontColor=#333333;fontSize=14;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="1130" y="380" width="150" height="48" as="geometry" />
+        </mxCell>
+        <mxCell id="v24" value="100%" style="whiteSpace=wrap;html=1;fillColor=#DDEFDD;strokeColor=#B7DBB7;fontColor=#2E7D32;fontSize=14;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="1280" y="380" width="150" height="48" as="geometry" />
+        </mxCell>
+
+        <!-- Row 3: > 100 ETH -->
+        <mxCell id="rh3" value="&gt; 100 ETH" style="whiteSpace=wrap;html=1;fillColor=#DCE6F6;strokeColor=#C6CBD9;fontColor=#16305C;fontSize=13;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="520" y="428" width="160" height="48" as="geometry" />
+        </mxCell>
+        <mxCell id="v30" value="1%" style="whiteSpace=wrap;html=1;fillColor=#F7D9DD;strokeColor=#E6BFC4;fontColor=#C8102E;fontSize=14;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="680" y="428" width="150" height="48" as="geometry" />
+        </mxCell>
+        <mxCell id="v31" value="2%" style="whiteSpace=wrap;html=1;fillColor=#F7D9DD;strokeColor=#E6BFC4;fontColor=#C8102E;fontSize=14;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="830" y="428" width="150" height="48" as="geometry" />
+        </mxCell>
+        <mxCell id="v32" value="6.7%" style="whiteSpace=wrap;html=1;fillColor=#FBEDEE;strokeColor=#E6BFC4;fontColor=#C8102E;fontSize=14;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="980" y="428" width="150" height="48" as="geometry" />
+        </mxCell>
+        <mxCell id="v33" value="20%" style="whiteSpace=wrap;html=1;fillColor=#FDF3E6;strokeColor=#EDD9BD;fontColor=#8A6D1A;fontSize=14;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="1130" y="428" width="150" height="48" as="geometry" />
+        </mxCell>
+        <mxCell id="v34" value="100%" style="whiteSpace=wrap;html=1;fillColor=#DDEFDD;strokeColor=#B7DBB7;fontColor=#2E7D32;fontSize=14;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="1280" y="428" width="150" height="48" as="geometry" />
+        </mxCell>
+
+        <!-- ============ EMPHASIS: worstCaseKappa ============ -->
+        <mxCell id="emph" value="Ràng buộc kinh tế (worstCaseKappaBps): tham số được chọn sao cho không tồn tại chiến lược fill một phần rồi bỏ nào có lợi nhuận dương.&#10;Config hợp lệ khi κ_worst ≥ 10%. Config mặc định đạt κ ≈ 14.3% — chênh giá tối thiểu để snipe hoà vốn." style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#EAF1FB;strokeColor=#16305C;strokeWidth=2;fontColor=#16305C;fontSize=14;align=left;verticalAlign=middle;spacingLeft=18;" vertex="1" parent="1">
+          <mxGeometry x="520" y="500" width="920" height="90" as="geometry" />
+        </mxCell>
+
+        <!-- ============ WORKED EXAMPLE ============ -->
+        <mxCell id="ex" value="Ví dụ — order 5 ETH, còn 8 block:   rate 50%  ×  mult 3×   →   stake = 7.5 ETH.     Nếu filler chỉ fill 20% cam kết rồi bỏ  →  hoàn 20% = 1.5 ETH,  MẤT 6 ETH." style="rounded=1;arcSize=10;whiteSpace=wrap;html=1;fillColor=#FFF3D6;strokeColor=#C89B2E;strokeWidth=2;fontColor=#8A6D1A;fontSize=14;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="40" y="650" width="1400" height="60" as="geometry" />
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

@@ -1,9 +1,11 @@
 # NeutronX — Smart-Contract Test Catalogue (Detailed)
 
-> Verified against a full `forge test` run on **2026-06-29**. Supersedes `testcase.md`,
-> whose headline numbers had drifted. Every test below is named exactly as it appears in
-> the suite, with a one-line statement of the property it pins down. Where a test maps to a
-> security finding in `audit.md` / `crosschain.md`, the finding tag is given.
+> Verified against a full `forge test` run on **2026-07-08**. Supersedes the 2026-06-29
+> pass (this file's own prior revision), whose headline numbers had drifted after the
+> B1-B5 dynamic-stake-config refactor added `StakeConfigGuard.t.sol` and expanded
+> `CoreGuards`/`FallbackExecutor`/`DynamicStakeLib`. Every test below is named exactly as
+> it appears in the suite, with a one-line statement of the property it pins down. Where a
+> test maps to a security finding in `audit.md` / `crosschain.md`, the finding tag is given.
 
 ---
 
@@ -11,52 +13,104 @@
 
 | | Count | Result |
 |---|---|---|
-| **Total tests** | **149** | all pass |
-| Test suites (contracts) | **24** | — |
-| Non-fork (deterministic, no network) | **137** | all pass |
-| Fork (mainnet, need `ALCHEMY_RPC_URL`) | **12** | all pass on a healthy RPC; can be transiently flaky on live-pool drift / RPC timeout |
+| **Total tests** | **173** | all pass |
+| Test suites (contracts) | **26** | — |
+| Non-fork (deterministic, no network) | **158** | all pass |
+| Fork (mainnet, need `ALCHEMY_RPC_URL`) | **15** | all pass on a healthy RPC; can be transiently flaky on live-pool drift / RPC timeout |
 
-Fork suites: `FallbackExecutor.t.sol` (9), `TwapCollateral.t.sol` (2), `TwapManipulation.t.sol` (1).
-All three call `vm.createSelectFork(vm.envString("ALCHEMY_RPC_URL"))`.
+Fork suites: `FallbackExecutor.t.sol` (11), `TwapCollateral.t.sol` (2), `TwapManipulation.t.sol` (1),
+`TwapWindowComparison.t.sol` (1). All four call `vm.createSelectFork(vm.envString("ALCHEMY_RPC_URL"))`.
 
 Test-type prefixes: `test_*` = unit · `testFuzz_*` = property/fuzz (256 runs) · `invariant_*` = stateful invariant (256 runs × 100 calls).
 
-### What changed since `testcase.md`
+### What changed since the 2026-06-29 pass
 
-| Item | `testcase.md` said | Actual now |
+| Item | 2026-06-29 said | Actual now |
 |---|---|---|
-| Total | 145 | **149** |
-| Non-fork / fork split | 133 / 12 | **137 / 12** |
-| `FallbackExecutor` | 3 tests | **9** (rewritten around an allowlisted/mock router + signed-floor + cumulative-floor + refund-leftover + owner-gate) |
-| `FeeOnTransfer.t.sol` | not present | **2 (new)** — Trufy 3.2 balance-delta accounting |
-| `MinFillRemainder.t.sol` | not present | **2 (new)** — minFill tail-completion exemption |
-| `EscrowSrcFactory` | 10 tests | **12** (adds the single-cosigner-key pair) |
+| Total | 149 | **173** |
+| Test suites | 24 | **26** |
+| Non-fork / fork split | 137 / 12 | **158 / 15** |
+| `StakeConfigGuard.t.sol` | not present | **15 (new)** — B3/B4 dynamic-stake-config guard: loosen→pending→commit/cancel, cooldown on both paths, one-deep rollback, gradual-erosion penalty floor, registration-snapshot survives a live bucket-count reshape |
+| `CoreGuards.t.sol` | 25 tests, keyed to `setCollateralRate`/`setRefundTable` | **27 tests**, rewritten around the unified `setStakeConfig` atomic setter (those two per-field setters no longer exist) |
+| `DynamicStakeLib.t.sol` | 15 tests | **19** (adds `test_timeMultiplier_exactValues`, `test_fillRatio_exactBoundaries`, `test_orderSizeETH_exactBoundaries`, `test_orderSizeETH_midTiers`) |
+| `FallbackExecutor.t.sol` | 9 tests | **11** (adds `test_fallback_swapsSuccessfully_viaSplitApproveTargetRouter` and `test_setRouterAllowed_distinctApproveTarget` — ParaSwap-style split approve-target/call-target router support) |
+| `TwapWindowComparison.t.sol` | not present | **1 (new, fork)** — quantifies TWAP window length vs. manipulation resistance as a 2×3 table (2 dump sizes × 3 window lengths) |
 
 ---
 
 ## 1. How to run
 
+Foundry (`forge`) lives inside **WSL**, not on the Windows PATH — every command below is
+run through `wsl.exe`, `cd`-ing into the Windows-mounted repo path first. Copy the
+one-liners as-is; only the flags after `forge test` change between them.
+
+### 1.1 One-time setup
+
 ```bash
-cd contract
-# Foundry lives in WSL (no forge on the Windows PATH):
+# from a WSL shell, or via: wsl.exe bash -lc '...'
+cd /mnt/c/Users/vutie/Documents/DATN/dex-aggregator/contract
+
+# Foundry binaries aren't on PATH by default inside WSL:
+export PATH="$HOME/.foundry/bin:$PATH"
+forge --version          # sanity check (this catalogue was verified against 1.7.1)
+
+# Fork suites (§2.8) need a mainnet RPC. Put it in contract/.env — forge auto-loads it:
+echo 'ALCHEMY_RPC_URL=https://eth-mainnet.g.alchemy.com/v2/<your-key>' >> .env
+```
+
+### 1.2 Everyday commands
+
+```bash
+# Full suite (all 173 tests, needs ALCHEMY_RPC_URL for the 15 fork tests):
 wsl.exe bash -lc 'export PATH="$HOME/.foundry/bin:$PATH"; cd /mnt/c/Users/vutie/Documents/DATN/dex-aggregator/contract && forge test --summary'
 
-# Deterministic suites only (no RPC needed):
-forge test --no-match-path 'test/{FallbackExecutor,TwapCollateral,TwapManipulation}.t.sol'
+# Deterministic-only, no RPC needed (158 tests, ~seconds):
+wsl.exe bash -lc 'export PATH="$HOME/.foundry/bin:$PATH"; cd /mnt/c/Users/vutie/Documents/DATN/dex-aggregator/contract && forge test --summary --no-match-path "test/{FallbackExecutor,TwapCollateral,TwapManipulation,TwapWindowComparison}.t.sol"'
 
-# Include the mainnet-fork suites:
-export ALCHEMY_RPC_URL=<mainnet rpc>
-forge test
-
-# One suite, verbose:
-forge test --match-path 'test/adversarial/*' -vvv
+# Fork-only suites (15 tests; TwapManipulation.t.sol alone takes ~3 min — it re-simulates a whale dump):
+wsl.exe bash -lc 'export PATH="$HOME/.foundry/bin:$PATH"; cd /mnt/c/Users/vutie/Documents/DATN/dex-aggregator/contract && forge test --summary --match-path "test/{FallbackExecutor,TwapCollateral,TwapManipulation,TwapWindowComparison}.t.sol"'
 ```
+
+### 1.3 Targeted runs
+
+```bash
+# One file, verbose (shows console.log / emit log_* output — needed to read
+# TwapManipulation's / TwapWindowComparison's tabulated results):
+wsl.exe bash -lc 'export PATH="$HOME/.foundry/bin:$PATH"; cd /mnt/c/Users/vutie/Documents/DATN/dex-aggregator/contract && forge test --match-path "test/adversarial/*" -vvv'
+
+# One contract by name:
+wsl.exe bash -lc 'export PATH="$HOME/.foundry/bin:$PATH"; cd /mnt/c/Users/vutie/Documents/DATN/dex-aggregator/contract && forge test --match-contract StakeConfigGuardTest -vv'
+
+# One test function (substring match):
+wsl.exe bash -lc 'export PATH="$HOME/.foundry/bin:$PATH"; cd /mnt/c/Users/vutie/Documents/DATN/dex-aggregator/contract && forge test --match-test test_rollback_restoresOneStepBack_notFurther -vvvv'
+
+# The stateful invariant alone, with a bumped run count (default is 256 runs × 100 calls):
+wsl.exe bash -lc 'export PATH="$HOME/.foundry/bin:$PATH"; cd /mnt/c/Users/vutie/Documents/DATN/dex-aggregator/contract && FOUNDRY_INVARIANT_RUNS=1000 forge test --match-path "test/invariant/*" -vv'
+
+# Re-run only what failed last time:
+wsl.exe bash -lc 'export PATH="$HOME/.foundry/bin:$PATH"; cd /mnt/c/Users/vutie/Documents/DATN/dex-aggregator/contract && forge test --rerun'
+```
+
+### 1.4 Coverage & gas
+
+```bash
+# Line/statement/function coverage (branch % is noisy — see §5 caveat):
+wsl.exe bash -lc 'export PATH="$HOME/.foundry/bin:$PATH"; cd /mnt/c/Users/vutie/Documents/DATN/dex-aggregator/contract && forge coverage --no-match-path "test/{FallbackExecutor,TwapCollateral,TwapManipulation,TwapWindowComparison}.t.sol"'
+
+# Per-test gas snapshot (compare against .gas-snapshot to catch regressions):
+wsl.exe bash -lc 'export PATH="$HOME/.foundry/bin:$PATH"; cd /mnt/c/Users/vutie/Documents/DATN/dex-aggregator/contract && forge snapshot --diff'
+```
+
+**Flags cheat-sheet**: `-vv` shows revert reasons for failing tests · `-vvv` also shows
+traces for failing tests · `-vvvv` shows traces for *all* tests (verbose, use with
+`--match-test`) · `--summary` prints the pass/fail table in §0 instead of every line ·
+`--gas-report` (add to any run) prints per-function gas usage.
 
 ---
 
 ## 2. Suites by category
 
-### 2.1 Library unit tests — `test/libs/` (40 tests)
+### 2.1 Library unit tests — `test/libs/` (44 tests)
 
 Pure arithmetic of the staking / pricing / accounting primitives. All deterministic.
 
@@ -69,12 +123,16 @@ Pure arithmetic of the staking / pricing / accounting primitives. All determinis
 | `test_reset_resetsPrice` | reset moves the price anchor |
 | `test_reset_keepsDecayPerBlock` | reset preserves the slope |
 
-**`DynamicStakeLib.t.sol`** — bucketing helpers (15)
+**`DynamicStakeLib.t.sol`** — bucketing helpers (19)
 | Test group | Proves |
 |---|---|
 | `test_fillRatio_{edgeCase_fullFill, overFill, bucket0..bucket4}` (7) | every fill-ratio boundary (0–4 + full + over-fill) classifies into the right bucket |
 | `test_orderSize_{bucket0..bucket3}` (4) | the 4 order-size tiers classify correctly |
 | `test_timeBucket_{farFromDeadline, close, veryClose, expired}` (4) | the 4 time-to-deadline tiers classify correctly |
+| `test_timeMultiplier_exactValues` | the time multiplier at each bucket boundary matches the configured table exactly |
+| `test_fillRatio_exactBoundaries` | fill-ratio bucketing is correct *at* each threshold value, not just on either side of it |
+| `test_orderSizeETH_exactBoundaries` | ETH-notional order-size bucketing is correct at each threshold |
+| `test_orderSizeETH_midTiers` | mid-range ETH notionals (between thresholds) land in the expected tier |
 
 **`DynamicStakeLibStake.t.sol`** — collateral/refund economics (9, incl. fuzz)
 | Test | Proves |
@@ -133,12 +191,32 @@ Pure arithmetic of the staking / pricing / accounting primitives. All determinis
 
 ---
 
-### 2.3 Guard / branch / edge-case batch (34 tests)
+### 2.3 Guard / branch / edge-case batch (54 tests)
 
-**`CoreGuards.t.sol`** — protective-shell revert arms (25). High-value because `forge coverage` under-counts `require(cond,"msg")` branches; these assert each revert string explicitly.
-- FillAuction owner/one-time guards: `test_setReactor_revert_{notOwner, alreadySet, zero}`, `test_setCollateralRate_{revert_notOwner, revert_badBucket, revert_rateTooHigh, success}`, `test_setRefundTable_revert_{notOwner, badSizeBucket, badRatioBucket, tooHigh}` (**L-2** bounds).
+**`CoreGuards.t.sol`** — protective-shell revert arms (27). High-value because `forge coverage` under-counts `require(cond,"msg")` branches; these assert each revert string explicitly. Rewritten around `setStakeConfig`, the unified atomic setter that replaced the old per-field `setCollateralRate`/`setRefundTable` (those two functions no longer exist).
+- FillAuction one-time/role guards: `test_setReactor_revert_{notOwner, alreadySet, zero}` (DEFAULT_ADMIN_ROLE, one-time wiring).
+- `setStakeConfig` shape/bound guards (all via the unified setter, **B3** `DynamicStakeLib.validate`): `test_setStakeConfig_revert_notParamAdmin`, `test_setStakeConfig_revert_{rateTooHigh, rateTooLow}` (**L-2** + **B3** `MIN_COLLATERAL_RATE` floor), `test_setStakeConfig_revert_refundTooHigh`, `test_setStakeConfig_revert_refundRow{NotEndingAt100, NotMonotonic}`, `test_setStakeConfig_revert_{sizeThresholdsNotIncreasing, timeThresholdsNotDecreasing}`, `test_setStakeConfig_revert_badRefundShape`, `test_setStakeConfig_success`.
 - `register` input guards: `test_register_revert_{zeroFill, fillExceedsTotal, fillTooLarge, totalTooLarge, stakeTooLarge}` (**L-2** uint128/width).
 - Reactor guards: `test_setFallbackExecutor_revert_{alreadySet, zero}`, `test_markFallbackInitiated_revert_{notFallbackExecutor, cancelled}`, `test_cancelOrder_revert_{notSwapper, alreadyCancelled}`, `test_register_revert_cancelled`, `test_executePartialChunk_revert_{belowMinFill, cancelled}`.
+
+**`StakeConfigGuard.t.sol`** — B4 governance timelock/rollback wrapper around `setStakeConfig` (15, **new**). Covers the state machine, not just the input shape checks above: loosen→pending→commit/cancel, cooldown gating both paths, one-deep rollback, and the two "gradual erosion" defences (D1-D4 in `DynamicStakeLib`'s design notes, `#1`-`#3` risk items).
+| Test | Proves |
+|---|---|
+| `test_setStakeConfig_queuesPending_whenLoosening` | a net-loosening config is **not** applied immediately — it's queued into `_pending`, live config unchanged |
+| `test_commitPending_revert_beforeDelay` | `commitPending()` before `LOOSEN_DELAY` (7 days) reverts `StillPending()` |
+| `test_commitPending_succeeds_afterDelay` | after the delay, anyone can commit; `_pending` is cleared |
+| `test_setStakeConfig_revert_pendingExists` | only one pending change at a time — a second `setStakeConfig` call reverts `PendingExists()` |
+| `test_cancelPendingConfig_revert_notGuardian` | only `GUARDIAN_ROLE` can veto a pending change — PARAM_ADMIN itself cannot |
+| `test_cancelPendingConfig_clearsPending` | guardian veto clears `_pending` and frees the slot for a new change |
+| `test_setStakeConfig_revert_cooldown_afterImmediateApply` | **D3** an immediate (tightening) apply starts `CHANGE_COOLDOWN` (1 day) — a second change inside it reverts `Cooldown()` |
+| `test_setStakeConfig_revert_cooldown_afterQueueingPending` | **D3** queuing a pending (loosening) *also* starts the cooldown — closes the "requeue every block" gap |
+| `test_setStakeConfig_revert_collateralDeltaTooLarge` | **D1** any single change > `MAX_DELTA_BPS` (20%) reverts, forcing gradual (hence cooldown-visible) change |
+| `test_rollback_revert_noPreviousConfig` | rollback with nothing to restore reverts `NoPreviousConfig()` |
+| `test_rollback_restoresOneStepBack_notFurther` | **D2** rollback restores the config replaced at the *last* `_apply` (even one reached via a committed pending) — never further back |
+| `test_rollback_secondCallIsNoOp` | calling `rollback()` twice in a row is idempotent — guardian cannot walk further into history |
+| `test_rollback_clearsPending` | **D4** rollback also clears any in-flight pending change, which no longer makes sense against the restored config |
+| `test_setStakeConfig_revert_penaltyFloorBreached_afterGradualLoosening` | **#2** 30 steps of "loosen 20% at a time" (each individually legal) eventually trips the direct `worstCaseKappaBps` floor — no salami-slicing the sniping-fee penalty toward zero |
+| `test_registrationSnapshot_survivesRatioBucketReshape` | **#3** a filler registered under a 5-bucket config settles correctly (full refund) even after PARAM_ADMIN reshapes the live config to 7 buckets — settlement always reads the registration's own snapshot, never the live (possibly reshaped) table |
 
 **`FillAuctionTerminalState.t.sol`** — double-settlement matrix (3). The three terminal states (`filled`/`slashed`/`released`) are mutually exclusive and each credits `pendingReturns` exactly once.
 | Test | Proves |
@@ -238,20 +316,22 @@ Pure arithmetic of the staking / pricing / accounting primitives. All determinis
 
 ---
 
-### 2.8 Fork tests (mainnet — need `ALCHEMY_RPC_URL`) (12)
+### 2.8 Fork tests (mainnet — need `ALCHEMY_RPC_URL`) (15)
 
-**`FallbackExecutor.t.sol`** — aggregator fallback path (9)
+**`FallbackExecutor.t.sol`** — aggregator fallback path (11)
 | Test | Proves |
 |---|---|
 | `test_fallback_swapsSuccessfully_viaArbitraryAllowlistedRouter` | happy path through an allowlisted aggregator; swapper paid, remaining zeroed |
-| `test_fallback_revert_belowSignedFloor` | **C-1** output below the swapper's signed pro-rata floor reverts `"below signed min output"` |
-| `test_fallback_revert_insufficientOutput` | output below the solver's own `minAmountOut` reverts `"insufficient output"` |
+| `test_fallback_swapsSuccessfully_viaSplitApproveTargetRouter` | **new** ParaSwap-style split model: `approveTarget` (TokenTransferProxy) ≠ call target (Augustus) — after execution the proxy's allowance is reset to 0 and the router itself never receives an allowance |
+| `test_fallback_revert_belowSignedFloor` | **C-1** output below the swapper's signed pro-rata floor reverts `"below signed min output"` even if the solver's own `minAmountOut` is lower |
+| `test_fallback_revert_insufficientOutput` | output below the solver's own `minAmountOut` reverts `"insufficient output"`, independent of the signed floor |
 | `test_fallback_revert_tooEarly` | outside `FALLBACK_WINDOW` reverts `"too early"` |
-| `test_fallback_revert_expired` | past deadline reverts (sig/expiry checked first) |
-| `test_fallback_revert_routerNotAllowed` | a non-allowlisted router reverts `"router not allowed"` |
-| `test_fallback_refundsUnconsumedInput` | **C-4** an exact-output route leaves leftover input → refunded to swapper |
-| `test_fallback_revert_cumulativeBelowAbsoluteFloor` | **C-3** cumulative paid (partials + fallback) below absolute `minOutputAmount` reverts |
+| `test_fallback_revert_expired` | past deadline reverts (sig/expiry checked first, via `reactor.verifyOrderSignature`) |
+| `test_fallback_revert_routerNotAllowed` | a non-allowlisted router reverts `"router not allowed"` before any funds move |
+| `test_fallback_refundsUnconsumedInput` | **C-4** an exact-output route leaves leftover input → refunded to swapper, none stranded in the executor |
+| `test_fallback_revert_cumulativeBelowAbsoluteFloor` | **C-3** cumulative paid (partial fills + fallback leg) below absolute `minOutputAmount` reverts `"min output total"`, even when every individual leg clears its own pro-rata floor |
 | `test_setRouterAllowed_onlyOwner` | the router allowlist is owner-gated |
+| `test_setRouterAllowed_distinctApproveTarget` | **new** registering a router with a distinct approve target records that exact pairing, not a collapsed single-address assumption |
 
 **`TwapCollateral.t.sol`** — D-1 oracle works for any token (2)
 | Test | Proves |
@@ -260,6 +340,8 @@ Pure arithmetic of the staking / pricing / accounting primitives. All determinis
 | `test_usdcInput_pricedViaTwap` | USDC is priced via the V3 TWAP into ETH-scale collateral, growing with fill size |
 
 **`TwapManipulation.t.sol`** — `test_manipulatedTwap_collapsesRequiredCollateral` (1): **PoC for N-3.** Dumps USDC into the same `(USDC,WETH,0.05%)` pool the oracle reads, holds price across the 60 s window; required stake for a 3000-USDC order collapses ~0.905 ETH → ~4.6e-6 ETH (−100%). Demonstrates the short-window collateral-collapse failure mode (same class as Mango/Cream/Harvest). Quantified further by Part C of `TESTING_NEXT_STEPS.md`.
+
+**`TwapWindowComparison.t.sol`** — `test_windowResistance_acrossDumpSizes` (1, **new**): turns the single `TwapManipulation` data point into a 2×3 table — 2 dump sizes (30M USDC "moderate", 300M USDC "whale") × 3 `FillAuction` instances configured with 60 s / 600 s / 1800 s TWAP windows, all reading the same live pool via `vm.snapshotState`/`vm.revertToState` so every row shares one honest baseline. Asserts two theory-backed, fork-block-independent facts: the deployed 60 s window collapses >50% under a whale dump, and resistance is **monotonically non-decreasing in window length** for both dump sizes (a longer TWAP averages the spike against more honest history). This is the on-chain evidence behind widening the window before mainnet.
 
 ---
 
@@ -280,7 +362,14 @@ Pure arithmetic of the staking / pricing / accounting primitives. All determinis
 | L-3 nonce invalidation | `AuditFixes::test_L3_invalidateNonce_blocksFill` |
 | D-1 ETH-denominated collateral | `TwapCollateral` (fork), `DynamicStakeLibStake` |
 | D-2 refund keyed to committed | `MevFiller::test_snipeSmallChunk_fullyRefunded` / `test_minFillBps_blocksDustFill`, `FillAuction::test_onFillSuccess_*`, `FrontRunGriefing` |
-| N-3 TWAP collateral manipulation | `TwapManipulation::*` (fork PoC) |
+| N-3 TWAP collateral manipulation | `TwapManipulation::*` (fork PoC), `TwapWindowComparison::test_windowResistance_acrossDumpSizes` (window-length resistance table) |
+| B3 stake-config setter bounds (rate/refund-shape floors) | `CoreGuards::test_setStakeConfig_revert_*` |
+| B4/D1 bounded single-step change (`MAX_DELTA_BPS`) | `StakeConfigGuard::test_setStakeConfig_revert_collateralDeltaTooLarge` |
+| B4/D2 one-deep rollback | `StakeConfigGuard::test_rollback_restoresOneStepBack_notFurther` / `test_rollback_secondCallIsNoOp` |
+| B4/D3 cooldown gates both apply paths | `StakeConfigGuard::test_setStakeConfig_revert_cooldown_afterImmediateApply` / `_afterQueueingPending` |
+| B4/D4 guardian veto + rollback clears pending | `StakeConfigGuard::test_cancelPendingConfig_*` / `test_rollback_clearsPending` |
+| #2 gradual multi-step penalty erosion | `StakeConfigGuard::test_setStakeConfig_revert_penaltyFloorBreached_afterGradualLoosening` |
+| #3 live bucket-count reshape vs. registration snapshot | `StakeConfigGuard::test_registrationSnapshot_survivesRatioBucketReshape` |
 | Cross-chain timelock (`crosschain.md §4`) | `CrossChainTimelock::test_T2geqT1_swapperTakesBothLegs` (PoC); off-chain `escrowDstWatcher` |
 | Trufy 3.1 timelock ordering | off-chain `escrowDstWatcher` expiry guard; PoC `CrossChainTimelock::*` |
 | Trufy 3.2 fee-on-transfer / received accounting | `FeeOnTransfer::*` |
@@ -307,15 +396,21 @@ These are **architecture choices**, not missing tests. A reviewer will probe the
 3. **Single-cosigner trust** — one immutable key authenticates everything; the cross-chain path adds the swapper's signature as defence-in-depth, but a leaked key / withholding server is a trust assumption, not a contract guard.
 4. **Trufy 3.2 / 3.6 filler-binding & last-slot output** — verified in the backend watcher (`escrowDstWatcher.ts`), no Foundry coverage.
 
-Live E2E (`tests/race/`, shell-orchestrated) exercises the real filler bots cooperatively on an Anvil fork but is **not** part of the 149 Foundry tests.
+Live E2E (`tests/race/`, shell-orchestrated) exercises the real filler bots cooperatively on an Anvil fork but is **not** part of the 173 Foundry tests.
 
 ---
 
 ## 5. Coverage numbers & branch-% caveat
 
-- `src/FillAuction.sol`: **100% line / statement / function** (non-fork run).
+> Line/statement/function numbers below are from the 2026-06-29 pass and **not
+> re-run** in this update (only `forge test`, not `forge coverage`, was re-verified on
+> 2026-07-08 — see §1.4 for the command to refresh them). `FillAuction.sol` gained the
+> B3/B4 governance state machine since then; re-run before citing these numbers in the
+> defense.
+
+- `src/FillAuction.sol`: **100% line / statement / function** (non-fork run, as of 2026-06-29).
 - `src/PartialFillReactor.sol`: **94% line / 96% statement** (the uncovered lines are fallback / `verifyOrderSignature` paths exercised only by the fork suite).
-- **Do not headline `forge coverage`'s branch %.** It under-counts `require(cond,"msg")` revert arms — exactly what the 25 `CoreGuards` tests exercise — so it barely moves even though every revert line is executed and asserted. The trustworthy evidence is the per-revert-string assertions plus FillAuction's full line/statement/function coverage.
+- **Do not headline `forge coverage`'s branch %.** It under-counts `require(cond,"msg")` revert arms — exactly what the 27 `CoreGuards` + 15 `StakeConfigGuard` tests exercise — so it barely moves even though every revert line is executed and asserted. The trustworthy evidence is the per-revert-string assertions plus FillAuction's full line/statement/function coverage.
 
 ---
 
@@ -323,7 +418,7 @@ Live E2E (`tests/race/`, shell-orchestrated) exercises the real filler bots coop
 
 Priority for the defense, with effort:
 1. **Slither** (static analysis, ~hours) — run *before* testnet; triage into fix / justified / noise. The only step with pre-ship safety value.
-2. **TWAP manipulation experiment** (Part C, ~1–2 days) — extend `TwapManipulation.t.sol` into a short-vs-long-window comparison table. Highest *contribution* value: quantifies Trufy 3.5 / N-3.
-3. **Mutation testing** (~1–3 days), scoped to the pure libs (`DynamicStakeLib`, `DecayCursorLib`, `ScaledOutputLib`, `RemainingLib`, `SlotLib`). Best evidence that the 149 tests are meaningful; skip fork/cross-chain mutants.
+2. ~~**TWAP manipulation experiment** (Part C, ~1–2 days) — extend `TwapManipulation.t.sol` into a short-vs-long-window comparison table.~~ **Done** — `TwapWindowComparison.t.sol` (§2.8). Quantifies Trufy 3.5 / N-3.
+3. **Mutation testing** (~1–3 days), scoped to the pure libs (`DynamicStakeLib`, `DecayCursorLib`, `ScaledOutputLib`, `RemainingLib`, `SlotLib`). Best evidence that the 173 tests are meaningful; skip fork/cross-chain mutants.
 
 Out of scope (future work): full formal verification, cross-chain testnet soak tests, agent-based economic simulation.

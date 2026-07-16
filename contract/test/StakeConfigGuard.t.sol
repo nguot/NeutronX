@@ -4,8 +4,6 @@ pragma solidity ^0.8.20;
 import "./adversarial/AdversarialBase.sol";
 import { IAccessControl } from "@openzeppelin/contracts/access/IAccessControl.sol";
 
-/// B4 "test nhóm 3": the guard/timelock/rollback wrapper around setStakeConfig
-/// (see DYNAMIC_STAKE_CONFIG_REFACTOR.md khối 🔑 D, D1-D4). Covers:
 ///  - loosening -> pending -> commit/cancel
 ///  - cooldown gates BOTH the immediate-apply and the queue-pending path (D3)
 ///  - only one pending at a time (D3)
@@ -244,7 +242,12 @@ contract StakeConfigGuardTest is AdversarialBase {
         }
 
         assertTrue(reverted, "penalty floor must eventually block further gradual loosening");
-        assertEq(revertData, abi.encodeWithSignature("Error(string)", "penalty floor breached"));
+        // The direct worst-case-kappa floor (DynamicStakeLib.worstCaseKappaBps)
+        // computes the SAME economics this loop is eroding and fires before the
+        // per-point penalty floor gets there (both exist to stop the same
+        // gradual-erosion attack; the holistic check is just a tighter, earlier
+        // tripwire on the identical underlying quantity).
+        assertEq(revertData, abi.encodeWithSignature("Error(string)", "kappa floor breached"));
     }
 
     // ── #3: registration snapshot survives a live reshape of the ratio buckets ──
@@ -285,7 +288,12 @@ contract StakeConfigGuardTest is AdversarialBase {
             newTable[s * 7 + 2] = oldTable[s * 5 + 1];
             newTable[s * 7 + 3] = oldTable[s * 5 + 2];
             newTable[s * 7 + 4] = oldTable[s * 5 + 3];
-            newTable[s * 7 + 5] = oldTable[s * 5 + 3];
+            // Bucket [7000,8000) is a subset of the OLD honest range [7000,∞)
+            // (old index 4, value 10000) — NOT old bucket 3 (30-70%, value
+            // 5000). Duplicating index 3 here would silently shrink the refund
+            // just below the new honest cutoff, a real loosening the old
+            // (coarser) guardCheck sampling grid never happened to sample.
+            newTable[s * 7 + 5] = oldTable[s * 5 + 4];
             newTable[s * 7 + 6] = oldTable[s * 5 + 4];
         }
         c.refundTable = newTable;

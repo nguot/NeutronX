@@ -4,6 +4,7 @@ pragma solidity ^0.8.20;
 import "forge-std/Test.sol";
 import "../src/PartialFillReactor.sol";
 import "../src/FillAuction.sol";
+import { IEthNotionalOracle } from "../src/interfaces/IEthNotionalOracle.sol";
 import "./mocks/MockERC20.sol";
 import "./mocks/MockPermit2.sol";
 
@@ -32,7 +33,7 @@ contract AuditFixesTest is Test {
 
     function setUp() public {
         permit2 = new MockPermit2();
-        auction = new FillAuction(treasury, address(0), address(0), 0, true); // oracle-disabled (1:1) mode
+        auction = new FillAuction(treasury, IEthNotionalOracle(address(0)), true); // oracle-disabled (1:1) mode
         reactor = new PartialFillReactor(address(permit2), address(auction), cosigner);
         auction.setReactor(address(reactor));
         reactor.setFallbackExecutor(fallbackExec);
@@ -117,14 +118,16 @@ contract AuditFixesTest is Test {
         reactor.register{value: STAKE}(o, INPUT_AMOUNT);
     }
 
-    /// C-1: the swapper's min-output floor is enforced.
+    /// C-1: the swapper's min-output floor is enforced. A floor set even 1 wei
+    /// above the highest output startPrice could ever pay is now caught by
+    /// _validateOrder's "unreachable min output" check at register() itself —
+    /// no filler can stake against an order that is provably unfillable.
     function test_C1_minOutputFloor_enforced() public {
         uint256 fullOut = uint256(INPUT_AMOUNT) * START_PRICE / 1e18;
         PartialFillReactor.SignedOrder memory o = _signed(fullOut + 1, START_PRICE); // floor just above achievable
-        _register(fillerA, o, INPUT_AMOUNT);
         vm.prank(fillerA);
-        vm.expectRevert("min output");
-        reactor.executePartialChunk(o, INPUT_AMOUNT);
+        vm.expectRevert("unreachable min output");
+        reactor.register{value: STAKE}(o, INPUT_AMOUNT);
     }
 
     // ── C-2: fallback / partial-fill mutual exclusion ──

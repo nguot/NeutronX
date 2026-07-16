@@ -34,11 +34,12 @@ pragma solidity ^0.8.20;
 //     the input token amount AND the safety deposit are sent to the swapper —
 //     refunding the stuck slot and compensating them for the lock-up.
 //
-//  NO MERKLE PROOF HERE
-//  ────────────────────
-//  The proof that (hashlock, slotIndex) belongs to the order's merkleRoot is
-//  checked once, at fill-time, by EscrowSrcFactory — BEFORE this clone is
-//  funded. By the time this contract exists, the hashlock is already trusted.
+//  HASHLOCK ORIGIN
+//  ───────────────
+//  The filler chooses `hashlock` itself (filler-holds-key model) and it is
+//  authorized by the swapper's per-fill signature, checked once at fill-time
+//  by EscrowSrcFactory — BEFORE this clone is funded. By the time this
+//  contract exists, the hashlock is already trusted.
 //
 //  REENTRANCY NOTE
 //  ───────────────
@@ -48,6 +49,13 @@ pragma solidity ^0.8.20;
 
 import { IERC20 }    from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+
+/// Callback into EscrowSrcFactory used by cancel() to release this fill's
+/// reservation back to the order's `remaining` (see the factory's
+/// restoreRemaining / §12.4 orphaned-reservation fix).
+interface IEscrowSrcFactory {
+    function restoreRemaining(bytes32 orderHash, bytes32 hashlock, uint256 amount) external;
+}
 
 contract EscrowSrc {
     using SafeERC20 for IERC20;
@@ -59,7 +67,15 @@ contract EscrowSrc {
     address public token;          // input token (e.g. WETH)
     uint256 public amount;         // slot amount locked here
     uint256 public safetyDeposit;  // native ETH posted by the filler at initialize()
-    uint256 public expiry;         // T1: block number after which anyone may cancel()
+    uint256 public expiry;         // T1: unix timestamp after which anyone may cancel()
+
+    // §12.4 orphaned-reservation fix: the order this fill belongs to and the
+    // factory that deployed this clone. On cancel() (abandonment), the clone
+    // calls factory.restoreRemaining(orderHash, hashlock, amount) so the amount
+    // it reserved at fillSlot() is returned to the order's fillable remainder —
+    // otherwise a cancelled fill leaves that slice permanently "spent".
+    bytes32 public orderHash;
+    address public factory;
 
     bool    public claimed;    // true after withdraw()
     bool    public cancelled;  // true after cancel()
@@ -101,14 +117,17 @@ contract EscrowSrc {
         address _swapper,
         address _token,
         uint256 _amount,
-        uint256 _expiry
+        uint256 _expiry,
+        bytes32 _orderHash,
+        address _factory
     ) external payable {
         require(!_initialized,                                       "already init");
         require(_swapper  != address(0),                            "zero swapper");
         require(_filler   != address(0),                            "zero filler");
         require(_amount   >  0,                                      "zero amount");
-        require(_expiry   >  block.number,                          "expiry in past");
+        require(_expiry   >  block.timestamp,                       "expiry in past");
         require(_hashlock != bytes32(0),                            "zero hashlock");
+        require(_factory  != address(0),                            "zero factory");
         // M-3: a zero safety deposit makes grief-filling a slot (taking the
         // swapper's funds into an escrow the griefer can never unlock) free
         // beyond gas. Require the filler to put real value at risk.
@@ -123,6 +142,8 @@ contract EscrowSrc {
         amount        = _amount;
         expiry        = _expiry;
         safetyDeposit = msg.value;
+        orderHash     = _orderHash;
+        factory       = _factory;
     }
 
     // ── withdraw ───────────────────────────────────────────────────────────────
@@ -136,7 +157,7 @@ contract EscrowSrc {
     function withdraw(bytes32 secret) external nonReentrant {
         require(_initialized,                                     "not init");
         require(!claimed && !cancelled,                           "settled");
-        require(block.number <= expiry,                           "expired");
+        require(block.timestamp <= expiry,                        "expired");
         require(keccak256(abi.encodePacked(secret)) == hashlock,  "wrong secret");
 
         claimed = true;
@@ -155,7 +176,7 @@ contract EscrowSrc {
     function cancel() external nonReentrant {
         require(_initialized,           "not init");
         require(!claimed && !cancelled, "settled");
-        require(block.number > expiry,  "not expired");
+        require(block.timestamp > expiry, "not expired");
 
         cancelled = true;
         IERC20(token).safeTransfer(swapper, amount);
@@ -169,6 +190,18 @@ contract EscrowSrc {
             // cancel() (and thus the slot) permanently stuck.
             _payEth(swapper, safetyDeposit);
         }
+
+        // §12.4 orphaned-reservation fix: the swapper's input has just been
+        // returned to their WALLET, so the amount this fill reserved at
+        // fillSlot() is genuinely available again — hand it back to the order's
+        // fillable remainder so another filler can take it. `cancelled` above
+        // makes this one-shot per clone (a second cancel reverts on "settled"),
+        // and the factory authenticates the caller is exactly this (orderHash,
+        // hashlock) clone, so the restore is exactly conservative. Kept last (after
+        // the token/ETH transfers) so `remaining` is only ever raised once the
+        // funds are provably back; it touches only factory storage, no re-entry here.
+        IEscrowSrcFactory(factory).restoreRemaining(orderHash, hashlock, amount);
+
         emit Cancelled(swapper, amount, msg.sender, safetyDeposit);
     }
 
@@ -205,9 +238,9 @@ contract EscrowSrc {
     // ── status ─────────────────────────────────────────────────────────────────
     function status() external view returns (string memory) {
         if (!_initialized)         return "uninitialized";
-        if (claimed)               return "withdrawn";
-        if (cancelled)             return "cancelled";
-        if (block.number > expiry) return "expired";
+        if (claimed)                  return "withdrawn";
+        if (cancelled)                return "cancelled";
+        if (block.timestamp > expiry) return "expired";
         return "active";
     }
 }

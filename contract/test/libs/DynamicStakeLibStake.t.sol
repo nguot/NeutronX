@@ -4,6 +4,7 @@ pragma solidity ^0.8.20;
 import "forge-std/Test.sol";
 import "../../src/libs/DynamicStakeLib.sol";
 import "../../src/FillAuction.sol";
+import { IEthNotionalOracle } from "../../src/interfaces/IEthNotionalOracle.sol";
 
 /// computeCollateral()/computeRefund() now take a full (dynamic) StakeConfig,
 /// so this contract holds its own copies as storage StakeConfigs — one
@@ -73,7 +74,7 @@ contract DynamicStakeLibStakeTest is Test {
             }
         }
 
-        FillAuction auction = new FillAuction(makeAddr("treasury"), address(0), address(0), 0, true);
+        FillAuction auction = new FillAuction(makeAddr("treasury"), IEthNotionalOracle(address(0)), true);
         // Direct memory -> storage struct assignment deep-copies every dynamic
         // array member (same mechanism FillAuction.setStakeConfig relies on).
         liveCfg = auction.stakeConfig();

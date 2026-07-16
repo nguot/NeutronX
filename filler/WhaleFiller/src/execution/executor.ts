@@ -1,9 +1,10 @@
 import { ethers } from 'ethers'
-import axios from 'axios'
+import { http as axios } from '../httpClient'
 import { BACKEND_URL, INVENTORY } from '../config'
 import { ensureOutputToken } from '../funding/inventory'
 import { wallet, fillAuction, reactor, erc20 } from '../contract/contracts'
 import { decide } from '../strategy/strategy'
+import { bgLog, bgWarn, bgError } from '../bgLog'
 import type { OrderInfo } from '../types'
 
 // Replicates PartialFillReactor._hashOrder
@@ -69,7 +70,7 @@ async function ensureApproval(tokenAddress: string, amount: bigint): Promise<voi
   if (allowed.toBigInt() < amount) {
     const tx = await token.approve(reactor.address, ethers.constants.MaxUint256)
     await tx.wait()
-    console.log(`[Executor] approved ${tokenAddress}`)
+    bgLog(`[Executor] approved ${tokenAddress}`)
   }
 }
 
@@ -82,18 +83,18 @@ export class Executor {
   watch(order: OrderInfo): void {
     if (this.watching.has(order.hash)) return
     this.watching.set(order.hash, order)
-    console.log(`[Executor] +watch  ${order.hash.slice(0,10)}…  watching=${this.watching.size}`)
+    bgLog(`[Executor] +watch  ${order.hash.slice(0,10)}…  watching=${this.watching.size}`)
   }
 
   async onBlock(currentBlock: number): Promise<void> {
     const active = [...this.watching.values()].filter(o => o.deadline - currentBlock <= INVENTORY.REGISTER_AT_BLOCKS_LEFT * 3)
     const idle   = this.watching.size - active.length
     if (active.length > 0 || this.registered.size > 0)
-      console.log(`[Executor] block #${currentBlock}  active=${active.length}  registered=${this.registered.size}  idle=${idle}`)
+      bgLog(`[Executor] block #${currentBlock}  active=${active.length}  registered=${this.registered.size}  idle=${idle}`)
 
     for (const [hash, order] of this.watching) {
       if (currentBlock > order.deadline) {
-        console.log(`[Executor] expired  ${hash.slice(0,10)}… — dropping`)
+        bgLog(`[Executor] expired  ${hash.slice(0,10)}… — dropping`)
         this.watching.delete(hash)
         this.registered.delete(hash)
         continue
@@ -101,7 +102,7 @@ export class Executor {
       const blocksLeft = order.deadline - currentBlock
       if (blocksLeft > INVENTORY.REGISTER_AT_BLOCKS_LEFT * 3) continue  // too early, skip silently
       await this.tryFill(order, currentBlock).catch(e =>
-        console.error(`[Executor] error on ${hash.slice(0,10)}…: ${(e as any)?.reason ?? (e as any)?.message ?? e}`)
+        bgError(`[Executor] error on ${hash.slice(0,10)}…: ${(e as any)?.reason ?? (e as any)?.message ?? e}`)
       )
     }
   }
@@ -116,7 +117,7 @@ export class Executor {
       order = data
       this.watching.set(order.hash, order)
     } catch {
-      console.warn(`${tag} backend unreachable — using cached order`)
+      bgWarn(`${tag} backend unreachable — using cached order`)
     }
 
     const hash       = order.hash
@@ -127,7 +128,7 @@ export class Executor {
     const remainingBN: ethers.BigNumber = await reactor.remainingInput(orderHash, order.inputAmount)
     const onChainRemaining = remainingBN.toBigInt()
     const remainingPct = (Number(onChainRemaining) / Number(order.inputAmount) * 100).toFixed(1)
-    console.log(`${tag} on-chain remaining=${remainingPct}%  blocksLeft=${order.deadline - currentBlock}`)
+    bgLog(`${tag} on-chain remaining=${remainingPct}%  blocksLeft=${order.deadline - currentBlock}`)
 
     if (onChainRemaining === 0n) {
       await this.reclaimStake(order, orderHash, 'fully filled by others')
@@ -143,10 +144,10 @@ export class Executor {
 
     // ── REGISTER PHASE ────────────────────────────────────────────────────
     if (!this.registered.has(hash) && blocksLeft <= INVENTORY.REGISTER_AT_BLOCKS_LEFT) {
-      console.log(`${tag} REGISTER PHASE  blocksLeft=${blocksLeft}`)
+      bgLog(`${tag} REGISTER PHASE  blocksLeft=${blocksLeft}`)
       const decision = await decide(order, currentBlock)
       if (!decision.shouldFill) {
-        console.log(`${tag} skip register — ${decision.reason}`)
+        bgLog(`${tag} skip register — ${decision.reason}`)
         return
       }
 
@@ -158,15 +159,15 @@ export class Executor {
       // Optimistic lock — prevents duplicate tx when multiple blocks fire before first tx mines
       this.registered.set(hash, { fillAmount, registeredAt: currentBlock })
 
-      console.log(`${tag} registering  fill=${fillAmount}  stake=${ethers.utils.formatEther(stake)} ETH  tx pending…`)
+      bgLog(`${tag} registering  fill=${fillAmount}  stake=${ethers.utils.formatEther(stake)} ETH  tx pending…`)
       try {
         const tx = await reactor.register(signedOrder, fillAmount, { value: stake })
         await tx.wait()
-        console.log(`${tag} ✔ registered  tx=${tx.hash}  stakeETH=${ethers.utils.formatEther(stake)}`)
+        bgLog(`${tag} ✔ registered  tx=${tx.hash}  stakeETH=${ethers.utils.formatEther(stake)}`)
       } catch (e: any) {
         const reason: string = e?.error?.reason ?? e?.reason ?? e?.message ?? ''
         if (reason.includes('already registered')) {
-          console.log(`${tag} already registered on-chain — recovering in-memory state`)
+          bgLog(`${tag} already registered on-chain — recovering in-memory state`)
         } else {
           this.registered.delete(hash)
           throw e
@@ -179,11 +180,11 @@ export class Executor {
     if (this.registered.has(hash)) {
       const { fillAmount: registeredFill, registeredAt } = this.registered.get(hash)!
       const fillAmount = registeredFill < onChainRemaining ? registeredFill : onChainRemaining
-      console.log(`${tag} EXECUTE PHASE  registeredAt=block#${registeredAt}  fillAmount=${fillAmount}`)
+      bgLog(`${tag} EXECUTE PHASE  registeredAt=block#${registeredAt}  fillAmount=${fillAmount}`)
 
       const decision = await decide(order, currentBlock)
       if (!decision.shouldFill) {
-        console.log(`${tag} holding — ${decision.reason}`)
+        bgLog(`${tag} holding — ${decision.reason}`)
         return
       }
 
@@ -192,15 +193,15 @@ export class Executor {
       await ensureOutputToken(order.outputToken, expectedOutput)
       await ensureApproval(order.outputToken, expectedOutput)
 
-      console.log(`${tag} calling executePartialChunk  fillAmount=${fillAmount}  tx pending…`)
+      bgLog(`${tag} calling executePartialChunk  fillAmount=${fillAmount}  tx pending…`)
       const tx = await reactor.executePartialChunk(signedOrder, fillAmount)
       await tx.wait()
-      console.log(`${tag} ✔ FILLED  tx=${tx.hash}`)
-      console.log(`${tag}   reason: ${decision.reason}`)
+      bgLog(`${tag} ✔ FILLED  tx=${tx.hash}`)
+      bgLog(`${tag}   reason: ${decision.reason}`)
 
       this.watching.delete(hash)
       this.registered.delete(hash)
-      console.log(`${tag} done  watching=${this.watching.size}  registered=${this.registered.size}`)
+      bgLog(`${tag} done  watching=${this.watching.size}  registered=${this.registered.size}`)
     }
   }
 
@@ -211,13 +212,13 @@ export class Executor {
   /// would be stuck forever.
   private async reclaimStake(order: OrderInfo, orderHash: string, why: string): Promise<void> {
     const tag = `[Executor] ${order.hash.slice(0,10)}…`
-    if (!this.registered.has(order.hash)) { console.log(`${tag} ${why} — dropping`); return }
+    if (!this.registered.has(order.hash)) { bgLog(`${tag} ${why} — dropping`); return }
     try {
       const tx = await fillAuction.releaseRegistration(orderHash, wallet.address)
       await tx.wait()
-      console.log(`${tag} ${why} — released stake, reclaim via withdraw()`)
+      bgLog(`${tag} ${why} — released stake, reclaim via withdraw()`)
     } catch {
-      console.log(`${tag} ${why} — drop (stake already resolved)`)
+      bgLog(`${tag} ${why} — drop (stake already resolved)`)
     }
   }
 }

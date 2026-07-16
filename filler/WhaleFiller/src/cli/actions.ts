@@ -1,19 +1,24 @@
 import Table from 'cli-table3'
 import ora from 'ora'
+import { readFileSync, unlinkSync } from 'fs'
 import { ethers } from 'ethers'
 import { wallet, fillAuction } from '../contract/contracts'
+import { PID_FILE } from './pidfile'
+import { installLogGate, setActiveSpinner } from './logGate'
 import { decide } from '../strategy/strategy'
 import { fill } from '../fill/partialFill'
-import { crossChainFill, crossChainClaim } from '../fill/crossChainFill'
+import { crossChainFill, crossChainResume, type CrossChainFillOptions } from '../fill/crossChainFill'
 import {
-  fetchOpenOrders, fetchOrder, fetchCcOrders, resetSlot,
+  fetchOpenOrders, fetchOrder, fetchCcOrders,
   currentBlock, readBalances,
 } from './data'
 import {
   sym, human, humanRaw, priceHuman, progressBar, shortHash,
-  statusLabel, banner, c,
+  statusLabel, banner, c, shortErr,
 } from './format'
 import type { OrderInfo } from '../types'
+
+installLogGate()
 
 export const FILLER_NAME = 'WhaleFiller'
 
@@ -204,59 +209,72 @@ export async function runFill(hash: string, pct: number): Promise<void> {
     }
   }
 
-  const spin = ora(`fill ${shortHash(hash)} @ ${pctLabel} — register → approve → execute`).start()
+  // discardStdin: false — ora's default (true) spins up a SECOND readline.Interface
+  // on the same process.stdin to swallow stray keypresses while the spinner
+  // runs, then closes it on succeed/fail. Closing a TTY readline.Interface
+  // flips process.stdin out of raw mode — which breaks the REPL's own,
+  // already-active readline.Interface (repl.ts) that still needs raw mode.
+  // Symptom without this: any command that uses ora (fill/cc fill/claim/reset)
+  // silently corrupts all keyboard input afterward — typing looks fine but
+  // Enter/Ctrl+C stop working, because the terminal is no longer in the mode
+  // the REPL's readline expects.
+  const spin = ora({ text: `fill ${shortHash(hash)} @ ${pctLabel} — register → approve → execute`, discardStdin: false }).start()
+  setActiveSpinner(spin)
   try {
     const tx = await fill(hash, pct * 100)
     spin.succeed(`filled ${shortHash(hash)} @ ${pctLabel}   ${c.dim('tx')} ${tx}`)
   } catch (e: any) {
-    spin.fail(c.red(e?.message ?? String(e)))
+    spin.fail(c.red(shortErr(e)))
     process.exitCode = 1
+  } finally {
+    setActiveSpinner(null)
   }
 }
 
-// ── cross-chain ────────────────────────────────────────────────────────────────
+// ── cross-chain (Model 2: filler-holds-key, continuous fill) ──────────────────
 export async function renderCcOrders(): Promise<void> {
   const orders = await fetchCcOrders()
   console.log(banner(FILLER_NAME, 'cross-chain orders'))
-  if (!orders.length) { console.log(c.dim('\n  no cross-chain orders with available slots.\n')); return }
+  if (!orders.length) { console.log(c.dim('\n  no open cross-chain orders.\n')); return }
   for (const o of orders) {
     const pair = `${sym(o.inputToken)}→${sym(o.outputToken)}`
     console.log(
       `\n  ${c.yellow(shortHash(o.orderHash))}  ${c.bold(pair)}  ` +
-      `${c.dim(`chain ${o.chainAId}→${o.dstChainId}`)}  ${c.dim(`${o.numSlots} slots`)}`
+      `${c.dim(`chain ${o.chainAId}→${o.dstChainId}`)}`
     )
-    const table = new Table({ head: ['SLOT', 'STATUS', 'FILLER'].map(h => c.dim(h)), style: { head: [], border: [] } })
-    for (const s of (o.slots ?? [])) {
-      table.push([String(s.index), statusLabel(s.status), s.assignedFiller ? shortHash(s.assignedFiller) : c.dim('—')])
+    const table = new Table({ head: ['FILL', 'HASHLOCK', 'STATUS', 'FILLER'].map(h => c.dim(h)), style: { head: [], border: [] } })
+    for (const f of (o.fills ?? [])) {
+      table.push([String(f.fillId), shortHash(f.hashlock), statusLabel(f.status), f.filler ? shortHash(f.filler) : c.dim('—')])
     }
+    if ((o.fills ?? []).length === 0) table.push([c.dim('(no fills yet — run: cc fill <hash> <pct>)'), '', '', ''])
     console.log(table.toString())
   }
   console.log('')
 }
 
-export async function runCcOp(label: string, hash: string, slot: number, fn: () => Promise<string>): Promise<void> {
-  const spin = ora(`${label} ${shortHash(hash)} slot ${slot}`).start()
+export async function runCcOp(label: string, hash: string, fn: () => Promise<string>): Promise<void> {
+  const spin = ora({ text: `${label} ${shortHash(hash)}`, discardStdin: false }).start()
+  setActiveSpinner(spin)
   try {
     const res = await fn()
-    if (res === 'reset-to-available') spin.warn(`slot ${slot} was stale — reset to available, re-run cc fill`)
-    else if (res === 'already-claimed') spin.succeed(`slot ${slot} was already claimed — marked done`)
-    else spin.succeed(`${label} slot ${slot} done   ${c.dim('tx')} ${res}`)
+    if (res === 'already-claimed') spin.succeed(`already claimed on the dest chain — nothing to do`)
+    else spin.succeed(`${label} done   ${c.dim('tx')} ${res}`)
   } catch (e: any) {
-    spin.fail(c.red(e?.message ?? String(e)))
+    spin.fail(c.red(shortErr(e)))
     process.exitCode = 1
+  } finally {
+    setActiveSpinner(null)
   }
 }
 
-export async function runCcFill(hash: string, slot: number): Promise<void> {
-  await runCcOp('cc fill', hash, slot, () => crossChainFill(hash, slot))
+// Start a brand-new fill for `pct`% of what's still fillable on this order.
+export async function runCcFill(hash: string, pct: number, opts?: CrossChainFillOptions): Promise<void> {
+  await runCcOp('cc fill', hash, () => crossChainFill(hash, pct, opts))
 }
 
-export async function runCcClaim(hash: string, slot: number): Promise<void> {
-  await runCcOp('cc claim', hash, slot, () => crossChainClaim(hash, slot))
-}
-
-export async function runCcReset(hash: string, slot: number): Promise<void> {
-  await runCcOp('cc reset', hash, slot, async () => { await resetSlot(hash, slot); return 'reset' })
+// Resume an in-flight fill (after a crash/restart) from wherever it left off.
+export async function runCcResume(hash: string, fillId: number, opts?: CrossChainFillOptions): Promise<void> {
+  await runCcOp('cc resume', hash, () => crossChainResume(hash, fillId, opts))
 }
 
 // ── quote (parity with the /quote API: run the strategy on an ad-hoc order) ─────
@@ -286,4 +304,29 @@ export async function withWatch(seconds: number | undefined, render: () => Promi
   const tick = async () => { process.stdout.write('\x1Bc'); await render().catch(e => console.error(c.red(e.message))) }
   await tick()
   setInterval(tick, seconds * 1000)
+}
+
+// ── shutdown: stop the running watcher (npm start / index.ts) from a
+// separate CLI invocation, via the PID it writes to PID_FILE on boot. ──────────
+export async function shutdownFiller(): Promise<void> {
+  const spin = ora({ text: `stopping ${FILLER_NAME} watcher`, discardStdin: false }).start()
+  let pid: number
+  try {
+    pid = Number(readFileSync(PID_FILE, 'utf-8').trim())
+  } catch {
+    spin.warn(`${FILLER_NAME} is not running (no ${PID_FILE})`)
+    return
+  }
+  try {
+    process.kill(pid, 'SIGTERM')
+    spin.succeed(`${FILLER_NAME} (pid ${pid}) stopped`)
+  } catch (e: any) {
+    if (e.code === 'ESRCH') {
+      spin.warn(`${FILLER_NAME} was not running (stale pidfile) — removing it`)
+      try { unlinkSync(PID_FILE) } catch { /* already gone */ }
+    } else {
+      spin.fail(c.red(shortErr(e)))
+      process.exitCode = 1
+    }
+  }
 }

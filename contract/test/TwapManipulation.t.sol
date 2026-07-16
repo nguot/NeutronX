@@ -4,6 +4,7 @@ pragma solidity ^0.8.20;
 import "forge-std/Test.sol";
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "../src/FillAuction.sol";
+import "../src/oracles/UniswapV3NotionalOracle.sol";
 
 /// Minimal slice of the Uniswap V3 SwapRouter (the original, with a `deadline`
 /// field) — enough to push the (USDC, WETH) pool's price for the PoC.
@@ -25,8 +26,8 @@ interface ISwapRouter {
 /// N-3 (audit.md) PoC — oracle manipulation against the ETH-denominated
 /// collateral oracle.
 ///
-/// `DynamicStakeLib.toEthNotional` sizes a filler's required stake from a 60-second
-/// Uniswap V3 TWAP over the order's `(inputToken, WETH, feeTier)` pool. The whole
+/// `UniswapV3NotionalOracle.quoteEthNotional` sizes a filler's required stake from
+/// a 60-second Uniswap V3 TWAP over the order's `(inputToken, WETH, feeTier)` pool. The whole
 /// point of the D-1 fix was that the stake should track the *real ETH value* of
 /// the order, so slashing has teeth. This test shows that an attacker who moves
 /// the pool price and holds it across the (short) 60s window drives the TWAP — and
@@ -52,7 +53,8 @@ contract TwapManipulationTest is Test {
 
     function setUp() public {
         vm.createSelectFork(vm.envString("ALCHEMY_RPC_URL"));
-        auction = new FillAuction(treasury, WETH, FACTORY, 60, false); // 60s TWAP, as deployed
+        UniswapV3NotionalOracle oracle = new UniswapV3NotionalOracle(WETH, FACTORY, 60); // 60s TWAP, as deployed
+        auction = new FillAuction(treasury, oracle, false);
     }
 
     function test_manipulatedTwap_collapsesRequiredCollateral() public {

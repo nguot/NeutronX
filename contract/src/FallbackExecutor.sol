@@ -31,12 +31,20 @@ contract FallbackExecutor is ReentrancyGuard {
     address            public immutable owner;
 
     // Adapter-agnostic router allowlist — lets the off-chain solver pick
-    // whichever aggregator (Uniswap, 1inch, 0x, ...) quoted best, without
-    // redeploying or re-wiring the reactor.
-    mapping(address => bool) public allowedRouters;
+    // whichever aggregator (Uniswap, 1inch, KyberSwap, ParaSwap, ...) quoted
+    // best, without redeploying or re-wiring the reactor.
+    //
+    // Maps the allowlisted call-target `router` to the address that should
+    // hold the ERC20 approval before `router` is called. Most aggregators use
+    // a single-address model (approveTargetOf[router] == router itself), but
+    // ParaSwap's Augustus/TokenTransferProxy split needs a different spender
+    // than the call target — resolved here from owner-set storage instead of
+    // a caller-supplied parameter, so a malicious caller can never point the
+    // approval at an unvetted address.
+    mapping(address => address) public approveTargetOf;
 
     event FallbackExecuted(bytes32 indexed orderHash, uint256 amountIn, uint256 amountOut);
-    event RouterAllowed(address indexed router, bool allowed);
+    event RouterAllowed(address indexed router, address indexed approveTarget, bool allowed);
 
     constructor(address _permit2, address _reactor, address _initialRouter) {
         require(_permit2      != address(0), "zero permit2");
@@ -46,18 +54,26 @@ contract FallbackExecutor is ReentrancyGuard {
         reactor = PartialFillReactor(_reactor);
         owner   = msg.sender;
 
-        allowedRouters[_initialRouter] = true;
-        emit RouterAllowed(_initialRouter, true);
+        approveTargetOf[_initialRouter] = _initialRouter;
+        emit RouterAllowed(_initialRouter, _initialRouter, true);
     }
 
     /// Owner-managed allowlist of swap router/aggregator contracts that
     /// `executeFallback` is permitted to approve + call into. Adding a new
-    /// DEX aggregator (1inch, 0x, ...) is just one call to this function.
-    function setRouterAllowed(address router, bool allowed) external {
+    /// DEX aggregator is just one call to this function — pass `approveTarget
+    /// == router` for single-address aggregators (Uniswap, 1inch, KyberSwap),
+    /// or the dedicated spender contract for split models (ParaSwap's
+    /// TokenTransferProxy).
+    function setRouterAllowed(address router, address approveTarget, bool allowed) external {
         require(msg.sender == owner, "not owner");
         require(router != address(0), "zero router");
-        allowedRouters[router] = allowed;
-        emit RouterAllowed(router, allowed);
+        if (allowed) {
+            require(approveTarget != address(0), "zero approve target");
+            approveTargetOf[router] = approveTarget;
+        } else {
+            delete approveTargetOf[router];
+        }
+        emit RouterAllowed(router, approveTarget, allowed);
     }
 
     /// @param order        order cần fallback
@@ -70,7 +86,8 @@ contract FallbackExecutor is ReentrancyGuard {
         bytes calldata routeCalldata,
         uint256 minAmountOut
     ) external nonReentrant {
-        require(allowedRouters[router], "router not allowed");
+        address approveTarget = approveTargetOf[router];
+        require(approveTarget != address(0), "router not allowed");
 
         bytes32 orderHash = _hashOrder(order.info);
 
@@ -98,7 +115,7 @@ contract FallbackExecutor is ReentrancyGuard {
             order.info.inputToken
         );
 
-        IERC20(order.info.inputToken).forceApprove(router, rem);
+        IERC20(order.info.inputToken).forceApprove(approveTarget, rem);
 
         uint256 balBefore = IERC20(order.info.outputToken).balanceOf(order.info.swapper);
 
@@ -119,7 +136,7 @@ contract FallbackExecutor is ReentrancyGuard {
         // C-4: an exact-output style route may spend less than `rem`. The order
         // is already terminal, so any unconsumed input must be refunded to the
         // swapper rather than left stranded in this contract.
-        IERC20(order.info.inputToken).forceApprove(router, 0);
+        IERC20(order.info.inputToken).forceApprove(approveTarget, 0);
         uint256 leftover = IERC20(order.info.inputToken).balanceOf(address(this)) - inBalBefore;
         if (leftover > 0) {
             IERC20(order.info.inputToken).safeTransfer(order.info.swapper, leftover);
